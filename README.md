@@ -4,6 +4,8 @@
 
 A cross-platform GUI client for Ollama with advanced features for chat management, context handling, and file processing, built with Flutter.
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue.svg)](https://github.com/MqtUA/OllamaVerse)
+
 ## Features
 
 ### Chat Interface
