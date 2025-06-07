@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
+import '../utils/app_version.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -334,9 +335,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'OllamaVerse v1.0.0\n'
-                        'A cross-platform GUI client for Ollama',
+                      FutureBuilder(
+                        future: AppVersion.init(),
+                        builder: (context, snapshot) {
+                          return Text(
+                            'OllamaVerse v${AppVersion.version}\n'
+                            'A cross-platform GUI client for Ollama',
+                          );
+                        },
                       ),
                       const SizedBox(height: 8),
                       InkWell(

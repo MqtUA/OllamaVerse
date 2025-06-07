@@ -6,6 +6,7 @@ import 'providers/chat_provider.dart';
 import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
+import 'utils/app_version.dart';
 
 void main() {
   // Initialize logger
@@ -13,6 +14,9 @@ void main() {
   
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize app version
+  AppVersion.init();
   
   runApp(const MyApp());
 }
