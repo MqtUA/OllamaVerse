@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
+import 'custom_markdown_body.dart';
 
 class ChatDrawer extends StatelessWidget {
   const ChatDrawer({super.key});
@@ -136,14 +137,13 @@ class ChatDrawer extends StatelessWidget {
                         chatProvider.deleteChat(chat.id);
                       },
                       child: ListTile(
-                        title: Text(
-                          chat.title,
-                          style: TextStyle(
+                        title: SizedBox(
+                          height: fontSize * 1.5, // Ensure consistent height
+                          child: CustomMarkdownBody(
+                            data: chat.title,
                             fontSize: fontSize,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            selectable: false,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
                           'Model: ${chat.modelName}',
