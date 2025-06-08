@@ -56,7 +56,10 @@ class ChatProvider extends ChangeNotifier {
       // Check if this is a system message (has context with role: system)
       if (msg.context != null && msg.context!.isNotEmpty) {
         for (var ctx in msg.context!) {
-          if (ctx is Map && ctx.containsKey('role') && ctx['role'] == 'system') {
+          if (ctx is Map && 
+              ctx.containsKey('role') && 
+              ctx['role'] == 'system' && 
+              (ctx['ui_only'] == true || !ctx.containsKey('ui_only'))) {
             return false; // Don't display system messages
           }
         }
@@ -139,7 +142,8 @@ class ChatProvider extends ChangeNotifier {
         content: systemPrompt,
         isUser: false,
         // Use a special context to mark this as a system message
-        context: [{'role': 'system'}],
+        // We use a custom format for our UI but don't send this to the Ollama API
+        context: [{'role': 'system', 'ui_only': true}],
       );
       
       // Add the system message to the chat
@@ -325,10 +329,31 @@ class ChatProvider extends ChangeNotifier {
       }
       
       // Add AI response with context
+      // Make sure we're not using a context that would cause this message to be filtered out
+      List<dynamic>? safeContext = context;
+      
+      // If we have context, make sure it doesn't contain any system messages with ui_only flag
+      if (safeContext != null && safeContext.isNotEmpty) {
+        safeContext = safeContext.where((item) {
+          if (item is Map && 
+              item.containsKey('role') && 
+              item['role'] == 'system' && 
+              (item['ui_only'] == true || !item.containsKey('ui_only'))) {
+            return false; // Filter out system messages that would hide this message
+          }
+          return true;
+        }).toList();
+        
+        // If filtering removed everything, set to null
+        if (safeContext.isEmpty) {
+          safeContext = null;
+        }
+      }
+      
       final aiMessage = ChatMessage(
         content: response,
         isUser: false,
-        context: context, // Store the context for future messages
+        context: safeContext, // Store the filtered context for future messages
       );
       
       final updatedWithAiMessages = [...updatedMessages, aiMessage];

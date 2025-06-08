@@ -42,25 +42,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Handle app lifecycle changes
-    if (state == AppLifecycleState.resumed && mounted) {
-      // App has come to the foreground
-      // Refresh connections and models after a short delay
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
-        
-        try {
-          // Get the ChatProvider directly when needed
-          final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-          chatProvider.refreshModels().catchError((e) {
-            // Handle any errors silently to prevent app crashes
-            debugPrint('Error refreshing models after resume: $e');
-            return true; // Error was handled
-          });
-        } catch (e) {
-          debugPrint('Error accessing ChatProvider: $e');
-        }
-      });
-    }
+    // We've removed the Provider access here to prevent errors
+    // The models will refresh when navigating to the ChatScreen anyway
   }
 
   @override

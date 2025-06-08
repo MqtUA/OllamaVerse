@@ -197,7 +197,24 @@ class OllamaService {
 
       // Add context if provided
       if (context != null && context.isNotEmpty) {
-        requestBody['context'] = context;
+        // Filter out UI-only context elements (like our system message markers)
+        final apiContext = context.where((item) {
+          if (item is Map) {
+            // Skip items marked as ui_only
+            return item['ui_only'] != true;
+          }
+          return true;
+        }).toList();
+        
+        // Only add context if we have valid API context elements
+        if (apiContext.isNotEmpty) {
+          requestBody['context'] = apiContext;
+        } else {
+          // If no valid context, set context_length from settings
+          requestBody['options'] = {
+            'num_ctx': settings.contextLength,
+          };
+        }
       } else {
         // If no context is provided, set context_length from settings
         requestBody['options'] = {
