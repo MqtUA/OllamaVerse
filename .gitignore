@@ -64,6 +64,11 @@ linked_*.ds
 unlinked.ds
 unlinked_spec.ds
 
+# Note: We're including *.mocks.dart files in the repository
+# to ensure consistent test behavior across environments.
+# If you prefer to exclude them, uncomment the following line:
+# **/*.mocks.dart
+
 # Android related
 **/android/**/gradle-wrapper.jar
 .gradle/
