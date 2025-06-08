@@ -169,32 +169,23 @@ class _ChatScreenState extends State<ChatScreen> {
     if (message.isEmpty) return;
 
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    final activeChat = chatProvider.activeChat;
-
-    if (activeChat == null) {
-      // If no active chat, create one with the first available model
-      final models = chatProvider.availableModels;
-      if (models.isNotEmpty) {
-        chatProvider.createNewChat(models.first.name).then((_) {
-          chatProvider.sendMessage(message, attachedFiles: _attachedFiles);
-          
-          // Generate a name for the new chat based on the first message
-          _generateChatName(message, models.first.name);
-        });
-      } else {
+  
+    // Use the new method that handles chat creation if needed
+    chatProvider.sendMessageWithOptionalChatCreation(message, attachedFiles: _attachedFiles)
+      .then((_) {
+        // Success case - nothing to do
+      })
+      .catchError((error) {
+        // Check if the widget is still mounted before using the context
+        if (!mounted) return; // Early return if widget is no longer mounted
+        
+        // Now it's safe to use the context since we've checked mounted status
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No models available. Please check Ollama server connection.')),
+          SnackBar(content: Text('Error: $error')),
         );
-      }
-    } else {
-      chatProvider.sendMessage(message, attachedFiles: _attachedFiles);
-      
-      // If this is the first message in the chat, generate a name
-      if (activeChat.messages.isEmpty && activeChat.title == 'New Chat') {
-        _generateChatName(message, activeChat.modelName);
-      }
-    }
+      });
 
+    // Clear the input field and attachments
     _messageController.clear();
     setState(() {
       _attachedFiles = [];
@@ -204,22 +195,7 @@ class _ChatScreenState extends State<ChatScreen> {
     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
   }
   
-  // Generate a name for the chat based on the first message
-  void _generateChatName(String message, String modelName) {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    final activeChat = chatProvider.activeChat;
-    if (activeChat == null) return;
-    
-    // Create a short title based on the first few words of the message
-    String title;
-    if (message.length > 40) {
-      title = '${message.substring(0, 37)}...';
-    } else {
-      title = message;
-    }
-    
-    chatProvider.updateChatTitle(activeChat.id, title);
-  }
+
   
   // Show dialog to rename a chat
   void _showRenameChatDialog(String chatId, String currentTitle) {
@@ -418,14 +394,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 
                 WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
                 
+                // Use the displayableMessages getter from ChatProvider
+                final displayMessages = chatProvider.displayableMessages;
+                
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16.0),
                   // Add +1 to itemCount if generating to show typing indicator or streaming response
-                  itemCount: activeChat.messages.length + (chatProvider.isGenerating ? 1 : 0),
+                  itemCount: displayMessages.length + (chatProvider.isGenerating ? 1 : 0),
                   itemBuilder: (context, index) {
                     // Show typing indicator or streaming response as the last item when generating
-                    if (index == activeChat.messages.length && chatProvider.isGenerating) {
+                    if (index == displayMessages.length && chatProvider.isGenerating) {
                       final settings = Provider.of<SettingsProvider>(context, listen: false).settings;
                       
                       if (settings.showLiveResponse && chatProvider.currentStreamingResponse.isNotEmpty) {
@@ -511,7 +490,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       }
                     }
                     
-                    final message = activeChat.messages[index];
+                    final message = displayMessages[index];
                     return _buildMessageBubble(message, fontSize);
                   },
                 );

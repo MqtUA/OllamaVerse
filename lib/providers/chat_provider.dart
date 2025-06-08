@@ -31,15 +31,40 @@ class ChatProvider extends ChangeNotifier {
     
     // Listen for settings changes to refresh models when settings change
     settingsProvider.addListener(() {
-      // Instead of reassigning _ollamaService (which is final),
-      // we'll refresh models when settings change
+      // Get a fresh OllamaService with the updated settings
+      _updateOllamaService();
+      // Refresh models with the new service
       refreshModels();
     });
+  }
+  
+  // Update the OllamaService with current settings
+  void _updateOllamaService() {
+    // Use the proper method to update settings
+    _ollamaService.updateSettings(_settingsProvider.settings);
   }
 
   // Getters
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
+  
+  // Getter for messages that should be displayed in the UI (filters out system messages)
+  List<ChatMessage> get displayableMessages {
+    if (_activeChat == null) return [];
+    
+    return _activeChat!.messages.where((msg) {
+      // Check if this is a system message (has context with role: system)
+      if (msg.context != null && msg.context!.isNotEmpty) {
+        for (var ctx in msg.context!) {
+          if (ctx is Map && ctx.containsKey('role') && ctx['role'] == 'system') {
+            return false; // Don't display system messages
+          }
+        }
+      }
+      return true; // Display all other messages
+    }).toList();
+  }
+  
   List<OllamaModel> get availableModels => _availableModels;
   bool get isLoading => _isLoading;
   bool get isGenerating => _isGenerating;
@@ -390,5 +415,25 @@ class ChatProvider extends ChangeNotifier {
   // Refresh available models - used by external components
   Future<bool> refreshModels() async {
     return _refreshModelsWithRetry();
+  }
+  
+  // Send a message, creating a new chat if needed
+  Future<void> sendMessageWithOptionalChatCreation(String message, {List<String>? attachedFiles}) async {
+    if (message.isEmpty) return;
+    
+    // If no active chat, create one with the first available model
+    if (_activeChat == null) {
+      if (_availableModels.isEmpty) {
+        _error = 'No models available. Please check Ollama server connection.';
+        notifyListeners();
+        return;
+      }
+      
+      // Create a new chat with the first available model
+      await createNewChat(_availableModels.first.name);
+    }
+    
+    // Now send the message
+    await sendMessage(message, attachedFiles: attachedFiles);
   }
 }

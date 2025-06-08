@@ -8,23 +8,71 @@ import '../models/app_settings.dart';
 import '../utils/file_utils.dart';
 import '../utils/logger.dart';
 
+/// Custom exception for Ollama API errors
+class OllamaApiException implements Exception {
+  final String message;
+  final int? statusCode;
+  final Object? originalError;
+  
+  OllamaApiException(this.message, {this.statusCode, this.originalError});
+  
+  @override
+  String toString() => statusCode != null 
+      ? 'OllamaApiException: $message (Status code: $statusCode)' 
+      : originalError != null
+          ? 'OllamaApiException: $message (Error: $originalError)'
+          : 'OllamaApiException: $message';
+}
+
+/// Custom exception for connection errors
+class OllamaConnectionException implements Exception {
+  final String message;
+  final Object? originalError;
+  
+  OllamaConnectionException(this.message, {this.originalError});
+  
+  @override
+  String toString() => originalError != null 
+      ? 'OllamaConnectionException: $message (Error: $originalError)' 
+      : 'OllamaConnectionException: $message';
+}
+
 class OllamaService {
-  final AppSettings settings;
+  // Changed from final to allow updating
+  AppSettings settings;
   
   // For cancellation support
   http.Client? _activeClient;
   StreamSubscription? _activeStreamSubscription;
   bool _isCancelled = false;
   
+  /// Creates a new OllamaService instance with the provided settings.
+  /// 
+  /// [settings] - The AppSettings object containing Ollama server configuration.
   OllamaService({required this.settings});
   
-  // Clean up resources after request
+  /// Updates the service with new settings.
+  /// 
+  /// This method allows changing the Ollama server configuration dynamically
+  /// without having to create a new OllamaService instance.
+  /// 
+  /// [newSettings] - The new AppSettings object to use for future API calls.
+  void updateSettings(AppSettings newSettings) {
+    settings = newSettings;
+  }
+  
+  /// Cleans up resources after a request is completed or cancelled.
+  /// 
+  /// Releases the HTTP client and stream subscription to prevent memory leaks.
   void _cleanupAfterRequest() {
     _activeClient = null;
     _activeStreamSubscription = null;
   }
   
-  // Cancel the current request
+  /// Cancels the current ongoing generation request.
+  /// 
+  /// Sets the cancellation flag and closes any active connections.
+  /// This method can be called to stop a streaming response that's in progress.
   void cancelGeneration() {
     _isCancelled = true;
     if (_activeStreamSubscription != null) {
@@ -36,7 +84,9 @@ class OllamaService {
     _cleanupAfterRequest();
   }
 
-  // Get default headers with auth token if available
+  /// Returns HTTP headers for API requests, including auth token if available.
+  /// 
+  /// @return A map of header key-value pairs for HTTP requests.
   Map<String, String> _getHeaders() {
     final headers = {'Content-Type': 'application/json'};
     if (settings.authToken.isNotEmpty) {
@@ -45,7 +95,12 @@ class OllamaService {
     return headers;
   }
 
-  // Test connection to the Ollama server
+  /// Tests the connection to the Ollama server.
+  /// 
+  /// Makes a lightweight request to verify if the server is reachable
+  /// and responding with a valid status code.
+  /// 
+  /// @return A Future that resolves to true if connection is successful, false otherwise.
   Future<bool> testConnection() async {
     try {
       final response = await http.get(
@@ -58,6 +113,18 @@ class OllamaService {
     }
   }
 
+  // Custom exceptions are now defined at the top level
+
+  /// Fetches the list of available models from the Ollama server.
+  /// 
+  /// Makes an HTTP request to the Ollama API's /api/tags endpoint to retrieve
+  /// all available models that can be used for generating responses.
+  /// 
+  /// Returns a Future that resolves to a List of [OllamaModel] objects.
+  /// 
+  /// Throws:
+  /// - [OllamaApiException]: When the API returns an error status code or invalid format
+  /// - [OllamaConnectionException]: When there's a network or connection error
   Future<List<OllamaModel>> getModels() async {
     try {
       final response = await http.get(
@@ -70,13 +137,49 @@ class OllamaService {
         final List<dynamic> models = data['models'] ?? [];
         return models.map((model) => OllamaModel.fromJson(model)).toList();
       } else {
-        throw Exception('Failed to load models: ${response.statusCode}');
+        throw OllamaApiException(
+          'Failed to load models', 
+          statusCode: response.statusCode
+        );
       }
+    } on http.ClientException catch (e) {
+      throw OllamaConnectionException(
+        'Error connecting to Ollama server', 
+        originalError: e
+      );
+    } on FormatException catch (e) {
+      throw OllamaApiException(
+        'Invalid response format from Ollama server', 
+        originalError: e
+      );
     } catch (e) {
-      throw Exception('Error connecting to Ollama: $e');
+      throw OllamaConnectionException(
+        'Unexpected error when connecting to Ollama', 
+        originalError: e
+      );
     }
   }
 
+  /// Generates a response from the Ollama model based on the provided prompt.
+  /// 
+  /// Parameters:
+  /// - [modelName]: The name of the Ollama model to use (e.g., 'llama2', 'mistral')
+  /// - [prompt]: The text prompt to send to the model
+  /// - [attachedFiles]: Optional list of file paths to include as context
+  /// - [context]: Optional conversation context from previous interactions
+  /// - [stream]: Whether to stream the response (true) or wait for complete response (false)
+  /// - [onStreamResponse]: Callback function that receives chunks of streamed response
+  /// 
+  /// Returns a Future that resolves to the complete response string.
+  /// 
+  /// Throws:
+  /// - [OllamaApiException]: When the API returns an error status code or invalid format
+  /// - [OllamaConnectionException]: When there's a network or connection error
+  /// 
+  /// The method handles various file types differently:
+  /// - Images: Converted to base64 and sent in the 'images' field
+  /// - PDFs: Text is extracted and added to the prompt
+  /// - Text files: Content is read and added to the prompt
   Future<String> generateResponse({
     required String modelName,
     required String prompt,
@@ -221,7 +324,10 @@ class OllamaService {
             },
             onError: (e) {
               if (!completer.isCompleted) {
-                completer.completeError(Exception('Failed to generate streaming response: $e'));
+                completer.completeError(OllamaConnectionException(
+                  'Failed to generate streaming response',
+                  originalError: e
+                ));
               }
               _cleanupAfterRequest();
             },
@@ -230,8 +336,28 @@ class OllamaService {
           
           return await completer.future;
         } else {
+          // Get the error response body for more details
+          final errorBody = await streamedResponse.stream.transform(utf8.decoder).join();
           _cleanupAfterRequest();
-          throw Exception('Failed to generate streaming response: ${streamedResponse.statusCode}');
+          
+          // Try to parse the error response for more details
+          String errorDetails = '';
+          try {
+            final errorJson = json.decode(errorBody);
+            if (errorJson.containsKey('error')) {
+              errorDetails = ': ${errorJson['error']}';
+            }
+          } catch (_) {
+            // If we can't parse the JSON, use the raw body if it's not too long
+            if (errorBody.length < 100) {
+              errorDetails = ': $errorBody';
+            }
+          }
+          
+          throw OllamaApiException(
+            'Failed to generate streaming response$errorDetails', 
+            statusCode: streamedResponse.statusCode
+          );
         }
       } else {
         // Reset cancellation state
@@ -260,18 +386,58 @@ class OllamaService {
             // Return just the response string as required by the API
             return result['response'] as String;
           } else {
-            throw Exception('Failed to generate response: ${response.statusCode}');
+            // Try to parse the error response for more details
+            String errorDetails = '';
+            try {
+              final errorJson = json.decode(response.body);
+              if (errorJson.containsKey('error')) {
+                errorDetails = ': ${errorJson['error']}';
+              }
+            } catch (_) {
+              // If we can't parse the JSON, use the raw body if it's not too long
+              if (response.body.length < 100) {
+                errorDetails = ': ${response.body}';
+              }
+            }
+            
+            throw OllamaApiException(
+              'Failed to generate response$errorDetails', 
+              statusCode: response.statusCode
+            );
           }
         } catch (e) {
           _cleanupAfterRequest();
           if (_isCancelled) {
             return 'Request cancelled by user';
           }
-          throw Exception('Failed to generate response: $e');
+          if (e is http.ClientException) {
+            throw OllamaConnectionException(
+              'Error connecting to Ollama server', 
+              originalError: e
+            );
+          } else if (e is FormatException) {
+            throw OllamaApiException(
+              'Invalid response format from Ollama server', 
+              originalError: e
+            );
+          } else {
+            throw OllamaConnectionException(
+              'Unexpected error when generating response', 
+              originalError: e
+            );
+          }
         }
       }
     } catch (e) {
-      throw Exception('Error connecting to Ollama: $e');
+      if (e is OllamaApiException || e is OllamaConnectionException) {
+        // Re-throw custom exceptions
+        rethrow;
+      } else {
+        throw OllamaConnectionException(
+          'Error connecting to Ollama', 
+          originalError: e
+        );
+      }
     }
   }
 }
