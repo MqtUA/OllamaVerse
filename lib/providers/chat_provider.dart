@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/chat.dart';
 import '../models/chat_message.dart';
@@ -8,8 +9,9 @@ import '../utils/logger.dart';
 import 'settings_provider.dart';
 
 class ChatProvider extends ChangeNotifier {
+  final OllamaService _ollamaService;
   final StorageService _storageService = StorageService();
-  late OllamaService _ollamaService;
+  final SettingsProvider _settingsProvider;
   
   List<Chat> _chats = [];
   Chat? _activeChat;
@@ -18,14 +20,20 @@ class ChatProvider extends ChangeNotifier {
   bool _isGenerating = false;
   String _error = '';
 
-  ChatProvider(SettingsProvider settingsProvider) {
-    _ollamaService = OllamaService(settings: settingsProvider.settings);
+  ChatProvider({
+    required OllamaService ollamaService,
+    required SettingsProvider settingsProvider,
+  }) : 
+    _ollamaService = ollamaService,
+    _settingsProvider = settingsProvider {
     _loadChats();
     _loadModels();
     
-    // Listen for settings changes
+    // Listen for settings changes to refresh models when settings change
     settingsProvider.addListener(() {
-      _ollamaService = OllamaService(settings: settingsProvider.settings);
+      // Instead of reassigning _ollamaService (which is final),
+      // we'll refresh models when settings change
+      refreshModels();
     });
   }
 
@@ -63,7 +71,7 @@ class ChatProvider extends ChangeNotifier {
     await _refreshModelsWithRetry();
   }
 
-  // Public method to refresh models with retry logic
+  // Private method to refresh models with retry logic
   Future<bool> _refreshModelsWithRetry({int retryCount = 2, int delaySeconds = 1}) async {
     _error = '';
     notifyListeners();
@@ -92,14 +100,32 @@ class ChatProvider extends ChangeNotifier {
 
   // Create a new chat
   Future<void> createNewChat(String modelName) async {
+    // Create a new chat with the model name
     final newChat = Chat(
       title: '**New Chat** with `$modelName`',
       modelName: modelName,
     );
     
+    // Check if there's a system prompt configured
+    final systemPrompt = _settingsProvider.settings.systemPrompt;
+    if (systemPrompt.isNotEmpty) {
+      // Add a system message with the configured prompt
+      final systemMessage = ChatMessage(
+        content: systemPrompt,
+        isUser: false,
+        // Use a special context to mark this as a system message
+        context: [{'role': 'system'}],
+      );
+      
+      // Add the system message to the chat
+      newChat.messages.add(systemMessage);
+    }
+    
+    // Add the new chat to the list and set it as active
     _chats.insert(0, newChat);
     _activeChat = newChat;
     
+    // Save the chat to storage
     await _storageService.saveChat(newChat);
     notifyListeners();
   }

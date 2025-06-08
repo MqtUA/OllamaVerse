@@ -33,6 +33,7 @@ class SettingsProvider extends ChangeNotifier {
     bool? darkMode,
     bool? showLiveResponse,
     int? contextLength,
+    String? systemPrompt,
   }) async {
     _settings = _settings.copyWith(
       ollamaHost: ollamaHost,
@@ -42,6 +43,7 @@ class SettingsProvider extends ChangeNotifier {
       darkMode: darkMode,
       showLiveResponse: showLiveResponse,
       contextLength: contextLength,
+      systemPrompt: systemPrompt,
     );
     
     await _storageService.saveSettings(_settings);
@@ -50,7 +52,7 @@ class SettingsProvider extends ChangeNotifier {
 
   ThemeMode get themeMode => _settings.darkMode ? ThemeMode.dark : ThemeMode.light;
   
-  // Get an instance of OllamaService with current settings
+  // Get a configured OllamaService instance based on current settings
   OllamaService getOllamaService() {
     return OllamaService(settings: _settings);
   }

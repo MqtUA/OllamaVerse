@@ -8,6 +8,7 @@ import '../providers/settings_provider.dart';
 import '../utils/file_utils.dart';
 import '../widgets/chat_drawer.dart';
 import '../widgets/custom_markdown_body.dart';
+import '../widgets/markdown_title.dart';
 import '../widgets/model_selector.dart';
 import '../widgets/typing_indicator.dart';
 
@@ -294,7 +295,13 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Consumer<ChatProvider>(
           builder: (context, chatProvider, child) {
             final activeChat = chatProvider.activeChat;
-            return Text(activeChat?.title ?? 'New Chat');
+            return MarkdownTitle(
+              data: activeChat?.title ?? 'New Chat',
+              style: Theme.of(context).appBarTheme.titleTextStyle ?? 
+                     Theme.of(context).textTheme.titleLarge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
           },
         ),
         actions: [

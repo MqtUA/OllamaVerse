@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
 
@@ -14,11 +15,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _hostController;
   late TextEditingController _portController;
   late TextEditingController _authTokenController;
+  late TextEditingController _systemPromptController;
   late double _fontSize;
   late bool _darkMode;
   late bool _showLiveResponse;
   late int _contextLength;
   bool _isTesting = false;
+  String _appVersion = ''; // Store app version
 
   @override
   void initState() {
@@ -27,10 +30,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _hostController = TextEditingController(text: settings.ollamaHost);
     _portController = TextEditingController(text: settings.ollamaPort.toString());
     _authTokenController = TextEditingController(text: settings.authToken);
+    _systemPromptController = TextEditingController(text: settings.systemPrompt);
     _fontSize = settings.fontSize;
     _darkMode = settings.darkMode;
     _showLiveResponse = settings.showLiveResponse;
     _contextLength = settings.contextLength;
+    
+    // Load app version from package info
+    _loadAppVersion();
+  }
+  
+  // Load app version from package info
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = packageInfo.version;
+      });
+    } catch (e) {
+      // Fallback to default version if package info fails
+      setState(() {
+        _appVersion = '1.0.0';
+      });
+    }
   }
 
   @override
@@ -38,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _hostController.dispose();
     _portController.dispose();
     _authTokenController.dispose();
+    _systemPromptController.dispose();
     super.dispose();
   }
   
@@ -312,6 +335,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                         ),
                       ),
+                      
+                      // System Prompt Section
+                      const Divider(),
+                      const ListTile(
+                        title: Text('System Prompt'),
+                        subtitle: Text('This prompt will be applied to all new chats'),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: TextField(
+                          controller: _systemPromptController,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter a system prompt...',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 4,
+                          onChanged: (value) {
+                            // Save the system prompt when it changes
+                            settingsProvider.updateSettings(systemPrompt: value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          'The system prompt helps define the AI assistant\'s behavior. '  
+                          'For example: "You are a helpful assistant specialized in programming."',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -334,8 +392,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'OllamaVerse v1.0.0\n'
+                      Text(
+                        'OllamaVerse v$_appVersion\n'
                         'A cross-platform GUI client for Ollama',
                       ),
                       const SizedBox(height: 8),

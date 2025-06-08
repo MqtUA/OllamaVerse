@@ -22,6 +22,9 @@ migrate_working_dir/
 # VS Code related
 .vscode/
 
+# Cascade related
+.windsurf/
+
 # Flutter repo-specific
 /bin/cache/
 /bin/internal/bootstrap.bat

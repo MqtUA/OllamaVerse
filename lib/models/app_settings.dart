@@ -6,6 +6,7 @@ class AppSettings {
   final bool darkMode;
   final bool showLiveResponse;
   final int contextLength;
+  final String systemPrompt; // System prompt to be applied to all new chats
 
   AppSettings({
     this.ollamaHost = '127.0.0.1',
@@ -15,6 +16,7 @@ class AppSettings {
     this.darkMode = false,
     this.showLiveResponse = false,
     this.contextLength = 4096,
+    this.systemPrompt = '', // Default empty system prompt
   });
 
   String get ollamaUrl => 'http://$ollamaHost:$ollamaPort';
@@ -27,6 +29,7 @@ class AppSettings {
     bool? darkMode,
     bool? showLiveResponse,
     int? contextLength,
+    String? systemPrompt,
   }) {
     return AppSettings(
       ollamaHost: ollamaHost ?? this.ollamaHost,
@@ -36,6 +39,7 @@ class AppSettings {
       darkMode: darkMode ?? this.darkMode,
       showLiveResponse: showLiveResponse ?? this.showLiveResponse,
       contextLength: contextLength ?? this.contextLength,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
     );
   }
 
@@ -48,6 +52,7 @@ class AppSettings {
       darkMode: json['darkMode'] ?? false,
       showLiveResponse: json['showLiveResponse'] ?? false,
       contextLength: json['contextLength'] ?? 4096,
+      systemPrompt: json['systemPrompt'] ?? '',
     );
   }
 
@@ -60,6 +65,7 @@ class AppSettings {
       'darkMode': darkMode,
       'showLiveResponse': showLiveResponse,
       'contextLength': contextLength,
+      'systemPrompt': systemPrompt,
     };
   }
 }
