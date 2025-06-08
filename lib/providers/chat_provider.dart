@@ -371,8 +371,8 @@ class ChatProvider extends ChangeNotifier {
       
       await _storageService.saveChat(updatedWithAiChat);
       
-      // If this is the first message exchange, generate a better title
-      if (updatedMessages.length == 1 || _activeChat!.title == 'New Chat') {
+      // If this is the first message exchange or the chat still has the default title, generate a better title
+      if (updatedMessages.length <= 2 || _activeChat!.title == 'New Chat') {
         await _generateChatTitle(content, response, _activeChat!.modelName, _activeChat!.id);
       }
     } catch (e) {
