@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
-import 'custom_markdown_body.dart';
+import 'markdown_title.dart';
 
 class ChatDrawer extends StatelessWidget {
   const ChatDrawer({super.key});
@@ -137,13 +137,14 @@ class ChatDrawer extends StatelessWidget {
                         chatProvider.deleteChat(chat.id);
                       },
                       child: ListTile(
-                        title: SizedBox(
-                          height: fontSize * 1.5, // Ensure consistent height
-                          child: CustomMarkdownBody(
-                            data: chat.title,
+                        title: MarkdownTitle(
+                          data: chat.title,
+                          style: TextStyle(
                             fontSize: fontSize,
-                            selectable: false,
+                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
                           'Model: ${chat.modelName}',
@@ -205,18 +206,54 @@ class ChatDrawer extends StatelessWidget {
 
   void _showEditTitleDialog(BuildContext context, String chatId, String currentTitle) {
     final TextEditingController controller = TextEditingController(text: currentTitle);
+    final ValueNotifier<String> titleNotifier = ValueNotifier<String>(currentTitle);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final fontSize = settingsProvider.settings.fontSize;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Chat Title'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Title',
-            border: OutlineInputBorder(),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  border: OutlineInputBorder(),
+                  helperText: 'Supports markdown formatting',
+                ),
+                autofocus: true,
+                onChanged: (value) {
+                  titleNotifier.value = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              const Text('Preview:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8.0),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: ValueListenableBuilder<String>(
+                  valueListenable: titleNotifier,
+                  builder: (context, value, child) {
+                    return MarkdownTitle(
+                      data: value,
+                      style: TextStyle(fontSize: fontSize),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          autofocus: true,
         ),
         actions: [
           TextButton(
@@ -236,6 +273,9 @@ class ChatDrawer extends StatelessWidget {
           ),
         ],
       ),
-    ).then((_) => controller.dispose());
+    ).then((_) {
+      controller.dispose();
+      titleNotifier.dispose();
+    });
   }
 }

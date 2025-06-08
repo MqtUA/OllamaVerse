@@ -93,7 +93,7 @@ class ChatProvider extends ChangeNotifier {
   // Create a new chat
   Future<void> createNewChat(String modelName) async {
     final newChat = Chat(
-      title: 'New Chat',
+      title: '**New Chat** with `$modelName`',
       modelName: modelName,
     );
     
