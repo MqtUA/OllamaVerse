@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 
 class ModelSelector extends StatelessWidget {
-  const ModelSelector({super.key});
+  final bool compact;
+  
+  const ModelSelector({super.key, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -25,31 +27,52 @@ class ModelSelector extends StatelessWidget {
           );
         }
 
+        // Use different UI for compact mode
         return PopupMenuButton<String>(
-          icon: Stack(
-            alignment: Alignment.center,
-            children: [
-              const Icon(Icons.model_training),
-              // Add a small badge to indicate the current model is active
-              if (activeChat != null)
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check,
-                      size: 8,
-                      color: Colors.white,
-                    ),
-                  ),
+          icon: compact 
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.model_training, size: 20),
+                    if (activeChat != null) ...[  
+                      const SizedBox(width: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 100),
+                        child: Text(
+                          activeChat.modelName,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 14),
+                    ],
+                  ],
+                )
+              : Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const Icon(Icons.model_training),
+                    // Add a small badge to indicate the current model is active
+                    if (activeChat != null)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).primaryColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 8,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
-          ),
           tooltip: activeChat != null 
               ? 'Current model: ${activeChat.modelName}' 
               : 'Select model',

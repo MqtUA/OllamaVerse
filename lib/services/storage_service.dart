@@ -10,6 +10,7 @@ class StorageService {
   // Constants
   static const String settingsKey = 'app_settings';
   static const String chatsDir = 'chats';
+  static const String lastSelectedModelKey = 'last_selected_model';
 
   // Save app settings
   Future<void> saveSettings(AppSettings settings) async {
@@ -32,6 +33,18 @@ class StorageService {
     }
     
     return AppSettings(); // Return default settings
+  }
+  
+  // Save last selected model
+  Future<void> saveLastSelectedModel(String modelName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(lastSelectedModelKey, modelName);
+  }
+  
+  // Load last selected model
+  Future<String> loadLastSelectedModel() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(lastSelectedModelKey) ?? '';
   }
 
   // Get chats directory

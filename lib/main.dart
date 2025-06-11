@@ -6,15 +6,29 @@ import 'providers/chat_provider.dart';
 import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
+import 'utils/file_utils.dart';
+import 'theme/dracula_theme.dart';
 
-void main() {
-  // Initialize logger
-  AppLogger.init();
-  
+Future<void> main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Initialize logger
+  await AppLogger.init();
+
+  // Start periodic file cleanup
+  _startFileCleanup();
+
   runApp(const MyApp());
+}
+
+// Start periodic file cleanup
+void _startFileCleanup() {
+  // Clean up files every 24 hours
+  Future.delayed(const Duration(hours: 24), () async {
+    await FileUtils.cleanupOldFiles();
+    _startFileCleanup(); // Schedule next cleanup
+  });
 }
 
 class MyApp extends StatefulWidget {
@@ -38,12 +52,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Handle app lifecycle changes
-    // We've removed the Provider access here to prevent errors
-    // The models will refresh when navigating to the ChatScreen anyway
+    if (state == AppLifecycleState.resumed) {
+      // Clean up files when app is resumed
+      FileUtils.cleanupOldFiles();
+    }
   }
 
   @override
@@ -52,12 +68,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       providers: [
         // Create the SettingsProvider first
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        
+
         // Create the ChatProvider with the required parameters
         ChangeNotifierProxyProvider<SettingsProvider, ChatProvider>(
           // Create a new ChatProvider with the required parameters
           create: (context) {
-            final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+            final settingsProvider = Provider.of<SettingsProvider>(
+              context,
+              listen: false,
+            );
             final ollamaService = settingsProvider.getOllamaService();
             return ChatProvider(
               ollamaService: ollamaService,
@@ -87,14 +106,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               useMaterial3: true,
               brightness: Brightness.light,
             ),
-            darkTheme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: Colors.blue,
-                brightness: Brightness.dark,
-              ),
-              useMaterial3: true,
-              brightness: Brightness.dark,
-            ),
+            darkTheme: draculaDarkTheme(),
             themeMode: settingsProvider.themeMode,
             initialRoute: '/',
             routes: {

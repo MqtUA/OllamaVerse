@@ -16,6 +16,9 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **Chat Deletion**: Delete unwanted conversations
 - **Selectable Text**: All text (both user and AI responses) is selectable for easy copying
 - **Enhanced Chat Bubbles**: Visually distinct chat bubbles with improved styling
+- **System Prompt Configuration**: Set custom system prompts for each chat
+- **Chat History Persistence**: All conversations are automatically saved and restored
+- **Keyboard Shortcuts**: Use Ctrl+Enter to quickly send messages
 
 ### Response Generation
 - **Live Response Streaming**: See responses as they are generated in real-time
@@ -23,17 +26,18 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **Enhanced Context Memory**: Maintains comprehensive conversation history for better follow-up understanding
 - **Smart Context Handling**: Automatically includes previous messages for short follow-up prompts
 - **Configurable Context Length**: Adjust the token context window size (2048-32768)
+- **Error Recovery**: Automatic retry mechanism for failed API calls
 
 ### File Handling
 - **File Attachments**: Attach files to your messages for context
 - **PDF Support**: Extract and process text from PDF files
 - **Image Support**: Process images as part of your prompts
 - **Multiple File Types**: Support for various text and document formats
+- **File Size Limits**: Automatic handling of large files
+- **File Cleanup**: Automatic cleanup of temporary files
 
 ### Code Display
-- **Syntax Highlighting**: Proper formatting for code blocks with language-specific coloring
-- **Dark Mode Support**: Code blocks display correctly in both light and dark themes
-- **Copy Button**: Easily copy code snippets
+- **Copy Code Button**: Easily copy code snippets
 - **Language Labels**: Code blocks show the programming language
 - **LaTeX Support**: Render mathematical formulas and equations
 
@@ -41,6 +45,8 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **Dark Mode**: Toggle between light and dark themes
 - **Font Size Control**: Adjust text size for better readability
 - **Responsive Design**: Works on different screen sizes
+- **Custom Themes**: Support for custom color schemes
+- **Accessibility**: High contrast mode and screen reader support
 
 ### Settings
 - **Server Configuration**: Configure Ollama server host and port
@@ -49,16 +55,20 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **Font Size**: Adjust the font size for better readability
 - **Dark Mode**: Toggle between light and dark themes
 - **Live Response**: Toggle real-time response streaming
+- **System Prompt**: Configure default system prompt for new chats
 
 ### Server Configuration
 - **Custom Host/Port**: Connect to any Ollama server
 - **Model Refresh**: Update the available model list
+- **Connection Status**: Real-time server connection status
+- **Error Handling**: Detailed error messages for connection issues
 
 ## Getting Started
 
 ### Prerequisites
 - [Ollama](https://ollama.ai/) installed and running on your local machine or a remote server
 - At least one model pulled in Ollama (e.g., `ollama pull llama3`)
+- Flutter SDK (for development)
 
 ### Installation
 1. Download the latest release for your platform
@@ -72,6 +82,7 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 4. Attach files using the attachment button if needed
 5. Use the stop button to cancel response generation
 6. Adjust settings as needed through the Settings screen
+7. Use Ctrl+Enter to quickly send messages
 
 ### Storage Locations
 
@@ -94,14 +105,19 @@ Or on newer Android versions with scoped storage:
 
 ## Development
 
-This project is built with Flutter and can be run on Windows and Android platforms.
+### Environment Setup
+1. Install Flutter SDK
+2. Clone the repository
+3. Install dependencies
+4. Configure your IDE
 
+### Building from Source
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ollamaverse.git
+git clone https://github.com/MqtUA/OllamaVerse.git
 
 # Navigate to the project directory
-cd ollamaverse
+cd OllamaVerse
 
 # Install dependencies
 flutter pub get
@@ -110,9 +126,29 @@ flutter pub get
 flutter run
 ```
 
-## Packages Used
+### Testing
+```bash
+# Run unit tests
+flutter test
 
-OllamaVerse leverages several Flutter packages to provide its functionality:
+# Run integration tests
+flutter test integration_test
+```
+
+### Code Style
+- Follow the official Dart style guide
+- Use meaningful variable and function names
+- Add comments for complex logic
+- Write unit tests for new features
+
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Write tests for new features
+5. Submit a pull request
+
+## Packages Used
 
 ### Core Functionality
 - **http**: Network requests to the Ollama API

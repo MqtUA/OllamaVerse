@@ -63,10 +63,15 @@ class MockOllamaService extends _i1.Mock implements _i3.OllamaService {
   );
 
   @override
-  void updateSettings(_i2.AppSettings? newSettings) => super.noSuchMethod(
-    Invocation.method(#updateSettings, [newSettings]),
-    returnValueForMissingStub: null,
-  );
+  void updateSettings(_i2.AppSettings? newSettings, {String? newAuthToken}) =>
+      super.noSuchMethod(
+        Invocation.method(
+          #updateSettings,
+          [newSettings],
+          {#newAuthToken: newAuthToken},
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void cancelGeneration() => super.noSuchMethod(

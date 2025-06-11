@@ -21,25 +21,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _showLiveResponse;
   late int _contextLength;
   bool _isTesting = false;
-  String _appVersion = ''; // Store app version
+  String _appVersion = '';
+  bool _showAuthToken = false;
 
   @override
   void initState() {
     super.initState();
-    final settings = Provider.of<SettingsProvider>(context, listen: false).settings;
+    final settings =
+        Provider.of<SettingsProvider>(context, listen: false).settings;
     _hostController = TextEditingController(text: settings.ollamaHost);
-    _portController = TextEditingController(text: settings.ollamaPort.toString());
-    _authTokenController = TextEditingController(text: settings.authToken);
-    _systemPromptController = TextEditingController(text: settings.systemPrompt);
+    _portController = TextEditingController(
+      text: settings.ollamaPort.toString(),
+    );
+    _authTokenController = TextEditingController();
+    _systemPromptController = TextEditingController(
+      text: settings.systemPrompt,
+    );
     _fontSize = settings.fontSize;
     _darkMode = settings.darkMode;
     _showLiveResponse = settings.showLiveResponse;
     _contextLength = settings.contextLength;
-    
-    // Load app version from package info
+
+    // Load app version and auth token
     _loadAppVersion();
+    _loadAuthToken();
   }
-  
+
+  // Load auth token securely
+  Future<void> _loadAuthToken() async {
+    final settingsProvider = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    );
+    final authToken = settingsProvider.authToken;
+    if (authToken != null) {
+      _authTokenController.text = '••••••••••••••••'; // Show placeholder
+    }
+  }
+
   // Load app version from package info
   Future<void> _loadAppVersion() async {
     try {
@@ -48,7 +67,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _appVersion = packageInfo.version;
       });
     } catch (e) {
-      // Fallback to default version if package info fails
       setState(() {
         _appVersion = '1.0.0';
       });
@@ -63,59 +81,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _systemPromptController.dispose();
     super.dispose();
   }
-  
+
   // Handle saving settings and checking connection
   Future<void> _saveAndCheckConnection() async {
-    // Set loading state
     setState(() {
       _isTesting = true;
     });
-    
+
     try {
       final host = _hostController.text;
       final port = int.tryParse(_portController.text) ?? 11434;
-      final authToken = _authTokenController.text;
-      
-      // Get providers
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-      
-      // Update settings
+      final authToken = _showAuthToken ? _authTokenController.text : null;
+
+      final settingsProvider = Provider.of<SettingsProvider>(
+        context,
+        listen: false,
+      );
+
       await settingsProvider.updateSettings(
         ollamaHost: host,
         ollamaPort: port,
         authToken: authToken,
       );
-      
-      // Test connection - must check mounted after each async operation
+
       if (!mounted) return;
-      
+
       final ollamaService = settingsProvider.getOllamaService();
       final isConnected = await ollamaService.testConnection();
-      
-      // Must check mounted again after the async operation
+
       if (!mounted) return;
-      
+
       if (isConnected) {
-        // Connection successful, refresh models
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
         await chatProvider.refreshModels();
-        
-        // Must check mounted again
+
         if (!mounted) return;
-        
-        // Show success message
+
         _showSuccessMessage();
       } else {
-        // Show connection failed dialog
         _showConnectionFailedDialog();
       }
     } catch (e) {
-      // Show error dialog if still mounted
       if (mounted) {
         _showErrorDialog(e.toString());
       }
     } finally {
-      // Reset loading state if still mounted
       if (mounted) {
         setState(() {
           _isTesting = false;
@@ -123,66 +133,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
   }
-  
+
   // Show success message
   void _showSuccessMessage() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Connection successful! Models refreshed.'), 
-        backgroundColor: Colors.green
+        content: Text('Connection successful! Models refreshed.'),
+        backgroundColor: Colors.green,
       ),
     );
   }
-  
+
   // Show connection failed dialog
   void _showConnectionFailedDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Connection Failed'),
-        content: const Text('Could not connect to the Ollama server. Please check your settings and ensure the server is running.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Connection Failed'),
+            content: const Text(
+              'Could not connect to the Ollama server. Please check your settings and ensure the server is running.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
-  
+
   // Show error dialog
   void _showErrorDialog(String errorMessage) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Connection Error'),
-        content: Text('Error: $errorMessage'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Connection Error'),
+            content: Text('Error: $errorMessage'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.width <= 600;
+    final horizontalPadding = isSmallScreen ? 8.0 : 16.0;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, child) {
           return ListView(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: 16.0,
+            ),
             children: [
               // Ollama Server Settings Section
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -194,68 +212,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _hostController,
-                        decoration: const InputDecoration(
-                          labelText: 'Ollama Host',
-                          hintText: 'e.g., 127.0.0.1',
-                          border: OutlineInputBorder(),
+                      if (isSmallScreen) ...[
+                        _buildHostField(),
+                        const SizedBox(height: 8),
+                        _buildPortField(),
+                        const SizedBox(height: 8),
+                        _buildAuthTokenField(),
+                      ] else
+                        Row(
+                          children: [
+                            Expanded(child: _buildHostField()),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildPortField()),
+                          ],
                         ),
-                      ),
+                      if (!isSmallScreen) ...[
+                        const SizedBox(height: 16),
+                        _buildAuthTokenField(),
+                      ],
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: _portController,
-                        decoration: const InputDecoration(
-                          labelText: 'Ollama Port',
-                          hintText: 'e.g., 11434',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _authTokenController,
-                        decoration: const InputDecoration(
-                          labelText: 'Auth Token (Optional)',
-                          hintText: 'Bearer token for authentication',
-                          border: OutlineInputBorder(),
-                          helperText: 'Used only if Ollama is behind an authentication server',
-                        ),
-                        obscureText: true,
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isTesting 
-                            ? null 
-                            : () {
-                                // Use a separate method to handle async operations
-                                _saveAndCheckConnection();
-                              },
-                          child: _isTesting 
-                            ? const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                                  SizedBox(width: 10),
-                                  Text('Testing connection...'),
-                                ],
-                              )
-                            : const Text('Save and check connection'),
-                        ),
-                      ),
+                      _buildTestConnectionButton(),
                     ],
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // App Appearance Settings Section
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -283,7 +270,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 });
                               },
                               onChangeEnd: (value) {
-                                settingsProvider.updateSettings(fontSize: value);
+                                settingsProvider.updateSettings(
+                                  fontSize: value,
+                                );
                               },
                             ),
                           ),
@@ -304,46 +293,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Divider(),
                       SwitchListTile(
                         title: const Text('Show Live Response'),
-                        subtitle: const Text('See responses as they are generated'),
+                        subtitle: const Text(
+                          'See responses as they are generated',
+                        ),
                         value: _showLiveResponse,
                         onChanged: (value) {
                           setState(() {
                             _showLiveResponse = value;
                           });
-                          settingsProvider.updateSettings(showLiveResponse: value);
+                          settingsProvider.updateSettings(
+                            showLiveResponse: value,
+                          );
                         },
                       ),
                       const Divider(),
                       ListTile(
                         title: const Text('Context Length'),
-                        subtitle: const Text('Maximum token context window (default: 4096)'),
+                        subtitle: const Text(
+                          'Maximum token context window (default: 4096)',
+                        ),
                         trailing: DropdownButton<int>(
                           value: _contextLength,
-                          items: [2048, 4096, 8192, 16384, 32768].map((int value) {
-                            return DropdownMenuItem<int>(
-                              value: value,
-                              child: Text(value.toString()),
-                            );
-                          }).toList(),
+                          items:
+                              [2048, 4096, 8192, 16384, 32768].map((int value) {
+                                return DropdownMenuItem<int>(
+                                  value: value,
+                                  child: Text(value.toString()),
+                                );
+                              }).toList(),
                           onChanged: (int? newValue) {
                             if (newValue != null) {
                               setState(() {
                                 _contextLength = newValue;
                               });
-                              settingsProvider.updateSettings(contextLength: newValue);
+                              settingsProvider.updateSettings(
+                                contextLength: newValue,
+                              );
                             }
                           },
                         ),
                       ),
-                      
+
                       // System Prompt Section
                       const Divider(),
                       const ListTile(
                         title: Text('System Prompt'),
-                        subtitle: Text('This prompt will be applied to all new chats'),
+                        subtitle: Text(
+                          'This prompt will be applied to all new chats',
+                        ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: horizontalPadding,
+                        ),
                         child: TextField(
                           controller: _systemPromptController,
                           decoration: const InputDecoration(
@@ -353,7 +355,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           maxLines: 4,
                           onChanged: (value) {
                             // Save the system prompt when it changes
-                            settingsProvider.updateSettings(systemPrompt: value);
+                            settingsProvider.updateSettings(
+                              systemPrompt: value,
+                            );
                           },
                         ),
                       ),
@@ -361,7 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: Text(
-                          'The system prompt helps define the AI assistant\'s behavior. '  
+                          'The system prompt helps define the AI assistant\'s behavior. '
                           'For example: "You are a helpful assistant specialized in programming."',
                           style: TextStyle(
                             fontSize: 12,
@@ -374,13 +378,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // About Section
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -403,7 +407,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           // This would require url_launcher package
                           // For now, just show a message
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('GitHub: https://github.com/MqtUA/OllamaVerse')),
+                            const SnackBar(
+                              content: Text(
+                                'GitHub: https://github.com/MqtUA/OllamaVerse',
+                              ),
+                            ),
                           );
                         },
                         child: const Text(
@@ -421,6 +429,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildHostField() {
+    return TextField(
+      controller: _hostController,
+      decoration: const InputDecoration(
+        labelText: 'Host',
+        hintText: 'localhost',
+        border: OutlineInputBorder(),
+      ),
+    );
+  }
+
+  Widget _buildPortField() {
+    return TextField(
+      controller: _portController,
+      decoration: const InputDecoration(
+        labelText: 'Port',
+        hintText: '11434',
+        border: OutlineInputBorder(),
+      ),
+      keyboardType: TextInputType.number,
+    );
+  }
+
+  Widget _buildAuthTokenField() {
+    return TextField(
+      controller: _authTokenController,
+      decoration: InputDecoration(
+        labelText: 'Auth Token (Optional)',
+        hintText: 'Bearer token for authentication',
+        border: const OutlineInputBorder(),
+        helperText: 'Used only if Ollama is behind an authentication server',
+        suffixIcon: IconButton(
+          icon: Icon(_showAuthToken ? Icons.visibility_off : Icons.visibility),
+          onPressed: () {
+            setState(() {
+              _showAuthToken = !_showAuthToken;
+              if (!_showAuthToken) {
+                _authTokenController.text = '••••••••••••••••';
+              } else {
+                _loadAuthToken();
+              }
+            });
+          },
+        ),
+      ),
+      obscureText: !_showAuthToken,
+    );
+  }
+
+  Widget _buildTestConnectionButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isTesting ? null : _saveAndCheckConnection,
+        child:
+            _isTesting
+                ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : const Text('Test Connection'),
       ),
     );
   }

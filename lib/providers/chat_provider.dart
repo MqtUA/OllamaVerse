@@ -19,6 +19,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isLoading = true;
   bool _isGenerating = false;
   String _error = '';
+  String _lastSelectedModel = ''; // Track last selected model
 
   ChatProvider({
     required OllamaService ollamaService,
@@ -82,6 +83,9 @@ class ChatProvider extends ChangeNotifier {
     try {
       _chats = await _storageService.loadAllChats();
       
+      // Load the last selected model
+      _lastSelectedModel = await _storageService.loadLastSelectedModel();
+      
       // Set active chat to the most recent one if available
       if (_chats.isNotEmpty && _activeChat == null) {
         _activeChat = _chats.first;
@@ -127,11 +131,20 @@ class ChatProvider extends ChangeNotifier {
   }
 
   // Create a new chat
-  Future<void> createNewChat(String modelName) async {
+  Future<void> createNewChat([String? modelName]) async {
+    // Use the provided model name, or last selected model, or first available model
+    final selectedModel = modelName ?? 
+                         (_lastSelectedModel.isNotEmpty ? _lastSelectedModel : 
+                         (_availableModels.isNotEmpty ? _availableModels.first.name : 'unknown'));
+    
+    // Update last selected model and persist it
+    _lastSelectedModel = selectedModel;
+    await _storageService.saveLastSelectedModel(selectedModel);
+    
     // Create a new chat with the model name
     final newChat = Chat(
-      title: '**New Chat** with `$modelName`',
-      modelName: modelName,
+      title: 'New chat with $selectedModel',
+      modelName: selectedModel,
     );
     
     // Check if there's a system prompt configured
@@ -186,7 +199,24 @@ class ChatProvider extends ChangeNotifier {
   Future<void> updateChatModel(String chatId, String newModelName) async {
     final index = _chats.indexWhere((c) => c.id == chatId);
     if (index >= 0) {
-      final updatedChat = _chats[index].copyWith(modelName: newModelName);
+      // Check if this is a new chat with default title
+      bool isDefaultTitle = false;
+      if (_chats[index].messages.isEmpty && 
+          (_chats[index].title == 'New Chat' || 
+           _chats[index].title.startsWith('New chat with'))) {
+        isDefaultTitle = true;
+      }
+      
+      // Update last selected model
+      _lastSelectedModel = newModelName;
+      
+      // Create updated chat with new model name
+      final updatedChat = _chats[index].copyWith(
+        modelName: newModelName,
+        // Update title if it's a default title
+        title: isDefaultTitle ? 'New chat with $newModelName' : _chats[index].title,
+      );
+      
       _chats[index] = updatedChat;
       
       if (_activeChat?.id == chatId) {

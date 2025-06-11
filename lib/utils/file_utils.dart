@@ -9,30 +9,81 @@ import 'package:uuid/uuid.dart';
 import 'logger.dart';
 
 class FileUtils {
+  // Constants for file handling
+  static const int maxFileSizeMB = 50; // Maximum file size in MB
+  static const List<String> allowedExtensions = [
+    'pdf',
+    'txt',
+    'md',
+    'json',
+    'csv',
+    'html',
+    'xml',
+    'js',
+    'py',
+    'java',
+    'c',
+    'cpp',
+    'h',
+    'cs',
+    'php',
+    'rb',
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'bmp',
+  ];
+
   // Pick files from device
   static Future<List<String>> pickFiles() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
-        type: FileType.any,
+        type: FileType.custom,
+        allowedExtensions: allowedExtensions,
       );
 
       if (result != null) {
         List<String> savedPaths = [];
-        
+
         // Save picked files to app directory
         for (var file in result.files) {
           if (file.path != null) {
-            final savedPath = await saveFileToAppDirectory(File(file.path!), file.name);
+            // Check file size
+            final fileSize = await File(file.path!).length();
+            final sizeInMB = fileSize / (1024 * 1024);
+
+            if (sizeInMB > maxFileSizeMB) {
+              AppLogger.warning(
+                'File ${file.name} exceeds size limit of ${maxFileSizeMB}MB',
+              );
+              continue;
+            }
+
+            // Check file extension
+            final ext = getFileExtension(file.path!);
+            if (!allowedExtensions.contains(ext)) {
+              AppLogger.warning(
+                'File ${file.name} has unsupported extension: $ext',
+              );
+              continue;
+            }
+
+            final savedPath = await saveFileToAppDirectory(
+              File(file.path!),
+              file.name,
+            );
             if (savedPath != null) {
               savedPaths.add(savedPath);
             }
           }
         }
-        
+
         return savedPaths;
       }
-      
+
       return [];
     } catch (e) {
       AppLogger.error('Error picking files', e);
@@ -41,23 +92,59 @@ class FileUtils {
   }
 
   // Save file to app directory
-  static Future<String?> saveFileToAppDirectory(File file, String fileName) async {
+  static Future<String?> saveFileToAppDirectory(
+    File file,
+    String fileName,
+  ) async {
     try {
       final appDir = await getApplicationDocumentsDirectory();
       final attachmentsDir = Directory('${appDir.path}/attachments');
-      
+
       if (!await attachmentsDir.exists()) {
         await attachmentsDir.create(recursive: true);
       }
-      
+
       // Generate unique filename to avoid collisions
       final uniqueId = const Uuid().v4();
-      final savedFile = await file.copy('${attachmentsDir.path}/$uniqueId-$fileName');
-      
+      final savedFile = await file.copy(
+        '${attachmentsDir.path}/$uniqueId-$fileName',
+      );
+
       return savedFile.path;
     } catch (e) {
       AppLogger.error('Error saving file', e);
       return null;
+    }
+  }
+
+  // Clean up old files
+  static Future<void> cleanupOldFiles({
+    Duration maxAge = const Duration(days: 7),
+  }) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final attachmentsDir = Directory('${appDir.path}/attachments');
+
+      if (!await attachmentsDir.exists()) {
+        return;
+      }
+
+      final now = DateTime.now();
+      final files = await attachmentsDir.list().toList();
+
+      for (var file in files) {
+        if (file is File) {
+          final stat = await file.stat();
+          final age = now.difference(stat.modified);
+
+          if (age > maxAge) {
+            await file.delete();
+            AppLogger.info('Deleted old file: ${file.path}');
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.error('Error cleaning up old files', e);
     }
   }
 
@@ -75,7 +162,7 @@ class FileUtils {
   // Get file icon based on extension
   static String getFileIconName(String filePath) {
     final ext = getFileExtension(filePath);
-    
+
     // Map common extensions to appropriate icons
     switch (ext) {
       case 'pdf':
@@ -132,38 +219,58 @@ class FileUtils {
   // Check if file is a text file
   static bool isTextFile(String filePath) {
     final ext = getFileExtension(filePath);
-    return ['txt', 'md', 'json', 'csv', 'html', 'xml', 'js', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'php', 'rb'].contains(ext);
+    return [
+      'txt',
+      'md',
+      'json',
+      'csv',
+      'html',
+      'xml',
+      'js',
+      'py',
+      'java',
+      'c',
+      'cpp',
+      'h',
+      'cs',
+      'php',
+      'rb',
+    ].contains(ext);
   }
-  
+
   // Extract text from PDF file using Syncfusion PDF library
   static Future<String> extractTextFromPdf(String filePath) async {
     try {
       final file = File(filePath);
+      final fileSize = await file.length();
+      final sizeInMB = fileSize / (1024 * 1024);
+
+      if (sizeInMB > maxFileSizeMB) {
+        return 'PDF file is too large (${sizeInMB.toStringAsFixed(2)}MB). Maximum size is ${maxFileSizeMB}MB.';
+      }
+
       final Uint8List bytes = await file.readAsBytes();
       final fileName = path.basename(filePath);
-      
+
       // Load the PDF document
       final PdfDocument document = PdfDocument(inputBytes: bytes);
-      
+
       // Extract text from all pages
       String extractedText = '';
       PdfTextExtractor extractor = PdfTextExtractor(document);
-      
+
       for (int i = 0; i < document.pages.count; i++) {
         String pageText = extractor.extractText(startPageIndex: i);
         extractedText += 'Page ${i + 1}:\n$pageText\n\n';
       }
-      
+
       // Close the document
       document.dispose();
-      
+
       if (extractedText.trim().isEmpty) {
-        // If no text was extracted (e.g., scanned PDF), return a placeholder
-        final fileSize = await file.length();
-        final sizeInMB = (fileSize / (1024 * 1024)).toStringAsFixed(2);
-        return '[PDF File: $fileName, Size: $sizeInMB MB]\n\nThis appears to be a scanned or image-based PDF. Text extraction is limited.';
+        return '[PDF File: $fileName, Size: ${sizeInMB.toStringAsFixed(2)}MB]\n\nThis appears to be a scanned or image-based PDF. Text extraction is limited.';
       }
-      
+
       return 'Content extracted from PDF: $fileName\n\n$extractedText';
     } catch (e) {
       AppLogger.error('Error extracting text from PDF', e);

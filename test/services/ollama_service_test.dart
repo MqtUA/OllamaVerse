@@ -7,13 +7,11 @@ import 'package:ollamaverse/services/ollama_service.dart';
 
 // Generate a MockClient using the Mockito package
 @GenerateMocks([http.Client])
-
 void main() {
   late OllamaService ollamaService;
   final testSettings = AppSettings(
     ollamaHost: 'localhost',
     ollamaPort: 11434,
-    authToken: 'test-token',
     contextLength: 4096,
     darkMode: false,
     fontSize: 14,
@@ -34,22 +32,35 @@ void main() {
       final newSettings = AppSettings(
         ollamaHost: 'new-host',
         ollamaPort: 12345,
-        authToken: 'new-token',
         contextLength: 2048,
         darkMode: true,
         fontSize: 16,
         showLiveResponse: false,
       );
-      
+
       ollamaService.updateSettings(newSettings);
       expect(ollamaService.settings, equals(newSettings));
       expect(ollamaService.settings.ollamaUrl, equals('http://new-host:12345'));
     });
 
+    test('updateSettings updates auth token', () {
+      final newSettings = AppSettings(
+        ollamaHost: 'new-host',
+        ollamaPort: 12345,
+        contextLength: 2048,
+        darkMode: true,
+        fontSize: 16,
+        showLiveResponse: false,
+      );
+
+      ollamaService.updateSettings(newSettings, newAuthToken: 'new-token');
+      expect(ollamaService.settings, equals(newSettings));
+    });
+
     test('getModels returns list of models on success', () async {
       // This is a simplified test that doesn't use the mock client
       // In a real implementation, we would need to make the http client injectable
-      
+
       // Skip this test if we can't connect to a real Ollama instance
       final hasConnection = await ollamaService.testConnection();
       if (!hasConnection) {
@@ -57,28 +68,27 @@ void main() {
         markTestSkipped('No Ollama server available for testing');
         return;
       }
-      
+
       final models = await ollamaService.getModels();
       expect(models, isA<List<OllamaModel>>());
     });
-    
+
     test('getModels throws OllamaApiException on API error', () async {
       // Setup a mock response for the http client
       // This would require making the client injectable in the real implementation
       // For now, this test is more of a demonstration
-      
+
       expect(() async {
         // Simulate an API error by using an invalid URL
         final badSettings = AppSettings(
           ollamaHost: 'invalid-host',
           ollamaPort: 11434,
-          authToken: '',
           contextLength: 4096,
           darkMode: false,
           fontSize: 14,
           showLiveResponse: true,
         );
-        
+
         final service = OllamaService(settings: badSettings);
         await service.getModels();
       }, throwsA(isA<OllamaConnectionException>()));
@@ -90,7 +100,7 @@ void main() {
     test('getModels parses response correctly', () {
       // This test would require making the http client injectable
       // It would look something like this:
-      
+
       /*
       when(mockClient.get(
         Uri.parse('http://localhost:11434/api/tags'),
