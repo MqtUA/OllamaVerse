@@ -13,24 +13,38 @@ class FileCleanupService {
   FileCleanupService._();
 
   Timer? _periodicCleanupTimer;
+  Timer? _monitoringTimer;
   StreamController<FileCleanupProgress>? _progressController;
+  StreamController<FileSizeMonitoringData>? _monitoringController;
   bool _isCleanupRunning = false;
+  bool _isMonitoring = false;
   late final FileCleanupConfig _config;
 
-  /// Initialize the cleanup service
+  // File size monitoring data
+  final Map<String, DirectoryStats> _directoryStats = {};
+  DateTime? _lastMonitoringUpdate;
+
+  /// Initialize the cleanup service with enhanced monitoring
   Future<void> init({FileCleanupConfig? config}) async {
     _config = config ?? FileCleanupConfig.defaultConfig();
     _progressController = StreamController<FileCleanupProgress>.broadcast();
+    _monitoringController =
+        StreamController<FileSizeMonitoringData>.broadcast();
 
-    // Start periodic cleanup
+    // Start periodic cleanup and monitoring
     _startPeriodicCleanup();
+    _startFileSizeMonitoring();
 
-    AppLogger.info('File cleanup service initialized');
+    AppLogger.info('File cleanup service initialized with monitoring');
   }
 
   /// Stream for cleanup progress updates
   Stream<FileCleanupProgress> get progressStream =>
       _progressController?.stream ?? const Stream.empty();
+
+  /// Stream for file size monitoring updates
+  Stream<FileSizeMonitoringData> get monitoringStream =>
+      _monitoringController?.stream ?? const Stream.empty();
 
   /// Start periodic cleanup based on configuration
   void _startPeriodicCleanup() {
@@ -38,6 +52,155 @@ class FileCleanupService {
     _periodicCleanupTimer = Timer.periodic(_config.cleanupInterval, (_) {
       _performSmartCleanup();
     });
+  }
+
+  /// Start file size monitoring for smart cleanup triggers
+  void _startFileSizeMonitoring() {
+    if (_isMonitoring) return;
+
+    _isMonitoring = true;
+    _monitoringTimer?.cancel();
+    _monitoringTimer = Timer.periodic(
+      const Duration(minutes: 5), // Monitor every 5 minutes
+      (_) => _performFileSizeMonitoring(),
+    );
+  }
+
+  /// Perform file size monitoring and trigger cleanup if needed
+  Future<void> _performFileSizeMonitoring() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final monitoringData = FileSizeMonitoringData(
+        timestamp: DateTime.now(),
+        directories: {},
+        needsCleanup: false,
+        recommendations: [],
+      );
+
+      final directories = [
+        ('attachments', '${appDir.path}/attachments', _config.maxDirectorySize),
+        ('logs', '${appDir.path}/logs', _config.maxLogSize),
+        ('cache', '${appDir.path}/cache', _config.maxCacheSize),
+      ];
+
+      bool needsCleanup = false;
+      final recommendations = <String>[];
+
+      for (final (name, path, maxSize) in directories) {
+        final dir = Directory(path);
+        if (await dir.exists()) {
+          final stats = await _getDirectoryStats(dir);
+          monitoringData.directories[name] = stats;
+          _directoryStats[name] = stats;
+
+          // Check if cleanup is needed
+          if (stats.totalSize > maxSize) {
+            needsCleanup = true;
+            recommendations.add(
+              '$name directory (${_formatBytes(stats.totalSize)}) exceeds limit (${_formatBytes(maxSize)})',
+            );
+          }
+
+          // Check growth rate
+          final previousStats = _directoryStats[name];
+          if (previousStats != null && _lastMonitoringUpdate != null) {
+            final timeDiff = DateTime.now().difference(_lastMonitoringUpdate!);
+            final sizeDiff = stats.totalSize - previousStats.totalSize;
+
+            if (timeDiff.inMinutes > 0 && sizeDiff > 0) {
+              final growthRate =
+                  sizeDiff / timeDiff.inMinutes; // bytes per minute
+              final projectedSize = stats.totalSize +
+                  (growthRate * 60 * 24); // 24 hours projection
+
+              if (projectedSize > maxSize * 0.8) {
+                // 80% of max size
+                recommendations.add(
+                  '$name directory growing rapidly (${_formatBytes(sizeDiff)} in ${timeDiff.inMinutes}min)',
+                );
+              }
+            }
+          }
+        }
+      }
+
+      final finalMonitoringData = FileSizeMonitoringData(
+        timestamp: DateTime.now(),
+        directories: monitoringData.directories,
+        needsCleanup: needsCleanup,
+        recommendations: recommendations,
+      );
+      _lastMonitoringUpdate = DateTime.now();
+
+      _monitoringController?.add(finalMonitoringData);
+
+      // Trigger automatic cleanup if needed
+      if (needsCleanup && !_isCleanupRunning) {
+        AppLogger.info('File size monitoring triggered automatic cleanup');
+        await _performSmartCleanup();
+      }
+    } catch (e) {
+      AppLogger.error('Error during file size monitoring', e);
+    }
+  }
+
+  /// Get comprehensive directory statistics
+  Future<DirectoryStats> _getDirectoryStats(Directory directory) async {
+    int totalFiles = 0;
+    int totalSize = 0;
+    int oldFiles = 0; // Files older than configured age
+    int largeFiles = 0; // Files larger than 10MB
+    DateTime? oldestFile;
+    DateTime? newestFile;
+    final now = DateTime.now();
+
+    await for (final entity in directory.list(recursive: true)) {
+      if (entity is File) {
+        try {
+          final stat = await entity.stat();
+          totalFiles++;
+          totalSize += stat.size;
+
+          // Track file ages
+          if (oldestFile == null || stat.modified.isBefore(oldestFile)) {
+            oldestFile = stat.modified;
+          }
+          if (newestFile == null || stat.modified.isAfter(newestFile)) {
+            newestFile = stat.modified;
+          }
+
+          // Count old files based on directory type
+          final maxAge = _getMaxAgeForDirectory(directory.path);
+          if (now.difference(stat.modified) > maxAge) {
+            oldFiles++;
+          }
+
+          // Count large files (>10MB)
+          if (stat.size > 10 * 1024 * 1024) {
+            largeFiles++;
+          }
+        } catch (e) {
+          // Skip files that can't be accessed
+          continue;
+        }
+      }
+    }
+
+    return DirectoryStats(
+      totalFiles: totalFiles,
+      totalSize: totalSize,
+      oldFiles: oldFiles,
+      largeFiles: largeFiles,
+      oldestFile: oldestFile,
+      newestFile: newestFile,
+    );
+  }
+
+  /// Get maximum age configuration for a directory
+  Duration _getMaxAgeForDirectory(String directoryPath) {
+    if (directoryPath.contains('logs')) return _config.maxLogAge;
+    if (directoryPath.contains('cache')) return _config.maxCacheAge;
+    return _config.maxFileAge;
   }
 
   /// Perform smart cleanup based on usage patterns and file age
@@ -295,8 +458,11 @@ class FileCleanupService {
   /// Stop the cleanup service
   void dispose() {
     _periodicCleanupTimer?.cancel();
+    _monitoringTimer?.cancel();
     _progressController?.close();
+    _monitoringController?.close();
     _isCleanupRunning = false;
+    _isMonitoring = false;
     AppLogger.info('File cleanup service disposed');
   }
 }
@@ -392,4 +558,54 @@ class CleanupStats {
     required this.totalFiles,
     required this.totalSize,
   });
+}
+
+/// Comprehensive directory statistics for monitoring
+class DirectoryStats {
+  final int totalFiles;
+  final int totalSize;
+  final int oldFiles;
+  final int largeFiles;
+  final DateTime? oldestFile;
+  final DateTime? newestFile;
+
+  const DirectoryStats({
+    required this.totalFiles,
+    required this.totalSize,
+    required this.oldFiles,
+    required this.largeFiles,
+    this.oldestFile,
+    this.newestFile,
+  });
+
+  double get averageFileSize => totalFiles > 0 ? totalSize / totalFiles : 0.0;
+
+  Duration get ageSpan {
+    if (oldestFile == null || newestFile == null) return Duration.zero;
+    return newestFile!.difference(oldestFile!);
+  }
+}
+
+/// File size monitoring data for smart cleanup triggers
+class FileSizeMonitoringData {
+  final DateTime timestamp;
+  final Map<String, DirectoryStats> directories;
+  final bool needsCleanup;
+  final List<String> recommendations;
+
+  FileSizeMonitoringData({
+    required this.timestamp,
+    required this.directories,
+    required this.needsCleanup,
+    required this.recommendations,
+  });
+
+  int get totalFiles =>
+      directories.values.fold(0, (sum, stats) => sum + stats.totalFiles);
+  int get totalSize =>
+      directories.values.fold(0, (sum, stats) => sum + stats.totalSize);
+  int get totalOldFiles =>
+      directories.values.fold(0, (sum, stats) => sum + stats.oldFiles);
+  int get totalLargeFiles =>
+      directories.values.fold(0, (sum, stats) => sum + stats.largeFiles);
 }

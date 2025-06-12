@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
+import '../services/file_cleanup_service.dart';
+import '../services/performance_monitor.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -287,18 +289,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           setState(() {
                             _darkMode = value;
                           });
-                          // Show a brief feedback during theme change
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                value
-                                    ? 'Switched to Dark Mode'
-                                    : 'Switched to Light Mode',
-                              ),
-                              duration: const Duration(milliseconds: 1000),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
                           settingsProvider.updateSettings(darkMode: value);
                         },
                       ),
@@ -384,6 +374,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: Colors.grey[600],
                             fontStyle: FontStyle.italic,
                           ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Performance Settings Section
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Performance & Storage',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Performance monitoring display
+                      ListTile(
+                        title: const Text('Performance Monitoring'),
+                        subtitle: const Text(
+                          'Real-time performance tracking is active',
+                        ),
+                        trailing: const Icon(
+                          Icons.speed,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const Divider(),
+                      // Storage cleanup section
+                      ListTile(
+                        title: const Text('Storage Cleanup'),
+                        subtitle: const Text(
+                          'Manage temporary files and cache',
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () async {
+                            // Trigger manual cleanup
+                            await FileCleanupService.instance.forceCleanup();
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Storage cleanup completed'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Clean Now'),
                         ),
                       ),
                     ],
