@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:path_provider/path_provider.dart';
 import '../utils/logger.dart';
+import '../utils/file_utils.dart';
 
 /// A service for managing temporary file cleanup with advanced scheduling and error handling
 class FileCleanupService {
@@ -98,7 +99,7 @@ class FileCleanupService {
           if (stats.totalSize > maxSize) {
             needsCleanup = true;
             recommendations.add(
-              '$name directory (${_formatBytes(stats.totalSize)}) exceeds limit (${_formatBytes(maxSize)})',
+              '$name directory (${FileUtils.formatFileSize(stats.totalSize)}) exceeds limit (${FileUtils.formatFileSize(maxSize)})',
             );
           }
 
@@ -117,7 +118,7 @@ class FileCleanupService {
               if (projectedSize > maxSize * 0.8) {
                 // 80% of max size
                 recommendations.add(
-                  '$name directory growing rapidly (${_formatBytes(sizeDiff)} in ${timeDiff.inMinutes}min)',
+                  '$name directory growing rapidly (${FileUtils.formatFileSize(sizeDiff)} in ${timeDiff.inMinutes}min)',
                 );
               }
             }
@@ -240,7 +241,7 @@ class FileCleanupService {
       _progressController?.add(finalProgress);
 
       AppLogger.info('Cleanup completed: ${result.deletedFiles} files deleted, '
-          '${_formatBytes(result.freedSize)} freed');
+          '${FileUtils.formatFileSize(result.freedSize)} freed');
     } catch (e) {
       AppLogger.error('Error during cleanup', e);
       _progressController?.add(FileCleanupProgress(
@@ -444,16 +445,6 @@ class FileCleanupService {
       totalFiles: totalFiles,
       totalSize: totalSize,
     );
-  }
-
-  /// Format bytes to human readable format
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   /// Stop the cleanup service

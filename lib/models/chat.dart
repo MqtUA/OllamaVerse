@@ -1,5 +1,4 @@
 import 'message.dart';
-import 'chat_message.dart';
 
 class Chat {
   final String id;
@@ -8,6 +7,8 @@ class Chat {
   final List<Message> messages;
   final DateTime createdAt;
   DateTime lastUpdatedAt;
+  final List<int>?
+      context; // Ollama context for maintaining conversation memory
 
   Chat({
     required this.id,
@@ -16,6 +17,7 @@ class Chat {
     required this.messages,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.context, // Optional context for conversation memory
   });
 
   Chat copyWith({
@@ -25,6 +27,7 @@ class Chat {
     List<Message>? messages,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    List<int>? context,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -33,18 +36,8 @@ class Chat {
       messages: messages ?? this.messages,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      context: context ?? this.context,
     );
-  }
-
-  List<ChatMessage> toChatMessages() {
-    return messages
-        .map((message) => ChatMessage(
-              id: message.id,
-              content: message.content,
-              isUser: message.role == MessageRole.user,
-              timestamp: message.timestamp,
-            ))
-        .toList();
   }
 
   Map<String, dynamic> toJson() {
@@ -55,6 +48,7 @@ class Chat {
       'messages': messages.map((m) => m.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
       'lastUpdatedAt': lastUpdatedAt.toIso8601String(),
+      'context': context, // Store context for conversation memory
     };
   }
 
@@ -68,6 +62,9 @@ class Chat {
           .toList(),
       createdAt: DateTime.parse(json['createdAt'] as String),
       lastUpdatedAt: DateTime.parse(json['lastUpdatedAt'] as String),
+      context: json['context'] != null
+          ? List<int>.from(json['context'])
+          : null, // Load context for conversation memory
     );
   }
 }

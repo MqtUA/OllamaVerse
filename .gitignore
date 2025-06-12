@@ -155,3 +155,4 @@ app.*.map.json
 .cursorindexingignore
 THEME_OPTIMIZATION_TASKS.md
 ToDo/
+CHANGELOG.md

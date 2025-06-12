@@ -56,7 +56,7 @@ void main() {
       service.dispose();
 
       expect(
-        () => service.generateResponse('test'),
+        () => service.generateResponseWithFiles('test', model: 'test-model'),
         throwsA(predicate((e) => e.toString().contains('disposed'))),
       );
     });

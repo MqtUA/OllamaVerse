@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -24,6 +25,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '';
   bool _showAuthToken = false;
 
+  // Stream controller for performance monitoring
+  late StreamController<PerformanceStats> _performanceStreamController;
+  late Timer _performanceTimer;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +38,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _portController = TextEditingController();
     _authTokenController = TextEditingController();
     _systemPromptController = TextEditingController();
+
+    // Initialize performance monitoring stream
+    _performanceStreamController =
+        StreamController<PerformanceStats>.broadcast();
+    _performanceTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) {
+        if (mounted && !_performanceStreamController.isClosed) {
+          _performanceStreamController
+              .add(PerformanceMonitor.instance.getStats());
+        }
+      },
+    );
 
     // Load app version and auth token
     _loadAppVersion();
@@ -84,6 +102,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _portController.dispose();
     _authTokenController.dispose();
     _systemPromptController.dispose();
+
+    // Dispose of performance monitoring resources
+    _performanceTimer.cancel();
+    _performanceStreamController.close();
+
     super.dispose();
   }
 
@@ -396,10 +419,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: StreamBuilder<PerformanceStats>(
-                          stream: Stream.periodic(
-                            const Duration(seconds: 2),
-                            (_) => PerformanceMonitor.instance.getStats(),
-                          ),
+                          stream: _performanceStreamController.stream,
                           builder: (context, snapshot) {
                             if (!snapshot.hasData) {
                               return const Card(

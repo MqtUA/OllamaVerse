@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/app_settings.dart';
+import '../models/processed_file.dart';
+import '../models/ollama_response.dart';
+import '../models/message.dart';
+import '../services/model_capability_service.dart';
 import '../utils/logger.dart';
 
 /// Custom exception for Ollama API errors
@@ -156,144 +160,377 @@ class OllamaService {
     }
   }
 
-  Future<String> generateResponse(
+  /// Generate response with context support (new implementation)
+  Future<OllamaResponse> generateResponseWithContext(
     String prompt, {
     String? model,
+    List<ProcessedFile>? processedFiles,
     List<int>? context,
+    List<Message>? conversationHistory,
   }) async {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
     }
 
     return _makeRequest(() async {
-      final requestBody = {
-        'model': model ?? 'llama2',
-        'prompt': prompt,
-        'stream': false, // Explicitly request non-streaming response
+      final modelName = model ?? 'llama2';
+      final capabilities =
+          ModelCapabilityService.getModelCapabilities(modelName);
+
+      // Build the request body based on model capabilities
+      final requestBody = <String, dynamic>{
+        'model': modelName,
+        'stream': false,
       };
 
-      // Only add context if it's not null and not empty
-      if (context != null && context.isNotEmpty) {
-        requestBody['context'] = context;
-      }
+      // Handle vision models with images
+      final imageFiles = processedFiles
+              ?.where((file) => file.type == FileType.image)
+              .toList() ??
+          [];
+      final textFiles = processedFiles
+              ?.where((file) => file.type != FileType.image)
+              .toList() ??
+          [];
 
-      final response = await _client.post(
-        Uri.parse('$_baseUrl/api/generate'),
-        headers: _headers,
-        body: jsonEncode(requestBody),
-      );
+      if (capabilities.supportsVision || imageFiles.isNotEmpty) {
+        // Use chat endpoint for vision models - build full conversation history
+        final messages = <Map<String, dynamic>>[];
 
-      if (response.statusCode == 200) {
-        try {
-          final data = jsonDecode(response.body);
+        // Add conversation history first (excluding system messages for context preservation)
+        if (conversationHistory != null) {
+          for (final msg in conversationHistory) {
+            if (msg.role != MessageRole.system) {
+              final messageMap = <String, dynamic>{
+                'role': msg.role == MessageRole.user ? 'user' : 'assistant',
+                'content': msg.content,
+              };
 
-          // Check if response contains the expected fields
-          if (data['response'] != null) {
-            return data['response'] as String;
-          } else {
-            throw OllamaApiException(
-              'Invalid response format: missing response field',
-            );
+              // Add images if this was a user message with images
+              if (msg.hasImages && msg.role == MessageRole.user) {
+                final images =
+                    msg.imageFiles.map((f) => f.base64Content!).toList();
+                if (images.isNotEmpty) {
+                  messageMap['images'] = images;
+                }
+              }
+              messages.add(messageMap);
+            }
           }
-        } catch (e) {
-          if (e is OllamaApiException) rethrow;
+        }
 
-          // Log the raw response for debugging
-          AppLogger.error('Raw response body: ${response.body}');
-          throw OllamaApiException(
-            'Invalid JSON response from generate endpoint',
-            originalError: e,
-          );
+        // Build current message content with text files
+        String content = prompt;
+        if (textFiles.isNotEmpty) {
+          content += '\n\n';
+          for (final file in textFiles) {
+            if (file.hasTextContent) {
+              content += 'File: ${file.fileName}\n${file.textContent}\n\n';
+            }
+          }
+        }
+
+        final currentMessage = <String, dynamic>{
+          'role': 'user',
+          'content': content,
+        };
+
+        // Add images to the current message
+        if (imageFiles.isNotEmpty) {
+          final imageList = imageFiles.map((f) => f.base64Content!).toList();
+          currentMessage['images'] = imageList;
+        }
+
+        messages.add(currentMessage);
+        requestBody['messages'] = messages;
+
+        final response = await _client.post(
+          Uri.parse('$_baseUrl/api/chat'),
+          headers: _headers,
+          body: jsonEncode(requestBody),
+        );
+
+        if (response.statusCode == 200) {
+          try {
+            final data = jsonDecode(response.body);
+            if (data['message'] != null && data['message']['content'] != null) {
+              return OllamaResponse(
+                response: data['message']['content'] as String,
+                context:
+                    null, // Chat API doesn't return context, but maintains it internally
+              );
+            } else {
+              throw OllamaApiException(
+                  'Invalid response format: missing message content');
+            }
+          } catch (e) {
+            AppLogger.error('Raw response body: ${response.body}');
+            throw OllamaApiException('Invalid JSON response from chat endpoint',
+                originalError: e);
+          }
+        } else {
+          throw OllamaApiException('Failed to generate response with vision',
+              statusCode: response.statusCode);
         }
       } else {
-        throw OllamaApiException(
-          'Failed to generate response',
-          statusCode: response.statusCode,
+        // Use generate endpoint for text-only models with context
+        String finalPrompt = prompt;
+
+        // Include text file content in the prompt
+        if (processedFiles != null && processedFiles.isNotEmpty) {
+          finalPrompt += '\n\n';
+          for (final file in processedFiles) {
+            if (file.hasTextContent) {
+              finalPrompt += 'File: ${file.fileName}\n${file.textContent}\n\n';
+            }
+          }
+        }
+
+        requestBody['prompt'] = finalPrompt;
+
+        // Add context if available for conversation memory
+        if (context != null && context.isNotEmpty) {
+          requestBody['context'] = context;
+        }
+
+        final response = await _client.post(
+          Uri.parse('$_baseUrl/api/generate'),
+          headers: _headers,
+          body: jsonEncode(requestBody),
         );
+
+        if (response.statusCode == 200) {
+          try {
+            final data = jsonDecode(response.body);
+            return OllamaResponse.fromJson(data);
+          } catch (e) {
+            if (e is OllamaApiException) rethrow;
+            AppLogger.error('Raw response body: ${response.body}');
+            throw OllamaApiException(
+                'Invalid JSON response from generate endpoint',
+                originalError: e);
+          }
+        } else {
+          throw OllamaApiException('Failed to generate response',
+              statusCode: response.statusCode);
+        }
       }
     }, timeout: _receiveTimeout);
   }
 
-  Stream<String> generateStreamingResponse(
+  /// Generate response with file content support (backwards compatibility)
+  Future<String> generateResponseWithFiles(
     String prompt, {
     String? model,
+    List<ProcessedFile>? processedFiles,
     List<int>? context,
+  }) async {
+    final response = await generateResponseWithContext(
+      prompt,
+      model: model,
+      processedFiles: processedFiles,
+      context: context,
+    );
+    return response.response;
+  }
+
+  /// Generate streaming response with context support (new implementation)
+  Stream<OllamaStreamResponse> generateStreamingResponseWithContext(
+    String prompt, {
+    String? model,
+    List<ProcessedFile>? processedFiles,
+    List<int>? context,
+    List<Message>? conversationHistory,
   }) async* {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
     }
 
     try {
-      final requestBody = {
-        'model': model ?? 'llama2',
-        'prompt': prompt,
-        'stream': true, // Explicitly request streaming response
-      };
+      final modelName = model ?? 'llama2';
+      final capabilities =
+          ModelCapabilityService.getModelCapabilities(modelName);
 
-      // Only add context if it's not null and not empty
-      if (context != null && context.isNotEmpty) {
-        requestBody['context'] = context;
+      // Handle vision models with images
+      final imageFiles = processedFiles
+              ?.where((file) => file.type == FileType.image)
+              .toList() ??
+          [];
+      final textFiles = processedFiles
+              ?.where((file) => file.type != FileType.image)
+              .toList() ??
+          [];
+
+      http.Request request;
+      Map<String, dynamic> requestBody;
+
+      if (capabilities.supportsVision || imageFiles.isNotEmpty) {
+        // Use chat endpoint for vision models with conversation history
+        final messages = <Map<String, dynamic>>[];
+
+        // Add conversation history first (excluding system messages)
+        if (conversationHistory != null) {
+          for (final msg in conversationHistory) {
+            if (msg.role != MessageRole.system) {
+              final messageMap = <String, dynamic>{
+                'role': msg.role == MessageRole.user ? 'user' : 'assistant',
+                'content': msg.content,
+              };
+
+              // Add images if this was a user message with images
+              if (msg.hasImages && msg.role == MessageRole.user) {
+                final images =
+                    msg.imageFiles.map((f) => f.base64Content!).toList();
+                if (images.isNotEmpty) {
+                  messageMap['images'] = images;
+                }
+              }
+              messages.add(messageMap);
+            }
+          }
+        }
+
+        String content = prompt;
+        if (textFiles.isNotEmpty) {
+          content += '\n\n';
+          for (final file in textFiles) {
+            if (file.hasTextContent) {
+              content += 'File: ${file.fileName}\n${file.textContent}\n\n';
+            }
+          }
+        }
+
+        final currentMessage = <String, dynamic>{
+          'role': 'user',
+          'content': content,
+        };
+
+        // Add images to the current message
+        if (imageFiles.isNotEmpty) {
+          final imageList = imageFiles.map((f) => f.base64Content!).toList();
+          currentMessage['images'] = imageList;
+        }
+
+        messages.add(currentMessage);
+
+        requestBody = {
+          'model': modelName,
+          'messages': messages,
+          'stream': true,
+        };
+
+        request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
+      } else {
+        // Use generate endpoint for text-only models with context
+        String finalPrompt = prompt;
+
+        // Include text file content in the prompt
+        if (processedFiles != null && processedFiles.isNotEmpty) {
+          finalPrompt += '\n\n';
+          for (final file in processedFiles) {
+            if (file.hasTextContent) {
+              finalPrompt += 'File: ${file.fileName}\n${file.textContent}\n\n';
+            }
+          }
+        }
+
+        requestBody = {
+          'model': modelName,
+          'prompt': finalPrompt,
+          'stream': true,
+        };
+
+        // Add context if available for conversation memory
+        if (context != null && context.isNotEmpty) {
+          requestBody['context'] = context;
+        }
+
+        request = http.Request('POST', Uri.parse('$_baseUrl/api/generate'));
       }
 
-      final request = http.Request(
-        'POST',
-        Uri.parse('$_baseUrl/api/generate'),
-      );
       request.headers.addAll(_headers);
       request.body = jsonEncode(requestBody);
 
-      final streamedResponse = await _client.send(request).timeout(
-        _connectionTimeout,
-        onTimeout: () {
-          throw OllamaConnectionException(
-            'Connection timed out while starting streaming response',
-          );
-        },
-      );
+      final streamedResponse = await _client.send(request);
 
       if (streamedResponse.statusCode == 200) {
-        await for (final chunk
-            in streamedResponse.stream.transform(utf8.decoder)) {
-          final lines = chunk.split('\n');
-          for (final line in lines) {
-            if (line.trim().isNotEmpty) {
-              try {
-                final data = jsonDecode(line.trim());
-                if (data['response'] != null) {
-                  yield data['response'] as String;
-                }
+        await for (String line in streamedResponse.stream
+            .transform(const Utf8Decoder())
+            .transform(const LineSplitter())) {
+          line = line.trim();
+          if (line.isNotEmpty) {
+            try {
+              final data = jsonDecode(line);
+              final streamResponse = OllamaStreamResponse.fromJson(data);
+              yield streamResponse;
 
-                // Check if this is the final chunk
-                if (data['done'] == true) {
-                  return;
-                }
-              } catch (e) {
-                AppLogger.error(
-                    'Error parsing streaming response line: $line', e);
-                // Continue processing other lines instead of failing completely
+              // Break if done
+              if (streamResponse.done) {
+                break;
               }
+            } catch (e) {
+              AppLogger.error('Error parsing streaming response', e);
             }
           }
         }
       } else {
-        throw OllamaApiException(
-          'Failed to generate streaming response',
-          statusCode: streamedResponse.statusCode,
-        );
+        throw OllamaApiException('Failed to start streaming response',
+            statusCode: streamedResponse.statusCode);
       }
-    } on OllamaApiException {
-      rethrow;
-    } on TimeoutException {
-      throw OllamaConnectionException(
-        'Streaming request timed out',
-      );
     } catch (e) {
       AppLogger.error('Error in streaming response', e);
-      throw OllamaConnectionException(
-        'Failed to connect to Ollama server',
-        originalError: e,
-      );
+      rethrow;
     }
+  }
+
+  /// Generate streaming response with file content support (backwards compatibility)
+  Stream<String> generateStreamingResponseWithFiles(
+    String prompt, {
+    String? model,
+    List<ProcessedFile>? processedFiles,
+    List<int>? context,
+  }) async* {
+    await for (final streamResponse in generateStreamingResponseWithContext(
+      prompt,
+      model: model,
+      processedFiles: processedFiles,
+      context: context,
+    )) {
+      if (streamResponse.response.isNotEmpty) {
+        yield streamResponse.response;
+      }
+    }
+  }
+
+  /// Legacy method for backward compatibility - delegates to the file-enabled version
+  @Deprecated('Use generateResponseWithFiles instead for better functionality')
+  Future<String> generateResponse(
+    String prompt, {
+    String? model,
+    List<int>? context,
+  }) async {
+    return generateResponseWithFiles(
+      prompt,
+      model: model,
+      context: context,
+      processedFiles: null,
+    );
+  }
+
+  /// Legacy method for backward compatibility - delegates to the file-enabled version
+  @Deprecated(
+      'Use generateStreamingResponseWithFiles instead for better functionality')
+  Stream<String> generateStreamingResponse(
+    String prompt, {
+    String? model,
+    List<int>? context,
+  }) async* {
+    yield* generateStreamingResponseWithFiles(
+      prompt,
+      model: model,
+      context: context,
+      processedFiles: null,
+    );
   }
 
   void dispose() {

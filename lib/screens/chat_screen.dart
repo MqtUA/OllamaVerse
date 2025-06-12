@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../models/chat_message.dart';
+import '../models/message.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/file_utils.dart';
@@ -483,9 +483,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                   .currentStreamingResponse.isNotEmpty) {
                             // Show streaming response
                             return _buildMessageBubble(
-                              ChatMessage(
+                              Message(
+                                id: 'streaming',
                                 content: chatProvider.currentStreamingResponse,
-                                isUser: false,
+                                role: MessageRole.assistant,
                                 timestamp: DateTime.now(),
                               ),
                               fontSize,
@@ -689,7 +690,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message, double fontSize) {
+  Widget _buildMessageBubble(Message message, double fontSize) {
     final isUser = message.isUser;
     final isSmallScreen = MediaQuery.of(context).size.width <= 600;
 

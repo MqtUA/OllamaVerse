@@ -1,12 +1,9 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:uuid/uuid.dart';
 import 'logger.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
 
 class FileUtils {
   // Constants for file handling
@@ -162,10 +159,71 @@ class FileUtils {
     }
   }
 
+  // Extended file type detection (moved from FileContentProcessor for better coverage)
+
+  // Supported file extensions (comprehensive list)
+  static const List<String> imageExtensions = [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'bmp',
+    'webp',
+    'tiff',
+    'svg'
+  ];
+
+  static const List<String> textExtensions = [
+    'txt',
+    'md',
+    'csv',
+    'log',
+    'readme',
+    'rtf'
+  ];
+
+  static const List<String> sourceCodeExtensions = [
+    'dart',
+    'py',
+    'js',
+    'ts',
+    'java',
+    'cpp',
+    'c',
+    'h',
+    'hpp',
+    'cs',
+    'php',
+    'rb',
+    'go',
+    'rs',
+    'swift',
+    'kt',
+    'm',
+    'mm',
+    'sh',
+    'bat',
+    'ps1',
+    'sql',
+    'html',
+    'css',
+    'scss',
+    'sass',
+    'xml',
+    'yaml',
+    'yml',
+    'toml',
+    'ini',
+    'conf',
+    'cfg'
+  ];
+
+  static const List<String> jsonExtensions = ['json', 'jsonl', 'geojson'];
+
   // Check if file is an image
   static bool isImageFile(String filePath) {
     final ext = getFileExtension(filePath);
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(ext);
+    return imageExtensions.contains(ext);
   }
 
   // Check if file is a PDF
@@ -174,117 +232,36 @@ class FileUtils {
     return ext == 'pdf';
   }
 
-  // Check if file is a text file
+  // Check if file is a text file (includes source code and JSON)
   static bool isTextFile(String filePath) {
     final ext = getFileExtension(filePath);
-    return [
-      'txt',
-      'md',
-      'json',
-      'csv',
-      'html',
-      'xml',
-      'js',
-      'py',
-      'java',
-      'c',
-      'cpp',
-      'h',
-      'cs',
-      'php',
-      'rb',
-    ].contains(ext);
+    return textExtensions.contains(ext) ||
+        sourceCodeExtensions.contains(ext) ||
+        jsonExtensions.contains(ext);
   }
 
-  // Read file content based on file type with chunked reading for large files
-  static Future<String> readFileContent(String filePath) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return '[File not found: ${getFileName(filePath)}]';
-      }
-
-      final fileSize = await file.length();
-      final sizeInMB = fileSize / (1024 * 1024);
-
-      if (sizeInMB > maxFileSizeMB) {
-        return '[File too large: ${getFileName(filePath)}, Size: ${sizeInMB.toStringAsFixed(2)}MB]';
-      }
-
-      if (isPdfFile(filePath)) {
-        return await extractTextFromPdf(filePath);
-      } else if (isImageFile(filePath)) {
-        return '[Image file: ${getFileName(filePath)}, Size: ${sizeInMB.toStringAsFixed(2)}MB]';
-      } else {
-        // Use chunked reading for text files
-        final content = await _readFileInChunks(file);
-        return 'File: ${getFileName(filePath)}\n\n$content';
-      }
-    } catch (e) {
-      AppLogger.error('Error reading file content', e);
-      return '[Error reading file: ${getFileName(filePath)}]';
-    }
+  // Check if file is source code
+  static bool isSourceCodeFile(String filePath) {
+    final ext = getFileExtension(filePath);
+    return sourceCodeExtensions.contains(ext);
   }
 
-  // Read file in chunks to prevent memory issues
-  static Future<String> _readFileInChunks(File file) async {
-    const chunkSize = 1024 * 1024; // 1MB chunks
-    final fileSize = await file.length();
-    final buffer = StringBuffer();
-    var position = 0;
-
-    while (position < fileSize) {
-      final chunk = await file.openRead(position, position + chunkSize).first;
-      buffer.write(utf8.decode(chunk, allowMalformed: true));
-      position += chunkSize;
-    }
-
-    return buffer.toString();
+  // Check if file is JSON
+  static bool isJsonFile(String filePath) {
+    final ext = getFileExtension(filePath);
+    return jsonExtensions.contains(ext);
   }
 
-  // Extract text from PDF with memory optimization
-  static Future<String> extractTextFromPdf(String filePath) async {
-    try {
-      final file = File(filePath);
-      final fileSize = await file.length();
-      final sizeInMB = fileSize / (1024 * 1024);
-
-      if (sizeInMB > maxFileSizeMB) {
-        return 'PDF file is too large (${sizeInMB.toStringAsFixed(2)}MB). Maximum size is ${maxFileSizeMB}MB.';
-      }
-
-      // Read PDF in chunks
-      final bytes = await _readFileInChunks(file);
-      final fileName = path.basename(filePath);
-
-      // Load the PDF document
-      final PdfDocument document = PdfDocument(inputBytes: utf8.encode(bytes));
-
-      // Extract text from all pages with memory management
-      String extractedText = '';
-      PdfTextExtractor extractor = PdfTextExtractor(document);
-
-      for (int i = 0; i < document.pages.count; i++) {
-        String pageText = extractor.extractText(startPageIndex: i);
-        extractedText += 'Page ${i + 1}:\n$pageText\n\n';
-
-        // Force garbage collection after each page
-        if (i % 5 == 0) {
-          await Future.delayed(Duration.zero);
-        }
-      }
-
-      // Close the document
-      document.dispose();
-
-      if (extractedText.trim().isEmpty) {
-        return '[PDF File: $fileName, Size: ${sizeInMB.toStringAsFixed(2)}MB]\n\nThis appears to be a scanned or image-based PDF. Text extraction is limited.';
-      }
-
-      return 'Content extracted from PDF: $fileName\n\n$extractedText';
-    } catch (e) {
-      AppLogger.error('Error extracting text from PDF', e);
-      return 'Error extracting text from PDF. The file may be corrupted or password-protected.';
+  /// Format file size for human-readable display (consolidated utility)
+  static String formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
   }
 }
