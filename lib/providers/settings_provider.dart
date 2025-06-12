@@ -10,6 +10,7 @@ class SettingsProvider extends ChangeNotifier {
   final SecureStorageService _secureStorageService = SecureStorageService();
   bool _isLoading = true;
   String? _authToken;
+  bool _disposed = false;
 
   SettingsProvider() {
     _loadSettings();
@@ -19,15 +20,27 @@ class SettingsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get authToken => _authToken;
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  void _safeNotifyListeners() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadSettings() async {
     _isLoading = true;
-    notifyListeners();
+    _safeNotifyListeners();
 
     _settings = await _storageService.loadSettings();
     _authToken = await _secureStorageService.getAuthToken();
 
     _isLoading = false;
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   Future<void> updateSettings({
@@ -56,7 +69,7 @@ class SettingsProvider extends ChangeNotifier {
     }
 
     await _storageService.saveSettings(_settings);
-    notifyListeners();
+    _safeNotifyListeners();
   }
 
   ThemeMode get themeMode =>
@@ -64,6 +77,9 @@ class SettingsProvider extends ChangeNotifier {
 
   // Get a configured OllamaService instance based on current settings
   OllamaService getOllamaService() {
-    return OllamaService(settings: _settings, authToken: _authToken);
+    return OllamaService(
+      settings: _settings,
+      authToken: _authToken,
+    );
   }
 }

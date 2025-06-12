@@ -8,24 +8,29 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:ollamaverse/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('App initialization test', (WidgetTester tester) async {
     // Initialize Flutter binding for tests
     TestWidgetsFlutterBinding.ensureInitialized();
-    
+
     // Override the default HTTP client to avoid real network requests
     HttpOverrides.global = null;
-    
+
+    // Initialize SharedPreferences for testing
+    final prefs = await SharedPreferences.getInstance();
+
     // Build our app and trigger a frame
-    await tester.pumpWidget(const MyApp());
-    
+    await tester.pumpWidget(MyApp(prefs: prefs));
+
     // Verify that the app initializes without errors
     expect(find.byType(MaterialApp), findsOneWidget);
-    
+
     // Pump a few more times to handle pending timers
     await tester.pumpAndSettle(const Duration(seconds: 2));
-  }, skip: true); // Skipping due to timer issues that need to be fixed in the app
+  },
+      skip:
+          true); // Skipping due to timer issues that need to be fixed in the app
 }

@@ -16,11 +16,12 @@ class ChatDrawer extends StatelessWidget {
       child: Column(
         children: [
           DrawerHeader(
-            decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
-            ),
+            decoration: BoxDecoration(color: Theme.of(context).primaryColor),
             margin: EdgeInsets.zero,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -57,12 +58,15 @@ class ChatDrawer extends StatelessWidget {
                         onPressed: () {
                           final models = chatProvider.availableModels;
                           if (models.isNotEmpty) {
-                            chatProvider.createNewChat(models.first.name);
+                            // Use createNewChat without parameters to let it use the last selected model
+                            chatProvider.createNewChat();
                             Navigator.pop(context); // Close drawer
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('No models available. Please check Ollama server connection.'),
+                                content: Text(
+                                  'No models available. Please check Ollama server connection.',
+                                ),
                               ),
                             );
                           }
@@ -86,15 +90,13 @@ class ChatDrawer extends StatelessWidget {
                   return Center(
                     child: Text(
                       'No chats yet',
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        color: Colors.grey,
-                      ),
+                      style: TextStyle(fontSize: fontSize, color: Colors.grey),
                     ),
                   );
                 }
 
                 return ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: chats.length,
                   itemBuilder: (context, index) {
                     final chat = chats[index];
@@ -106,10 +108,7 @@ class ChatDrawer extends StatelessWidget {
                         color: Colors.red,
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16.0),
-                        child: const Icon(
-                          Icons.delete,
-                          color: Colors.white,
-                        ),
+                        child: const Icon(Icons.delete, color: Colors.white),
                       ),
                       direction: DismissDirection.endToStart,
                       confirmDismiss: (direction) async {
@@ -118,14 +117,18 @@ class ChatDrawer extends StatelessWidget {
                           builder: (BuildContext context) {
                             return AlertDialog(
                               title: const Text('Confirm Delete'),
-                              content: const Text('Are you sure you want to delete this chat?'),
+                              content: const Text(
+                                'Are you sure you want to delete this chat?',
+                              ),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.of(context).pop(false),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
                                   child: const Text('Cancel'),
                                 ),
                                 TextButton(
-                                  onPressed: () => Navigator.of(context).pop(true),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
                                   child: const Text('Delete'),
                                 ),
                               ],
@@ -141,16 +144,15 @@ class ChatDrawer extends StatelessWidget {
                           data: chat.title,
                           style: TextStyle(
                             fontSize: fontSize,
-                            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            fontWeight:
+                                isActive ? FontWeight.bold : FontWeight.normal,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
                           'Model: ${chat.modelName}',
-                          style: TextStyle(
-                            fontSize: fontSize - 2,
-                          ),
+                          style: TextStyle(fontSize: fontSize - 2),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -158,10 +160,7 @@ class ChatDrawer extends StatelessWidget {
                           backgroundColor: isActive
                               ? Theme.of(context).primaryColor
                               : Colors.grey.shade300,
-                          child: const Icon(
-                            Icons.chat,
-                            color: Colors.white,
-                          ),
+                          child: const Icon(Icons.chat, color: Colors.white),
                         ),
                         selected: isActive,
                         onTap: () {
@@ -183,7 +182,10 @@ class ChatDrawer extends StatelessWidget {
             leading: const Icon(Icons.refresh),
             title: const Text('Refresh Models'),
             onTap: () {
-              final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+              final chatProvider = Provider.of<ChatProvider>(
+                context,
+                listen: false,
+              );
               chatProvider.refreshModels();
               Navigator.pop(context); // Close drawer
               ScaffoldMessenger.of(context).showSnackBar(
@@ -204,10 +206,21 @@ class ChatDrawer extends StatelessWidget {
     );
   }
 
-  void _showEditTitleDialog(BuildContext context, String chatId, String currentTitle) {
-    final TextEditingController controller = TextEditingController(text: currentTitle);
-    final ValueNotifier<String> titleNotifier = ValueNotifier<String>(currentTitle);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+  void _showEditTitleDialog(
+    BuildContext context,
+    String chatId,
+    String currentTitle,
+  ) {
+    final TextEditingController controller = TextEditingController(
+      text: currentTitle,
+    );
+    final ValueNotifier<String> titleNotifier = ValueNotifier<String>(
+      currentTitle,
+    );
+    final settingsProvider = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    );
     final fontSize = settingsProvider.settings.fontSize;
 
     showDialog(
@@ -233,7 +246,10 @@ class ChatDrawer extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 16),
-              const Text('Preview:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Preview:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -264,8 +280,10 @@ class ChatDrawer extends StatelessWidget {
             onPressed: () {
               final newTitle = controller.text.trim();
               if (newTitle.isNotEmpty) {
-                Provider.of<ChatProvider>(context, listen: false)
-                    .updateChatTitle(chatId, newTitle);
+                Provider.of<ChatProvider>(
+                  context,
+                  listen: false,
+                ).updateChatTitle(chatId, newTitle);
               }
               Navigator.pop(context);
             },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/settings_provider.dart';
 import 'providers/chat_provider.dart';
@@ -8,6 +9,9 @@ import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
 import 'utils/file_utils.dart';
 import 'theme/dracula_theme.dart';
+import 'theme/material_light_theme.dart';
+import 'services/chat_history_service.dart';
+import 'services/settings_service.dart';
 
 Future<void> main() async {
   // Ensure Flutter is initialized
@@ -16,10 +20,13 @@ Future<void> main() async {
   // Initialize logger
   await AppLogger.init();
 
+  // Initialize SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+
   // Start periodic file cleanup
   _startFileCleanup();
 
-  runApp(const MyApp());
+  runApp(MyApp(prefs: prefs));
 }
 
 // Start periodic file cleanup
@@ -32,7 +39,9 @@ void _startFileCleanup() {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final SharedPreferences prefs;
+
+  const MyApp({super.key, required this.prefs});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -73,22 +82,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProxyProvider<SettingsProvider, ChatProvider>(
           // Create a new ChatProvider with the required parameters
           create: (context) {
-            final settingsProvider = Provider.of<SettingsProvider>(
-              context,
-              listen: false,
-            );
-            final ollamaService = settingsProvider.getOllamaService();
+            final settingsProvider =
+                Provider.of<SettingsProvider>(context, listen: false);
+            final chatHistoryService = ChatHistoryService();
+            final settingsService = SettingsService(widget.prefs);
             return ChatProvider(
-              ollamaService: ollamaService,
+              chatHistoryService: chatHistoryService,
+              settingsService: settingsService,
               settingsProvider: settingsProvider,
             );
           },
           // Update the ChatProvider when SettingsProvider changes
           update: (context, settingsProvider, previous) {
             if (previous == null) {
-              final ollamaService = settingsProvider.getOllamaService();
+              final chatHistoryService = ChatHistoryService();
+              final settingsService = SettingsService(widget.prefs);
               return ChatProvider(
-                ollamaService: ollamaService,
+                chatHistoryService: chatHistoryService,
+                settingsService: settingsService,
                 settingsProvider: settingsProvider,
               );
             }
@@ -100,12 +111,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, child) {
           return MaterialApp(
+            key: const ValueKey('main_app'),
             title: 'OllamaVerse',
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-              useMaterial3: true,
-              brightness: Brightness.light,
-            ),
+            theme: materialLightTheme(),
             darkTheme: draculaDarkTheme(),
             themeMode: settingsProvider.themeMode,
             initialRoute: '/',
