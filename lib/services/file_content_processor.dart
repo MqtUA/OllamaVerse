@@ -4,6 +4,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/processed_file.dart';
 import '../utils/file_utils.dart';
 import '../utils/logger.dart';
+import 'file_content_cache.dart';
 
 /// Service for processing different file types and extracting content for AI analysis
 class FileContentProcessor {
@@ -55,35 +56,67 @@ class FileContentProcessor {
       final fileSize = await file.length();
       final fileType = getFileType(filePath);
 
+      // Check cache first
+      final cache = FileContentCache.instance;
+      final cachedFile = await cache.getCachedFile(filePath);
+      if (cachedFile != null) {
+        AppLogger.info('Using cached content for: $fileName');
+        return cachedFile;
+      }
+
       AppLogger.info(
           'Processing file: $fileName (${fileType.name}, ${FileUtils.formatFileSize(fileSize)})');
 
+      ProcessedFile processedFile;
       switch (fileType) {
         case FileType.image:
-          return await _processImageFile(filePath, fileName, fileSize);
+          processedFile = await _processImageFile(filePath, fileName, fileSize);
+          break;
         case FileType.pdf:
-          return await _processPdfFile(filePath, fileName, fileSize);
+          processedFile = await _processPdfFile(filePath, fileName, fileSize);
+          break;
         case FileType.text:
         case FileType.sourceCode:
         case FileType.json:
-          return await _processTextFile(filePath, fileName, fileSize, fileType);
+          processedFile =
+              await _processTextFile(filePath, fileName, fileSize, fileType);
+          break;
         default:
           throw UnsupportedError('File type ${fileType.name} is not supported');
       }
+
+      // Cache the processed file for future use
+      await cache.cacheFile(filePath, processedFile);
+
+      return processedFile;
     } catch (e) {
       AppLogger.error('Error processing file $filePath', e);
       rethrow;
     }
   }
 
-  /// Process multiple files in batch
+  /// Process multiple files in batch with caching support
   static Future<List<ProcessedFile>> processFiles(
       List<String> filePaths) async {
     final List<ProcessedFile> processedFiles = [];
     final List<String> errors = [];
+    int cacheHits = 0;
 
     for (final filePath in filePaths) {
       try {
+        final fileName = FileUtils.getFileName(filePath);
+
+        // Check cache first
+        final cache = FileContentCache.instance;
+        final cachedFile = await cache.getCachedFile(filePath);
+        if (cachedFile != null) {
+          processedFiles.add(cachedFile);
+          cacheHits++;
+          AppLogger.debug('Cache hit for: $fileName');
+          continue;
+        }
+
+        // Process file if not cached
         final processedFile = await processFile(filePath);
         processedFiles.add(processedFile);
         AppLogger.info('Successfully processed: ${processedFile.fileName}');
@@ -97,6 +130,11 @@ class FileContentProcessor {
 
     if (errors.isNotEmpty) {
       AppLogger.warning('Some files failed to process: ${errors.join(', ')}');
+    }
+
+    if (cacheHits > 0) {
+      AppLogger.info(
+          'Batch processing completed: $cacheHits cache hits out of ${filePaths.length} files');
     }
 
     return processedFiles;

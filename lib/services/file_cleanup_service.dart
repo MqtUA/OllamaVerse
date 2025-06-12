@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:path_provider/path_provider.dart';
 import '../utils/logger.dart';
 import '../utils/file_utils.dart';
+import 'file_content_cache.dart';
 
 /// A service for managing temporary file cleanup with advanced scheduling and error handling
 class FileCleanupService {
@@ -83,6 +84,11 @@ class FileCleanupService {
         ('attachments', '${appDir.path}/attachments', _config.maxDirectorySize),
         ('logs', '${appDir.path}/logs', _config.maxLogSize),
         ('cache', '${appDir.path}/cache', _config.maxCacheSize),
+        (
+          'file_cache',
+          FileContentCache.instance.cacheDirectoryPath,
+          _config.maxCacheSize
+        ),
       ];
 
       bool needsCleanup = false;
@@ -336,6 +342,21 @@ class FileCleanupService {
       freedSize += cacheResult.freedSize;
     }
 
+    // Clean file content cache directory
+    // Note: We can't directly access the cache instance in isolate, so use hardcoded path
+    final fileCacheDir = Directory('${appDir.path}/file_cache');
+    if (await fileCacheDir.exists()) {
+      final fileCacheResult = await _cleanDirectory(
+        fileCacheDir,
+        config.maxCacheAge,
+        config.maxCacheSize,
+      );
+      totalFiles += fileCacheResult.totalFiles;
+      deletedFiles += fileCacheResult.deletedFiles;
+      totalSize += fileCacheResult.totalSize;
+      freedSize += fileCacheResult.freedSize;
+    }
+
     return CleanupResult(
       totalFiles: totalFiles,
       deletedFiles: deletedFiles,
@@ -426,6 +447,7 @@ class FileCleanupService {
       '${appDir.path}/attachments',
       '${appDir.path}/logs',
       '${appDir.path}/cache',
+      '${appDir.path}/file_cache',
     ];
 
     for (final dirPath in dirs) {

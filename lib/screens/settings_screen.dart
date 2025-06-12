@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
 import '../services/file_cleanup_service.dart';
+import '../services/file_content_cache.dart';
 import '../services/performance_monitor.dart';
 import '../widgets/simple_theme_switch.dart';
 
@@ -529,30 +530,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const Divider(),
                       // Storage cleanup section
-                      ListTile(
-                        title: const Text('Storage Cleanup'),
-                        subtitle: const Text(
-                          'Manage temporary files and cache',
+                      const Text(
+                        'Storage Management',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            // Store the context before async operation
-                            final scaffoldMessenger =
-                                ScaffoldMessenger.of(context);
-
-                            // Trigger manual cleanup
-                            await FileCleanupService.instance.forceCleanup();
-
-                            if (mounted) {
-                              scaffoldMessenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Storage cleanup completed'),
-                                  backgroundColor: Colors.green,
+                      ),
+                      const SizedBox(height: 8),
+                      // File cache statistics
+                      FutureBuilder<CacheStats>(
+                        future: FileContentCache.instance.getCacheStats(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData) {
+                            final stats = snapshot.data!;
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4.0),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.folder_special,
+                                            size: 16),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'File Cache',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w500),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          stats.formattedSize,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${stats.totalEntries} cached files • Faster file processing',
+                                      style: const TextStyle(
+                                          fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            }
-                          },
-                          child: const Text('Clean Now'),
+                              ),
+                            );
+                          }
+                          return const Card(
+                            margin: EdgeInsets.symmetric(vertical: 4.0),
+                            child: Padding(
+                              padding: EdgeInsets.all(12.0),
+                              child: Text(
+                                'Loading cache statistics...',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      // Storage cleanup actions
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  final scaffoldMessenger =
+                                      ScaffoldMessenger.of(context);
+
+                                  await FileContentCache.instance.clearCache();
+
+                                  if (mounted) {
+                                    scaffoldMessenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('File cache cleared'),
+                                        backgroundColor: Colors.blue,
+                                      ),
+                                    );
+                                    setState(() {}); // Refresh cache stats
+                                  }
+                                },
+                                icon: const Icon(Icons.clear_all, size: 16),
+                                label: const Text('Clear Cache'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  final scaffoldMessenger =
+                                      ScaffoldMessenger.of(context);
+
+                                  // Trigger manual cleanup
+                                  await FileCleanupService.instance
+                                      .forceCleanup();
+
+                                  if (mounted) {
+                                    scaffoldMessenger.showSnackBar(
+                                      const SnackBar(
+                                        content:
+                                            Text('Storage cleanup completed'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                    setState(() {}); // Refresh stats
+                                  }
+                                },
+                                icon: const Icon(Icons.cleaning_services,
+                                    size: 16),
+                                label: const Text('Clean All'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
