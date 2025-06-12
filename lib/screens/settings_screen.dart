@@ -148,19 +148,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showConnectionFailedDialog() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Connection Failed'),
-            content: const Text(
-              'Could not connect to the Ollama server. Please check your settings and ensure the server is running.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Connection Failed'),
+        content: const Text(
+          'Could not connect to the Ollama server. Please check your settings and ensure the server is running.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
@@ -168,17 +167,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showErrorDialog(String errorMessage) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Connection Error'),
-            content: Text('Error: $errorMessage'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Connection Error'),
+        content: Text('Error: $errorMessage'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
           ),
+        ],
+      ),
     );
   }
 
@@ -282,11 +280,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 16),
                       SwitchListTile(
                         title: const Text('Dark Mode'),
+                        subtitle: const Text(
+                            'Smooth transition between light and dark themes'),
                         value: _darkMode,
                         onChanged: (value) {
                           setState(() {
                             _darkMode = value;
                           });
+                          // Show a brief feedback during theme change
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                value
+                                    ? 'Switched to Dark Mode'
+                                    : 'Switched to Light Mode',
+                              ),
+                              duration: const Duration(milliseconds: 1000),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
                           settingsProvider.updateSettings(darkMode: value);
                         },
                       ),
@@ -316,11 +328,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           value: _contextLength,
                           items:
                               [2048, 4096, 8192, 16384, 32768].map((int value) {
-                                return DropdownMenuItem<int>(
-                                  value: value,
-                                  child: Text(value.toString()),
-                                );
-                              }).toList(),
+                            return DropdownMenuItem<int>(
+                              value: value,
+                              child: Text(value.toString()),
+                            );
+                          }).toList(),
                           onChanged: (int? newValue) {
                             if (newValue != null) {
                               setState(() {
@@ -487,14 +499,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _isTesting ? null : _saveAndCheckConnection,
-        child:
-            _isTesting
-                ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                : const Text('Test Connection'),
+        child: _isTesting
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('Test Connection'),
       ),
     );
   }

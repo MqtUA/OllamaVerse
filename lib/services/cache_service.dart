@@ -1,81 +1,131 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/logger.dart';
 
 /// A service for caching frequently accessed data
 class CacheService {
-  static SharedPreferences? _prefs;
   static const String _prefix = 'cache_';
-  static const String _expiryPrefix = 'expiry_';
+  static SharedPreferences? _prefs;
+  static final List<StreamSubscription> _subscriptions = [];
+  static bool _isInitialized = false;
 
+  /// Initialize the cache service
   static Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-  }
-
-  /// Get cached data
-  Future<T?> get<T>(
-    String key,
-    T Function(Map<String, dynamic>) fromJson,
-  ) async {
-    if (_prefs == null) await init();
-
-    final expiryKey = _expiryPrefix + key;
-    final expiryTime = _prefs!.getInt(expiryKey);
-
-    if (expiryTime != null &&
-        DateTime.now().millisecondsSinceEpoch > expiryTime) {
-      await remove(key);
-      return null;
-    }
-
-    final data = _prefs!.getString(_prefix + key);
-    if (data == null) return null;
+    if (_isInitialized) return;
 
     try {
-      final json = jsonDecode(data) as Map<String, dynamic>;
-      return fromJson(json);
+      _prefs = await SharedPreferences.getInstance();
+      _isInitialized = true;
+      AppLogger.info('Cache service initialized');
     } catch (e) {
-      AppLogger.error('Error getting cached data', e);
+      AppLogger.error('Error initializing cache service', e);
+      rethrow;
+    }
+  }
+
+  /// Clean up resources when the app is closed
+  static Future<void> dispose() async {
+    try {
+      // Cancel all active subscriptions
+      for (var subscription in _subscriptions) {
+        await subscription.cancel();
+      }
+      _subscriptions.clear();
+
+      // Clear any temporary data
+      await clear();
+
+      _isInitialized = false;
+      AppLogger.info('Cache service disposed');
+    } catch (e) {
+      AppLogger.error('Error disposing cache service', e);
+    }
+  }
+
+  /// Get a value from the cache
+  static Future<T?> get<T>(String key) async {
+    if (!_isInitialized) {
+      throw Exception('CacheService not initialized');
+    }
+
+    try {
+      final value = _prefs?.getString('$_prefix$key');
+      if (value == null) return null;
+
+      return value as T;
+    } catch (e) {
+      AppLogger.error('Error getting value from cache', e);
       return null;
     }
   }
 
-  /// Set data in cache
-  Future<void> set<T>(
-    String key,
-    T data,
-    Map<String, dynamic> Function(T) toJson, {
-    Duration? expiration,
-  }) async {
-    if (_prefs == null) await init();
+  /// Set a value in the cache
+  static Future<void> set<T>(String key, T value) async {
+    if (!_isInitialized) {
+      throw Exception('CacheService not initialized');
+    }
 
-    final json = toJson(data);
-    await _prefs!.setString(_prefix + key, jsonEncode(json));
-
-    if (expiration != null) {
-      final expiryTime = DateTime.now().add(expiration).millisecondsSinceEpoch;
-      await _prefs!.setInt(_expiryPrefix + key, expiryTime);
+    try {
+      await _prefs?.setString('$_prefix$key', value.toString());
+    } catch (e) {
+      AppLogger.error('Error setting value in cache', e);
     }
   }
 
-  /// Remove data from cache
-  Future<void> remove(String key) async {
-    if (_prefs == null) await init();
+  /// Remove a value from the cache
+  static Future<void> remove(String key) async {
+    if (!_isInitialized) {
+      throw Exception('CacheService not initialized');
+    }
 
-    await _prefs!.remove(_prefix + key);
-    await _prefs!.remove(_expiryPrefix + key);
+    try {
+      await _prefs?.remove('$_prefix$key');
+    } catch (e) {
+      AppLogger.error('Error removing value from cache', e);
+    }
   }
 
   /// Clear all cached data
-  Future<void> clear() async {
-    if (_prefs == null) await init();
-
-    final keys = _prefs!.getKeys();
-    for (final key in keys) {
-      if (key.startsWith(_prefix) || key.startsWith(_expiryPrefix)) {
-        await _prefs!.remove(key);
-      }
+  static Future<void> clear() async {
+    if (!_isInitialized) {
+      throw Exception('CacheService not initialized');
     }
+
+    try {
+      final keys = _prefs?.getKeys() ?? {};
+      for (final key in keys) {
+        if (key.startsWith(_prefix)) {
+          await _prefs?.remove(key);
+        }
+      }
+    } catch (e) {
+      AppLogger.error('Error clearing cache', e);
+    }
+  }
+
+  /// Get cache size in bytes
+  static Future<int> getCacheSize() async {
+    try {
+      if (_prefs == null) await init();
+      int size = 0;
+      final keys = _prefs!.getKeys().where((key) => key.startsWith(_prefix));
+      for (final key in keys) {
+        final value = _prefs!.get(key);
+        if (value is String) {
+          size += value.length;
+        } else if (value is List) {
+          size += value.length;
+        }
+      }
+      return size;
+    } catch (e) {
+      AppLogger.error('Error getting cache size', e);
+      return 0;
+    }
+  }
+
+  /// Add a subscription to be cleaned up on dispose
+  static void addSubscription(StreamSubscription subscription) {
+    _subscriptions.add(subscription);
   }
 }

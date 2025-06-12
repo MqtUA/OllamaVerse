@@ -12,6 +12,7 @@ import '../widgets/markdown_title.dart';
 import '../widgets/model_selector.dart';
 import '../widgets/typing_indicator.dart';
 import '../theme/dracula_theme.dart';
+import '../theme/material_light_theme.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -28,6 +29,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isCtrlPressed = false;
   bool _userHasScrolled = false;
 
+  // Cache provider reference to avoid unsafe lookups during dispose
+  ChatProvider? _chatProvider;
+
   @override
   void initState() {
     super.initState();
@@ -37,8 +41,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Add a listener to the chat provider to handle autoscrolling during message generation
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-      chatProvider.addListener(_handleChatProviderChanges);
+      if (mounted) {
+        _chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        _chatProvider?.addListener(_handleChatProviderChanges);
+      }
     });
     // Add keyboard listener for Ctrl+Enter
     _messageFocusNode.addListener(() {
@@ -82,14 +88,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _messageFocusNode.dispose();
     ServicesBinding.instance.keyboard.removeHandler(_handleKeyPress);
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    chatProvider.removeListener(_handleChatProviderChanges);
+
+    // Safe disposal - use cached provider reference
+    _chatProvider?.removeListener(_handleChatProviderChanges);
+    _chatProvider = null;
+
     super.dispose();
   }
 
   // Handle changes in the chat provider for autoscrolling during message generation
   void _handleChatProviderChanges() {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    // Use cached provider reference to avoid unsafe lookups
+    final chatProvider = _chatProvider;
+    if (chatProvider == null || !mounted) return;
 
     // If the chat provider is generating a message and the user hasn't manually scrolled up
     if (chatProvider.isGenerating && !_userHasScrolled) {
@@ -106,8 +117,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _onScrollChange() {
     if (_scrollController.hasClients) {
       // Check if we're at the bottom
-      final isAtBottom =
-          _scrollController.position.pixels >=
+      final isAtBottom = _scrollController.position.pixels >=
           (_scrollController.position.maxScrollExtent - 20); // 20px threshold
 
       // If we're not at the bottom and not during initial load, user has scrolled up
@@ -151,63 +161,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // Helper method to get appropriate file icon based on file type
-  Widget _getFileIcon(String fileType) {
-    IconData iconData;
-    Color iconColor;
-
-    switch (fileType) {
-      case 'pdf':
-        iconData = Icons.picture_as_pdf;
-        iconColor = Colors.red;
-        break;
-      case 'word':
-        iconData = Icons.description;
-        iconColor = Colors.blue;
-        break;
-      case 'excel':
-        iconData = Icons.table_chart;
-        iconColor = Colors.green;
-        break;
-      case 'powerpoint':
-        iconData = Icons.slideshow;
-        iconColor = Colors.orange;
-        break;
-      case 'text':
-        iconData = Icons.text_snippet;
-        iconColor = Colors.grey;
-        break;
-      case 'archive':
-        iconData = Icons.archive;
-        iconColor = Colors.brown;
-        break;
-      case 'audio':
-        iconData = Icons.audio_file;
-        iconColor = Colors.purple;
-        break;
-      case 'video':
-        iconData = Icons.video_file;
-        iconColor = Colors.red.shade700;
-        break;
-      case 'code':
-        iconData = Icons.code;
-        iconColor = Colors.indigo;
-        break;
-      default:
-        iconData = Icons.insert_drive_file;
-        iconColor = Colors.grey;
-    }
-
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color:
-            Theme.of(context).brightness == Brightness.dark
-                ? Colors.grey.shade900
-                : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(4.0),
-      ),
-      child: Center(child: Icon(iconData, color: iconColor, size: 30)),
+  Widget _getFileIcon(IconData icon) {
+    return Icon(
+      icon,
+      size: 24,
+      color: Theme.of(context).brightness == Brightness.dark
+          ? Colors.grey.shade300
+          : Colors.grey.shade700,
     );
   }
 
@@ -215,26 +175,27 @@ class _ChatScreenState extends State<ChatScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    // Use cached provider reference or get fresh one if needed
+    final chatProvider =
+        _chatProvider ?? Provider.of<ChatProvider>(context, listen: false);
 
     // Use the new method that handles chat creation if needed
     chatProvider
         .sendMessageWithOptionalChatCreation(
-          message,
-          attachedFiles: _attachedFiles,
-        )
+      message,
+      attachedFiles: _attachedFiles,
+    )
         .then((_) {
-          // Success case - nothing to do
-        })
-        .catchError((error) {
-          // Check if the widget is still mounted before using the context
-          if (!mounted) return; // Early return if widget is no longer mounted
+      // Success case - nothing to do
+    }).catchError((error) {
+      // Check if the widget is still mounted before using the context
+      if (!mounted) return; // Early return if widget is no longer mounted
 
-          // Now it's safe to use the context since we've checked mounted status
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: $error')));
-        });
+      // Now it's safe to use the context since we've checked mounted status
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
+    });
 
     // Clear the input field and attachments
     _messageController.clear();
@@ -257,37 +218,36 @@ class _ChatScreenState extends State<ChatScreen> {
 
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Rename Chat'),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Chat Name',
-                border: OutlineInputBorder(),
-              ),
-              autofocus: true,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  final newTitle = controller.text.trim();
-                  if (newTitle.isNotEmpty) {
-                    Provider.of<ChatProvider>(
-                      context,
-                      listen: false,
-                    ).updateChatTitle(chatId, newTitle);
-                  }
-                  Navigator.pop(context);
-                },
-                child: const Text('Save'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Chat'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Chat Name',
+            border: OutlineInputBorder(),
           ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newTitle = controller.text.trim();
+              if (newTitle.isNotEmpty) {
+                Provider.of<ChatProvider>(
+                  context,
+                  listen: false,
+                ).updateChatTitle(chatId, newTitle);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     ).then((_) => controller.dispose());
   }
 
@@ -335,8 +295,7 @@ class _ChatScreenState extends State<ChatScreen> {
             final activeChat = chatProvider.activeChat;
             return MarkdownTitle(
               data: activeChat?.title ?? 'New Chat',
-              style:
-                  Theme.of(context).appBarTheme.titleTextStyle ??
+              style: Theme.of(context).appBarTheme.titleTextStyle ??
                   Theme.of(context).textTheme.titleLarge,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -352,32 +311,31 @@ class _ChatScreenState extends State<ChatScreen> {
                 return PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Chat options',
-                  itemBuilder:
-                      (context) => [
-                        const PopupMenuItem<String>(
-                          value: 'rename',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit),
-                              SizedBox(width: 8),
-                              Text('Rename Chat'),
-                            ],
+                  itemBuilder: (context) => [
+                    const PopupMenuItem<String>(
+                      value: 'rename',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit),
+                          SizedBox(width: 8),
+                          Text('Rename Chat'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete Chat',
+                            style: TextStyle(color: Colors.red),
                           ),
-                        ),
-                        const PopupMenuItem<String>(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text(
-                                'Delete Chat',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  ],
                   onSelected: (value) {
                     if (value == 'rename') {
                       _showRenameChatDialog(activeChat.id, activeChat.title);
@@ -404,41 +362,39 @@ class _ChatScreenState extends State<ChatScreen> {
             )
           else
             Builder(
-              builder:
-                  (context) => IconButton(
-                    icon: const Icon(Icons.menu),
-                    onPressed: () {
-                      Scaffold.of(context).openEndDrawer();
-                    },
-                  ),
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openEndDrawer();
+                },
+              ),
             ),
         ],
       ),
       drawer: const ChatDrawer(),
-      endDrawer:
-          MediaQuery.of(context).size.width <= 600
-              ? Drawer(
-                child: SafeArea(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: const Text('Model'),
-                        trailing: const ModelSelector(compact: true),
-                      ),
-                      const Divider(),
-                      ListTile(
-                        leading: const Icon(Icons.settings),
-                        title: const Text('Settings'),
-                        onTap: () {
-                          Navigator.pop(context); // Close drawer
-                          Navigator.pushNamed(context, '/settings');
-                        },
-                      ),
-                    ],
-                  ),
+      endDrawer: MediaQuery.of(context).size.width <= 600
+          ? Drawer(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: const Text('Model'),
+                      trailing: const ModelSelector(compact: true),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.settings),
+                      title: const Text('Settings'),
+                      onTap: () {
+                        Navigator.pop(context); // Close drawer
+                        Navigator.pushNamed(context, '/settings');
+                      },
+                    ),
+                  ],
                 ),
-              )
-              : null,
+              ),
+            )
+          : null,
       body: Stack(
         children: [
           // Main content column
@@ -447,7 +403,7 @@ class _ChatScreenState extends State<ChatScreen> {
               // Error message display
               Consumer<ChatProvider>(
                 builder: (context, chatProvider, child) {
-                  if (chatProvider.error.isNotEmpty) {
+                  if (chatProvider.error?.isNotEmpty ?? false) {
                     return Container(
                       color: Colors.red.shade100,
                       padding: const EdgeInsets.all(8.0),
@@ -497,129 +453,41 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     }
 
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _scrollToBottom(),
-                    );
-
                     // Use the displayableMessages getter from ChatProvider
                     final displayMessages = chatProvider.displayableMessages;
 
                     return ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.all(16.0),
-                      // Add +1 to itemCount if generating to show typing indicator or streaming response
-                      itemCount:
-                          displayMessages.length +
+                      padding: const EdgeInsets.only(
+                        left: 16.0,
+                        right: 16.0,
+                        top: 16.0,
+                        bottom:
+                            80.0, // Add bottom padding to account for message input
+                      ),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: displayMessages.length +
                           (chatProvider.isGenerating ? 1 : 0),
                       itemBuilder: (context, index) {
                         // Show typing indicator or streaming response as the last item when generating
                         if (index == displayMessages.length &&
                             chatProvider.isGenerating) {
-                          final settings =
-                              Provider.of<SettingsProvider>(
-                                context,
-                                listen: false,
-                              ).settings;
+                          final settings = Provider.of<SettingsProvider>(
+                            context,
+                            listen: false,
+                          ).settings;
 
                           if (settings.showLiveResponse &&
                               chatProvider
-                                  .currentStreamingResponse
-                                  .isNotEmpty) {
+                                  .currentStreamingResponse.isNotEmpty) {
                             // Show streaming response
-                            return Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(
-                                  vertical: 8.0,
-                                ),
-                                padding: const EdgeInsets.all(12.0),
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width *
-                                      (MediaQuery.of(context).size.width > 600
-                                          ? 0.8
-                                          : 0.9),
-                                ),
-                                decoration: BoxDecoration(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? DraculaColors
-                                              .aiBubble // Dracula AI bubble color
-                                          : Theme.of(
-                                            context,
-                                          ).cardColor, // Light theme
-                                  borderRadius: BorderRadius.circular(12.0),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withAlpha(
-                                        26,
-                                      ), // 0.1 * 255 ≈ 26
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CustomMarkdownBody(
-                                      data:
-                                          chatProvider.currentStreamingResponse,
-                                      fontSize: fontSize,
-                                      selectable: true,
-                                      onTapLink: (text, href, title) {
-                                        if (href != null) {
-                                          // Handle link taps
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'Link tapped: $href',
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                    ),
-                                    const SizedBox(height: 4.0),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        SizedBox(
-                                          width: 12,
-                                          height: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  Theme.of(
-                                                            context,
-                                                          ).brightness ==
-                                                          Brightness.dark
-                                                      ? Colors.white70
-                                                      : Colors.grey.shade700,
-                                                ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Generating...',
-                                          style: TextStyle(
-                                            color:
-                                                Theme.of(context).brightness ==
-                                                        Brightness.dark
-                                                    ? Colors.white70
-                                                    : Colors.grey.shade600,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
+                            return _buildMessageBubble(
+                              ChatMessage(
+                                content: chatProvider.currentStreamingResponse,
+                                isUser: false,
+                                timestamp: DateTime.now(),
                               ),
+                              fontSize,
                             );
                           } else {
                             // Show typing indicator
@@ -630,11 +498,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                   vertical: 8.0,
                                 ),
                                 child: TypingIndicator(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.grey.shade300
-                                          : Colors.grey.shade700,
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.grey.shade300
+                                      : Colors.grey.shade700,
                                 ),
                               ),
                             );
@@ -663,12 +530,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: Theme.of(context).scaffoldBackgroundColor,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
+                  physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: _attachedFiles.length,
                   itemBuilder: (context, index) {
                     final fileName = FileUtils.getFileName(
                       _attachedFiles[index],
                     );
-                    final fileIconName = FileUtils.getFileIconName(
+                    final fileIcon = FileUtils.getFileIcon(
                       _attachedFiles[index],
                     );
 
@@ -676,74 +544,45 @@ class _ChatScreenState extends State<ChatScreen> {
                       margin: const EdgeInsets.only(left: 8.0),
                       padding: const EdgeInsets.all(8.0),
                       decoration: BoxDecoration(
-                        color:
-                            Theme.of(context).brightness == Brightness.dark
-                                ? Colors.grey.shade800
-                                : Colors.grey.shade200,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey.shade800
+                            : MaterialLightColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(8.0),
                         border: Border.all(
-                          color:
-                              Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.grey.shade700
-                                  : Colors.grey.shade300,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey.shade700
+                              : MaterialLightColors.outline,
                         ),
                       ),
                       child: Row(
                         children: [
                           FileUtils.isImageFile(_attachedFiles[index])
                               ? ClipRRect(
-                                borderRadius: BorderRadius.circular(4.0),
-                                child: Image.file(
-                                  File(_attachedFiles[index]),
-                                  width: 50,
-                                  height: 50,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                              : _getFileIcon(fileIconName),
+                                  borderRadius: BorderRadius.circular(4.0),
+                                  child: Image.file(
+                                    File(_attachedFiles[index]),
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : _getFileIcon(fileIcon),
                           const SizedBox(width: 8.0),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                fileName.length > 15
-                                    ? '${fileName.substring(0, 12)}...'
-                                    : fileName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color:
-                                      Theme.of(
-                                        context,
-                                      ).textTheme.bodyLarge?.color,
-                                ),
+                                fileName,
+                                style: const TextStyle(fontSize: 12),
                               ),
-                              if (FileUtils.isPdfFile(_attachedFiles[index]))
-                                Text(
-                                  'PDF File',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color:
-                                        Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall?.color,
-                                  ),
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () => _removeAttachment(index),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
                             ],
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.close,
-                              size: 16,
-                              color:
-                                  Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white70
-                                      : Colors.black54,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () => _removeAttachment(index),
                           ),
                         ],
                       ),
@@ -766,7 +605,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: Theme.of(context).cardColor,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(26), // 0.1 * 255 ≈ 26
+                        color: Colors.black.withAlpha(26),
                         blurRadius: 4,
                         offset: const Offset(0, -1),
                       ),
@@ -785,13 +624,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           decoration: InputDecoration(
                             hintText: 'Type a message...',
                             border: const OutlineInputBorder(),
-                            suffixIcon:
-                                _isCtrlPressed
-                                    ? const Icon(
-                                      Icons.keyboard_return,
-                                      color: Colors.green,
-                                    )
-                                    : null,
+                            suffixIcon: _isCtrlPressed
+                                ? const Icon(
+                                    Icons.keyboard_return,
+                                    color: Colors.green,
+                                  )
+                                : null,
                           ),
                           minLines: 1,
                           maxLines: 5,
@@ -800,50 +638,44 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(width: 8.0),
                       IconButton(
-                        icon:
-                            chatProvider.isGenerating
-                                ? Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
+                        icon: chatProvider.isGenerating
+                            ? Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        borderRadius: BorderRadius.circular(2),
-                                      ),
+                                  ),
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(2),
                                     ),
-                                  ],
-                                )
-                                : Icon(
-                                  Icons.send,
-                                  // Make sure the icon is visible in both light and dark themes
-                                  color:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.lightBlueAccent
-                                          : Theme.of(context).primaryColor,
-                                ),
+                                  ),
+                                ],
+                              )
+                            : Icon(
+                                Icons.send,
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.lightBlueAccent
+                                    : Theme.of(context).primaryColor,
+                              ),
                         onPressed: () {
                           if (chatProvider.isGenerating) {
-                            // Stop generation
                             chatProvider.cancelGeneration();
                           } else {
-                            // Send message
                             _sendMessage();
                           }
                         },
-                        tooltip:
-                            chatProvider.isGenerating
-                                ? 'Stop generation'
-                                : 'Send message',
+                        tooltip: chatProvider.isGenerating
+                            ? 'Stop generation'
+                            : 'Send message',
                       ),
                     ],
                   ),
@@ -870,18 +702,13 @@ class _ChatScreenState extends State<ChatScreen> {
               MediaQuery.of(context).size.width * (isSmallScreen ? 0.9 : 0.8),
         ),
         decoration: BoxDecoration(
-          color:
-              isUser
-                  ? Theme.of(context).brightness == Brightness.dark
-                      ? DraculaColors
-                          .userBubble // Dracula user bubble color
-                      : Theme.of(context).primaryColor.withAlpha(
-                        230,
-                      ) // Light theme
-                  : Theme.of(context).brightness == Brightness.dark
-                  ? DraculaColors
-                      .aiBubble // Dracula AI bubble color
-                  : Theme.of(context).cardColor, // Light theme
+          color: isUser
+              ? Theme.of(context).brightness == Brightness.dark
+                  ? DraculaColors.userBubble // Dracula user bubble color
+                  : MaterialLightColors.userBubble // Material light theme
+              : Theme.of(context).brightness == Brightness.dark
+                  ? DraculaColors.aiBubble // Dracula AI bubble color
+                  : MaterialLightColors.aiBubble, // Material light theme
           borderRadius: BorderRadius.circular(12.0),
           boxShadow: [
             BoxShadow(
@@ -891,10 +718,9 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
           border: Border.all(
-            color:
-                Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade800
-                    : Colors.transparent,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.grey.shade800
+                : Colors.transparent,
             width: 1.0,
           ),
         ),
@@ -906,41 +732,39 @@ class _ChatScreenState extends State<ChatScreen> {
               Wrap(
                 spacing: 8.0,
                 runSpacing: 8.0,
-                children:
-                    message.attachedFiles.map((filePath) {
-                      final fileName = FileUtils.getFileName(filePath);
-                      return FileUtils.isImageFile(filePath)
-                          ? Image.file(
-                            File(filePath),
-                            width: 100,
-                            height: 100,
-                            fit: BoxFit.cover,
-                          )
-                          : Container(
-                            padding: const EdgeInsets.all(4.0),
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? DraculaColors.selection
-                                      : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(4.0),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.insert_drive_file, size: 16),
-                                const SizedBox(width: 4.0),
-                                Text(
-                                  fileName.length > 20
-                                      ? '${fileName.substring(0, 17)}...'
-                                      : fileName,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          );
-                    }).toList(),
+                children: message.attachedFiles.map((filePath) {
+                  final fileName = FileUtils.getFileName(filePath);
+                  return FileUtils.isImageFile(filePath)
+                      ? Image.file(
+                          File(filePath),
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          padding: const EdgeInsets.all(4.0),
+                          decoration: BoxDecoration(
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? DraculaColors.selection
+                                    : MaterialLightColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(4.0),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.insert_drive_file, size: 16),
+                              const SizedBox(width: 4.0),
+                              Text(
+                                fileName.length > 20
+                                    ? '${fileName.substring(0, 17)}...'
+                                    : fileName,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        );
+                }).toList(),
               ),
               const SizedBox(height: 8.0),
             ],
@@ -948,38 +772,42 @@ class _ChatScreenState extends State<ChatScreen> {
             // Message content with selectable text
             isUser
                 ? SelectableText(
-                  message.content,
-                  style: TextStyle(fontSize: fontSize, color: Colors.white),
-                )
+                    message.content,
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : MaterialLightColors.onPrimary,
+                    ),
+                  )
                 : CustomMarkdownBody(
-                  data: message.content,
-                  fontSize: fontSize,
-                  selectable: true,
-                  onTapLink: (text, href, title) {
-                    if (href != null) {
-                      // Handle link taps - could open a browser or in-app webview
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Link tapped: $href')),
-                      );
-                    }
-                  },
-                ),
+                    data: message.content,
+                    fontSize: fontSize,
+                    selectable: true,
+                    onTapLink: (text, href, title) {
+                      if (href != null) {
+                        // Handle link taps - could open a browser or in-app webview
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Link tapped: $href')),
+                        );
+                      }
+                    },
+                  ),
 
             // Timestamp
             const SizedBox(height: 4.0),
             Text(
               '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
               style: TextStyle(
-                color:
-                    isUser
-                        ? Theme.of(context).brightness == Brightness.dark
-                            ? DraculaColors.foreground.withAlpha(
-                              179,
-                            ) // 0.7 opacity
-                            : Colors.white70
-                        : Theme.of(context).brightness == Brightness.dark
+                color: isUser
+                    ? Theme.of(context).brightness == Brightness.dark
+                        ? DraculaColors.foreground.withAlpha(
+                            179,
+                          ) // 0.7 opacity
+                        : MaterialLightColors.onPrimary.withValues(alpha: 0.8)
+                    : Theme.of(context).brightness == Brightness.dark
                         ? DraculaColors.comment
-                        : Colors.grey,
+                        : MaterialLightColors.onSurfaceVariant,
                 fontSize: 10,
               ),
             ),

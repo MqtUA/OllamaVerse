@@ -1,11 +1,7 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
-import '../models/ollama_model.dart';
 import '../models/app_settings.dart';
-import '../utils/file_utils.dart';
 import '../utils/logger.dart';
 
 /// Custom exception for Ollama API errors
@@ -17,10 +13,9 @@ class OllamaApiException implements Exception {
   OllamaApiException(this.message, {this.statusCode, this.originalError});
 
   @override
-  String toString() =>
-      statusCode != null
-          ? 'OllamaApiException: $message (Status code: $statusCode)'
-          : originalError != null
+  String toString() => statusCode != null
+      ? 'OllamaApiException: $message (Status code: $statusCode)'
+      : originalError != null
           ? 'OllamaApiException: $message (Error: $originalError)'
           : 'OllamaApiException: $message';
 }
@@ -33,445 +28,277 @@ class OllamaConnectionException implements Exception {
   OllamaConnectionException(this.message, {this.originalError});
 
   @override
-  String toString() =>
-      originalError != null
-          ? 'OllamaConnectionException: $message (Error: $originalError)'
-          : 'OllamaConnectionException: $message';
+  String toString() => originalError != null
+      ? 'OllamaConnectionException: $message (Error: $originalError)'
+      : 'OllamaConnectionException: $message';
 }
 
 class OllamaService {
-  // Changed from final to allow updating
-  AppSettings settings;
-  String? _authToken;
+  final http.Client _client;
+  final AppSettings _settings;
+  final String? _authToken;
+  StreamController<String>? _streamController;
+  bool _isDisposed = false;
 
-  // For cancellation support
-  http.Client? _activeClient;
-  StreamSubscription? _activeStreamSubscription;
-  bool _isCancelled = false;
+  // Connection timeout for Android devices
+  static const Duration _connectionTimeout = Duration(seconds: 30);
+  static const Duration _receiveTimeout = Duration(seconds: 60);
 
-  /// Creates a new OllamaService instance with the provided settings.
-  ///
-  /// [settings] - The AppSettings object containing Ollama server configuration.
-  /// [authToken] - Optional authentication token for the Ollama server.
-  OllamaService({required this.settings, String? authToken})
-    : _authToken = authToken;
+  OllamaService({
+    required AppSettings settings,
+    String? authToken,
+    http.Client? client,
+  })  : _settings = settings,
+        _authToken = authToken,
+        _client = client ?? http.Client();
 
-  /// Updates the service with new settings.
-  ///
-  /// This method allows changing the Ollama server configuration dynamically
-  /// without having to create a new OllamaService instance.
-  ///
-  /// [newSettings] - The new AppSettings object to use for future API calls.
-  /// [newAuthToken] - Optional new authentication token.
-  void updateSettings(AppSettings newSettings, {String? newAuthToken}) {
-    settings = newSettings;
-    if (newAuthToken != null) {
-      _authToken = newAuthToken;
-    }
-  }
+  String get _baseUrl => _settings.ollamaUrl;
 
-  /// Cleans up resources after a request is completed or cancelled.
-  ///
-  /// Releases the HTTP client and stream subscription to prevent memory leaks.
-  void _cleanupAfterRequest() {
-    _activeClient = null;
-    _activeStreamSubscription = null;
-  }
+  Map<String, String> get _headers {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
 
-  /// Cancels the current ongoing generation request.
-  ///
-  /// Sets the cancellation flag and closes any active connections.
-  /// This method can be called to stop a streaming response that's in progress.
-  void cancelGeneration() {
-    _isCancelled = true;
-    if (_activeStreamSubscription != null) {
-      _activeStreamSubscription!.cancel();
-    }
-    if (_activeClient != null) {
-      _activeClient!.close();
-    }
-    _cleanupAfterRequest();
-  }
-
-  /// Returns HTTP headers for API requests, including auth token if available.
-  ///
-  /// @return A map of header key-value pairs for HTTP requests.
-  Map<String, String> _getHeaders() {
-    final headers = {'Content-Type': 'application/json'};
+    // Add auth token if provided
     if (_authToken != null && _authToken!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_authToken';
     }
+
     return headers;
   }
 
-  /// Tests the connection to the Ollama server.
-  ///
-  /// Makes a lightweight request to verify if the server is reachable
-  /// and responding with a valid status code.
-  ///
-  /// @return A Future that resolves to true if connection is successful, false otherwise.
-  Future<bool> testConnection() async {
+  Future<T> _makeRequest<T>(
+    Future<T> Function() request, {
+    Duration? timeout,
+  }) async {
     try {
-      final response = await http.get(
-        Uri.parse('${settings.ollamaUrl}/api/tags'),
-        headers: _getHeaders(),
+      return await request().timeout(
+        timeout ?? _connectionTimeout,
+        onTimeout: () {
+          throw OllamaConnectionException(
+            'Connection timed out. Please check your network connection and server settings.',
+          );
+        },
       );
-      return response.statusCode == 200;
+    } on TimeoutException {
+      throw OllamaConnectionException(
+        'Request timed out. The server may be unreachable or overloaded.',
+      );
+    } on http.ClientException catch (e) {
+      throw OllamaConnectionException(
+        'Network error occurred',
+        originalError: e,
+      );
     } catch (e) {
-      return false;
+      if (e is OllamaConnectionException || e is OllamaApiException) {
+        rethrow;
+      }
+      throw OllamaConnectionException(
+        'Failed to connect to Ollama server',
+        originalError: e,
+      );
     }
   }
 
-  // Custom exceptions are now defined at the top level
-
-  /// Fetches the list of available models from the Ollama server.
-  ///
-  /// Makes an HTTP request to the Ollama API's /api/tags endpoint to retrieve
-  /// all available models that can be used for generating responses.
-  ///
-  /// Returns a Future that resolves to a List of [OllamaModel] objects.
-  ///
-  /// Throws:
-  /// - [OllamaApiException]: When the API returns an error status code or invalid format
-  /// - [OllamaConnectionException]: When there's a network or connection error
-  Future<List<OllamaModel>> getModels() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${settings.ollamaUrl}/api/tags'),
-        headers: _getHeaders(),
+  Future<List<String>> getModels() async {
+    return _makeRequest(() async {
+      final response = await _client.get(
+        Uri.parse('$_baseUrl/api/tags'),
+        headers: _headers,
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> models = data['models'] ?? [];
-        return models.map((model) => OllamaModel.fromJson(model)).toList();
+        try {
+          final data = jsonDecode(response.body);
+          if (data['models'] != null) {
+            return (data['models'] as List)
+                .map((model) => model['name'] as String)
+                .toList();
+          } else {
+            return [];
+          }
+        } catch (e) {
+          throw OllamaApiException(
+            'Invalid JSON response from models endpoint',
+            originalError: e,
+          );
+        }
       } else {
         throw OllamaApiException(
           'Failed to load models',
           statusCode: response.statusCode,
         );
       }
-    } on http.ClientException catch (e) {
-      throw OllamaConnectionException(
-        'Error connecting to Ollama server',
-        originalError: e,
+    });
+  }
+
+  Future<bool> testConnection() async {
+    try {
+      return await _makeRequest(() async {
+        final response = await _client.get(
+          Uri.parse('$_baseUrl/api/tags'),
+          headers: _headers,
+        );
+        return response.statusCode == 200;
+      });
+    } catch (e) {
+      AppLogger.error('Error testing connection', e);
+      return false;
+    }
+  }
+
+  Future<void> refreshModels() async {
+    try {
+      await getModels();
+    } catch (e) {
+      AppLogger.error('Error refreshing models', e);
+      rethrow;
+    }
+  }
+
+  Future<String> generateResponse(
+    String prompt, {
+    String? model,
+    List<int>? context,
+  }) async {
+    if (_isDisposed) {
+      throw Exception('OllamaService has been disposed');
+    }
+
+    return _makeRequest(() async {
+      final requestBody = {
+        'model': model ?? 'llama2',
+        'prompt': prompt,
+        'stream': false, // Explicitly request non-streaming response
+      };
+
+      // Only add context if it's not null and not empty
+      if (context != null && context.isNotEmpty) {
+        requestBody['context'] = context;
+      }
+
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/api/generate'),
+        headers: _headers,
+        body: jsonEncode(requestBody),
       );
-    } on FormatException catch (e) {
-      throw OllamaApiException(
-        'Invalid response format from Ollama server',
-        originalError: e,
+
+      if (response.statusCode == 200) {
+        try {
+          final data = jsonDecode(response.body);
+
+          // Check if response contains the expected fields
+          if (data['response'] != null) {
+            return data['response'] as String;
+          } else {
+            throw OllamaApiException(
+              'Invalid response format: missing response field',
+            );
+          }
+        } catch (e) {
+          if (e is OllamaApiException) rethrow;
+
+          // Log the raw response for debugging
+          AppLogger.error('Raw response body: ${response.body}');
+          throw OllamaApiException(
+            'Invalid JSON response from generate endpoint',
+            originalError: e,
+          );
+        }
+      } else {
+        throw OllamaApiException(
+          'Failed to generate response',
+          statusCode: response.statusCode,
+        );
+      }
+    }, timeout: _receiveTimeout);
+  }
+
+  Stream<String> generateStreamingResponse(
+    String prompt, {
+    String? model,
+    List<int>? context,
+  }) async* {
+    if (_isDisposed) {
+      throw Exception('OllamaService has been disposed');
+    }
+
+    try {
+      final requestBody = {
+        'model': model ?? 'llama2',
+        'prompt': prompt,
+        'stream': true, // Explicitly request streaming response
+      };
+
+      // Only add context if it's not null and not empty
+      if (context != null && context.isNotEmpty) {
+        requestBody['context'] = context;
+      }
+
+      final request = http.Request(
+        'POST',
+        Uri.parse('$_baseUrl/api/generate'),
+      );
+      request.headers.addAll(_headers);
+      request.body = jsonEncode(requestBody);
+
+      final streamedResponse = await _client.send(request).timeout(
+        _connectionTimeout,
+        onTimeout: () {
+          throw OllamaConnectionException(
+            'Connection timed out while starting streaming response',
+          );
+        },
+      );
+
+      if (streamedResponse.statusCode == 200) {
+        await for (final chunk
+            in streamedResponse.stream.transform(utf8.decoder)) {
+          final lines = chunk.split('\n');
+          for (final line in lines) {
+            if (line.trim().isNotEmpty) {
+              try {
+                final data = jsonDecode(line.trim());
+                if (data['response'] != null) {
+                  yield data['response'] as String;
+                }
+
+                // Check if this is the final chunk
+                if (data['done'] == true) {
+                  return;
+                }
+              } catch (e) {
+                AppLogger.error(
+                    'Error parsing streaming response line: $line', e);
+                // Continue processing other lines instead of failing completely
+              }
+            }
+          }
+        }
+      } else {
+        throw OllamaApiException(
+          'Failed to generate streaming response',
+          statusCode: streamedResponse.statusCode,
+        );
+      }
+    } on OllamaApiException {
+      rethrow;
+    } on TimeoutException {
+      throw OllamaConnectionException(
+        'Streaming request timed out',
       );
     } catch (e) {
+      AppLogger.error('Error in streaming response', e);
       throw OllamaConnectionException(
-        'Unexpected error when connecting to Ollama',
+        'Failed to connect to Ollama server',
         originalError: e,
       );
     }
   }
 
-  /// Generates a response from the Ollama model based on the provided prompt.
-  ///
-  /// Parameters:
-  /// - [modelName]: The name of the Ollama model to use (e.g., 'llama2', 'mistral')
-  /// - [prompt]: The text prompt to send to the model
-  /// - [attachedFiles]: Optional list of file paths to include as context
-  /// - [context]: Optional conversation context from previous interactions
-  /// - [stream]: Whether to stream the response (true) or wait for complete response (false)
-  /// - [onStreamResponse]: Callback function that receives chunks of streamed response
-  ///
-  /// Returns a Future that resolves to the complete response string.
-  ///
-  /// Throws:
-  /// - [OllamaApiException]: When the API returns an error status code or invalid format
-  /// - [OllamaConnectionException]: When there's a network or connection error
-  ///
-  /// The method handles various file types differently:
-  /// - Images: Converted to base64 and sent in the 'images' field
-  /// - PDFs: Text is extracted and added to the prompt
-  /// - Text files: Content is read and added to the prompt
-  Future<String> generateResponse({
-    required String modelName,
-    required String prompt,
-    List<String>? attachedFiles,
-    List<dynamic>? context,
-    bool stream = false,
-    Function(String)? onStreamResponse,
-  }) async {
-    try {
-      final Map<String, dynamic> requestBody = {
-        'model': modelName,
-        'prompt': prompt,
-        'stream': stream,
-      };
-
-      // Add context if provided
-      if (context != null && context.isNotEmpty) {
-        // Filter out UI-only context elements (like our system message markers)
-        final apiContext =
-            context.where((item) {
-              if (item is Map) {
-                // Skip items marked as ui_only
-                return item['ui_only'] != true;
-              }
-              return true;
-            }).toList();
-
-        // Only add context if we have valid API context elements
-        if (apiContext.isNotEmpty) {
-          requestBody['context'] = apiContext;
-        } else {
-          // If no valid context, set context_length from settings
-          requestBody['options'] = {'num_ctx': settings.contextLength};
-        }
-      } else {
-        // If no context is provided, set context_length from settings
-        requestBody['options'] = {'num_ctx': settings.contextLength};
-      }
-
-      // Process attached files if any
-      if (attachedFiles != null && attachedFiles.isNotEmpty) {
-        List<String> imageBase64List = [];
-        List<String> textContents = [];
-
-        for (String filePath in attachedFiles) {
-          if (FileUtils.isImageFile(filePath)) {
-            // Handle image files - convert to base64
-            final File file = File(filePath);
-            if (await file.exists()) {
-              final bytes = await file.readAsBytes();
-              final base64Image = base64Encode(bytes);
-              imageBase64List.add(base64Image);
-            }
-          } else if (FileUtils.isPdfFile(filePath)) {
-            // Handle PDF files - extract text
-            try {
-              final pdfText = await FileUtils.extractTextFromPdf(filePath);
-              final fileName = path.basename(filePath);
-              textContents.add('PDF File: $fileName\n\n$pdfText');
-            } catch (e) {
-              AppLogger.error('Error processing PDF file', e);
-              final fileName = path.basename(filePath);
-              textContents.add(
-                'PDF File: $fileName\n\n[Error extracting PDF content]',
-              );
-            }
-          } else {
-            // Handle text files - read content
-            final File file = File(filePath);
-            if (await file.exists()) {
-              try {
-                final content = await file.readAsString();
-                final fileName = path.basename(filePath);
-                textContents.add('File: $fileName\n\n$content');
-              } catch (e) {
-                AppLogger.error('Error reading file', e);
-              }
-            }
-          }
-        }
-
-        // Add images if any
-        if (imageBase64List.isNotEmpty) {
-          requestBody['images'] = imageBase64List;
-        }
-
-        // Add text content to prompt if any
-        if (textContents.isNotEmpty) {
-          final fileContexts = textContents.join('\n\n---\n\n');
-          requestBody['prompt'] =
-              '$prompt\n\nHere are the attached files for context:\n\n$fileContexts';
-        }
-      }
-
-      if (stream && onStreamResponse != null) {
-        // Reset cancellation state
-        _isCancelled = false;
-
-        // Handle streaming response
-        final request = http.Request(
-          'POST',
-          Uri.parse('${settings.ollamaUrl}/api/generate'),
-        );
-        request.headers.addAll(_getHeaders());
-        request.body = json.encode(requestBody);
-
-        // Create a client that we can cancel later
-        _activeClient = http.Client();
-        final streamedResponse = await _activeClient!.send(request);
-
-        if (streamedResponse.statusCode == 200) {
-          String fullResponse = '';
-          final completer = Completer<String>();
-
-          // Store the subscription so we can cancel it
-          _activeStreamSubscription = streamedResponse.stream
-              .transform(utf8.decoder)
-              .listen(
-                (chunk) {
-                  if (_isCancelled) return;
-
-                  // Each chunk might contain multiple JSON objects separated by newlines
-                  final lines = chunk.split('\n');
-
-                  for (var line in lines) {
-                    if (line.trim().isEmpty) continue;
-                    if (_isCancelled) break;
-
-                    try {
-                      final Map<String, dynamic> data = json.decode(line);
-                      if (data.containsKey('response')) {
-                        final partialResponse = data['response'] as String;
-                        fullResponse += partialResponse;
-                        onStreamResponse(partialResponse);
-                      }
-
-                      // Store context if available
-                      if (data.containsKey('context')) {
-                        requestBody['context'] = data['context'];
-                      }
-
-                      // Check if this is the done message
-                      if (data.containsKey('done') && data['done'] == true) {
-                        if (!completer.isCompleted) {
-                          // Return both the response and context
-                          final result = {
-                            'response': fullResponse,
-                            'context': requestBody['context'],
-                          };
-                          completer.complete(result['response'] as String);
-                        }
-                        break;
-                      }
-                    } catch (e) {
-                      AppLogger.error('Error parsing streaming response', e);
-                    }
-                  }
-                },
-                onDone: () {
-                  if (!completer.isCompleted) {
-                    completer.complete(fullResponse);
-                  }
-                  _cleanupAfterRequest();
-                },
-                onError: (e) {
-                  if (!completer.isCompleted) {
-                    completer.completeError(
-                      OllamaConnectionException(
-                        'Failed to generate streaming response',
-                        originalError: e,
-                      ),
-                    );
-                  }
-                  _cleanupAfterRequest();
-                },
-                cancelOnError: true,
-              );
-
-          return await completer.future;
-        } else {
-          // Get the error response body for more details
-          final errorBody =
-              await streamedResponse.stream.transform(utf8.decoder).join();
-          _cleanupAfterRequest();
-
-          // Try to parse the error response for more details
-          String errorDetails = '';
-          try {
-            final errorJson = json.decode(errorBody);
-            if (errorJson.containsKey('error')) {
-              errorDetails = ': ${errorJson['error']}';
-            }
-          } catch (_) {
-            // If we can't parse the JSON, use the raw body if it's not too long
-            if (errorBody.length < 100) {
-              errorDetails = ': $errorBody';
-            }
-          }
-
-          throw OllamaApiException(
-            'Failed to generate streaming response$errorDetails',
-            statusCode: streamedResponse.statusCode,
-          );
-        }
-      } else {
-        // Reset cancellation state
-        _isCancelled = false;
-
-        // Handle non-streaming response with cancellation support
-        _activeClient = http.Client();
-        try {
-          final response = await _activeClient!.post(
-            Uri.parse('${settings.ollamaUrl}/api/generate'),
-            headers: _getHeaders(),
-            body: json.encode(requestBody),
-          );
-
-          _cleanupAfterRequest();
-
-          if (response.statusCode == 200) {
-            final Map<String, dynamic> data = json.decode(response.body);
-
-            // Create a result object with both response and context
-            Map<String, dynamic> result = {
-              'response': data['response'] ?? '',
-              'context': data['context'],
-            };
-
-            // Return just the response string as required by the API
-            return result['response'] as String;
-          } else {
-            // Try to parse the error response for more details
-            String errorDetails = '';
-            try {
-              final errorJson = json.decode(response.body);
-              if (errorJson.containsKey('error')) {
-                errorDetails = ': ${errorJson['error']}';
-              }
-            } catch (_) {
-              // If we can't parse the JSON, use the raw body if it's not too long
-              if (response.body.length < 100) {
-                errorDetails = ': ${response.body}';
-              }
-            }
-
-            throw OllamaApiException(
-              'Failed to generate response$errorDetails',
-              statusCode: response.statusCode,
-            );
-          }
-        } catch (e) {
-          _cleanupAfterRequest();
-          if (_isCancelled) {
-            return 'Request cancelled by user';
-          }
-          if (e is http.ClientException) {
-            throw OllamaConnectionException(
-              'Error connecting to Ollama server',
-              originalError: e,
-            );
-          } else if (e is FormatException) {
-            throw OllamaApiException(
-              'Invalid response format from Ollama server',
-              originalError: e,
-            );
-          } else {
-            throw OllamaConnectionException(
-              'Unexpected error when generating response',
-              originalError: e,
-            );
-          }
-        }
-      }
-    } catch (e) {
-      if (e is OllamaApiException || e is OllamaConnectionException) {
-        // Re-throw custom exceptions
-        rethrow;
-      } else {
-        throw OllamaConnectionException(
-          'Error connecting to Ollama',
-          originalError: e,
-        );
-      }
-    }
+  void dispose() {
+    _isDisposed = true;
+    _streamController?.close();
+    _client.close();
   }
 }

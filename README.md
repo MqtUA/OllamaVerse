@@ -181,3 +181,65 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - [Ollama](https://ollama.ai/) for the amazing local LLM runtime
 - [Flutter](https://flutter.dev/) for the cross-platform framework
+
+## Troubleshooting
+
+### Android Connection Issues
+
+If you're experiencing connection issues on Android when trying to connect to a remote Ollama instance:
+
+#### Common Issues and Solutions
+
+1. **"Connection Failed" or "Connection timed out" errors:**
+   - **Check Network Connectivity**: Ensure your Android device is connected to the same network as your Ollama server
+   - **Verify Server Address**: Make sure you're using the correct IP address and port (not `localhost` or `127.0.0.1` when connecting remotely)
+   - **Test Server Accessibility**: Try accessing `http://YOUR_SERVER_IP:11434/api/tags` in a web browser on your Android device
+
+2. **Firewall and Network Configuration:**
+   - **Server Firewall**: Ensure your Ollama server's firewall allows connections on port 11434
+   - **Router/Network Firewall**: Check if your router or network firewall is blocking the connection
+   - **Ollama Binding**: Make sure Ollama is bound to `0.0.0.0:11434` (not just `127.0.0.1:11434`)
+
+3. **Android-Specific Network Issues:**
+   - **Clear DNS Cache**: Go to Android Settings > Apps > OllamaVerse > Storage > Clear Cache
+   - **Network Security**: The app is configured to allow HTTP connections for development
+   - **Mobile Data vs WiFi**: Try switching between mobile data and WiFi to isolate network issues
+
+#### Configuring Ollama for Remote Access
+
+To allow remote connections to your Ollama server:
+
+1. **Set Environment Variable** (recommended):
+   ```bash
+   export OLLAMA_HOST=0.0.0.0:11434
+   ollama serve
+   ```
+
+2. **Or start with host binding**:
+   ```bash
+   ollama serve --host 0.0.0.0:11434
+   ```
+
+3. **For systemd services**, edit the service file:
+   ```bash
+   sudo systemctl edit ollama
+   ```
+   Add:
+   ```ini
+   [Service]
+   Environment="OLLAMA_HOST=0.0.0.0:11434"
+   ```
+
+#### Testing Connection
+
+1. **From your computer**: `curl http://YOUR_SERVER_IP:11434/api/tags`
+2. **From Android browser**: Navigate to `http://YOUR_SERVER_IP:11434/api/tags`
+3. **In the app**: Go to Settings and use "Test Connection"
+
+#### Network Configuration Examples
+
+- **Local network**: `192.168.1.100:11434`
+- **Docker**: Ensure port mapping `-p 11434:11434`
+- **Cloud server**: Use public IP and ensure security groups/firewall rules allow port 11434
+
+If issues persist, check the app logs in Settings > About for detailed error messages.

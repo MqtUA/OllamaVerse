@@ -1,54 +1,50 @@
-import 'package:uuid/uuid.dart';
+import 'message.dart';
 import 'chat_message.dart';
 
 class Chat {
   final String id;
-  final String title;
+  String title;
   final String modelName;
-  final List<ChatMessage> messages;
+  final List<Message> messages;
   final DateTime createdAt;
-  final DateTime lastUpdatedAt;
+  DateTime lastUpdatedAt;
 
   Chat({
-    String? id,
+    required this.id,
     required this.title,
     required this.modelName,
-    List<ChatMessage>? messages,
-    DateTime? createdAt,
-    DateTime? lastUpdatedAt,
-  }) : 
-    id = id ?? const Uuid().v4(),
-    messages = messages ?? [],
-    createdAt = createdAt ?? DateTime.now(),
-    lastUpdatedAt = lastUpdatedAt ?? DateTime.now();
+    required this.messages,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
 
   Chat copyWith({
+    String? id,
     String? title,
     String? modelName,
-    List<ChatMessage>? messages,
+    List<Message>? messages,
+    DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) {
     return Chat(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       modelName: modelName ?? this.modelName,
       messages: messages ?? this.messages,
-      createdAt: createdAt,
-      lastUpdatedAt: lastUpdatedAt ?? DateTime.now(),
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     );
   }
 
-  factory Chat.fromJson(Map<String, dynamic> json) {
-    return Chat(
-      id: json['id'],
-      title: json['title'],
-      modelName: json['modelName'],
-      messages: (json['messages'] as List)
-          .map((msg) => ChatMessage.fromJson(msg))
-          .toList(),
-      createdAt: DateTime.parse(json['createdAt']),
-      lastUpdatedAt: DateTime.parse(json['lastUpdatedAt']),
-    );
+  List<ChatMessage> toChatMessages() {
+    return messages
+        .map((message) => ChatMessage(
+              id: message.id,
+              content: message.content,
+              isUser: message.role == MessageRole.user,
+              timestamp: message.timestamp,
+            ))
+        .toList();
   }
 
   Map<String, dynamic> toJson() {
@@ -56,9 +52,22 @@ class Chat {
       'id': id,
       'title': title,
       'modelName': modelName,
-      'messages': messages.map((msg) => msg.toJson()).toList(),
+      'messages': messages.map((m) => m.toJson()).toList(),
       'createdAt': createdAt.toIso8601String(),
       'lastUpdatedAt': lastUpdatedAt.toIso8601String(),
     };
+  }
+
+  factory Chat.fromJson(Map<String, dynamic> json) {
+    return Chat(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      modelName: json['modelName'] as String? ?? '',
+      messages: (json['messages'] as List)
+          .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList(),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      lastUpdatedAt: DateTime.parse(json['lastUpdatedAt'] as String),
+    );
   }
 }

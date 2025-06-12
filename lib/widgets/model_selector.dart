@@ -4,7 +4,7 @@ import '../providers/chat_provider.dart';
 
 class ModelSelector extends StatelessWidget {
   final bool compact;
-  
+
   const ModelSelector({super.key, this.compact = false});
 
   @override
@@ -13,7 +13,7 @@ class ModelSelector extends StatelessWidget {
       builder: (context, chatProvider, child) {
         final models = chatProvider.availableModels;
         final activeChat = chatProvider.activeChat;
-        
+
         if (models.isEmpty) {
           return IconButton(
             icon: const Icon(Icons.model_training),
@@ -29,12 +29,12 @@ class ModelSelector extends StatelessWidget {
 
         // Use different UI for compact mode
         return PopupMenuButton<String>(
-          icon: compact 
+          icon: compact
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.model_training, size: 20),
-                    if (activeChat != null) ...[  
+                    if (activeChat != null) ...[
                       const SizedBox(width: 4),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 100),
@@ -73,13 +73,13 @@ class ModelSelector extends StatelessWidget {
                       ),
                   ],
                 ),
-          tooltip: activeChat != null 
-              ? 'Current model: ${activeChat.modelName}' 
+          tooltip: activeChat != null
+              ? 'Current model: ${activeChat.modelName}'
               : 'Select model',
           itemBuilder: (context) {
             return models.map((model) {
               return PopupMenuItem<String>(
-                value: model.name,
+                value: model,
                 child: Row(
                   children: [
                     Container(
@@ -87,13 +87,13 @@ class ModelSelector extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: activeChat?.modelName == model.name
+                        color: activeChat?.modelName == model
                             ? Theme.of(context).brightness == Brightness.dark
                                 ? Colors.lightBlueAccent
                                 : Theme.of(context).primaryColor
                             : Colors.transparent,
                       ),
-                      child: activeChat?.modelName == model.name
+                      child: activeChat?.modelName == model
                           ? const Icon(
                               Icons.check,
                               color: Colors.white,
@@ -103,22 +103,10 @@ class ModelSelector extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            model.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${(model.size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        model,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -134,11 +122,9 @@ class ModelSelector extends StatelessWidget {
                 builder: (BuildContext context) {
                   return AlertDialog(
                     title: const Text('Change Model'),
-                    content: Text(
-                      activeChat.messages.isEmpty
-                          ? 'Do you want to use $modelName for this chat?'
-                          : 'Do you want to change the model to $modelName for this chat or create a new chat?'
-                    ),
+                    content: Text(activeChat.messages.isEmpty
+                        ? 'Do you want to use $modelName for this chat?'
+                        : 'Do you want to change the model to $modelName for this chat or create a new chat?'),
                     actions: [
                       if (activeChat.messages.isNotEmpty)
                         TextButton(
@@ -152,7 +138,8 @@ class ModelSelector extends StatelessWidget {
                         onPressed: () {
                           Navigator.of(context).pop();
                           // Update the model for the current chat
-                          chatProvider.updateChatModel(activeChat.id, modelName);
+                          chatProvider.updateChatModel(
+                              activeChat.id, modelName);
                         },
                         child: const Text('Change Model'),
                       ),

@@ -1,83 +1,136 @@
 import 'package:flutter/material.dart';
 
-/// Dracula theme color palette
-/// Based on the official Dracula theme: https://draculatheme.com/
-class DraculaColors {
-  // Primary colors - From official spec: https://spec.draculatheme.com/
-  static const Color background = Color(
-    0xFF1C1E26,
-  ); // Much darker background (darker than official)
-  static const Color currentLine = Color(0xFF44475A); // Current Line
-  static const Color selection = Color(0xFF44475A); // Selection
-  static const Color foreground = Color(0xFFF8F8F2); // Foreground
+/// Material Design 3 inspired light theme color palette
+/// Based on modern design trends with clean, accessible colors
+class MaterialLightColors {
+  // Primary colors - Modern blue palette
+  static const Color primary = Color(0xFF1976D2); // Material Blue 700
+  static const Color primaryContainer = Color(0xFFE3F2FD); // Material Blue 50
+  static const Color onPrimary = Color(0xFFFFFFFF); // White
+  static const Color onPrimaryContainer =
+      Color(0xFF0D47A1); // Material Blue 900
 
-  // Accent colors - From official spec
-  static const Color comment = Color(0xFF6272A4); // Comment
-  static const Color cyan = Color(0xFF8BE9FD); // Cyan
-  static const Color green = Color(0xFF50FA7B); // Green
-  static const Color orange = Color(0xFFFFB86C); // Orange
-  static const Color pink = Color(0xFFFF79C6); // Pink
-  static const Color purple = Color(0xFFBD93F9); // Purple
-  static const Color red = Color(0xFFFF5555); // Red
-  static const Color yellow = Color(0xFFF1FA8C); // Yellow
+  // Secondary colors - Complementary teal
+  static const Color secondary = Color(0xFF00796B); // Material Teal 700
+  static const Color secondaryContainer = Color(0xFFE0F2F1); // Material Teal 50
+  static const Color onSecondary = Color(0xFFFFFFFF); // White
+  static const Color onSecondaryContainer =
+      Color(0xFF004D40); // Material Teal 900
 
-  // Chat bubble colors - Darker to match Dracula spec
-  static const Color userBubble = Color(
-    0xFF44475A,
-  ); // Selection color for user bubbles
-  static const Color aiBubble = Color(
-    0xFF282A36,
-  ); // Background color for AI bubbles
+  // Tertiary colors - Accent purple
+  static const Color tertiary = Color(0xFF7B1FA2); // Material Purple 700
+  static const Color tertiaryContainer =
+      Color(0xFFF3E5F5); // Material Purple 50
+  static const Color onTertiary = Color(0xFFFFFFFF); // White
+  static const Color onTertiaryContainer =
+      Color(0xFF4A148C); // Material Purple 900
 
-  // Code block color - Distinct from chat bubbles
-  static const Color codeBlock = Color(
-    0xFF21222C,
-  ); // Slightly lighter than background but darker than bubbles
+  // Surface colors - Clean whites and light grays
+  static const Color surface = Color(0xFFFFFBFE); // Warm white
+  static const Color surfaceVariant = Color(0xFFF5F5F5); // Light gray
+  static const Color onSurface = Color(0xFF1C1B1F); // Dark gray
+  static const Color onSurfaceVariant = Color(0xFF49454F); // Medium gray
+
+  // Background colors
+  static const Color background = Color(0xFFFFFBFE); // Warm white
+  static const Color onBackground = Color(0xFF1C1B1F); // Dark gray
+
+  // Error colors
+  static const Color error = Color(0xFFD32F2F); // Material Red 700
+  static const Color errorContainer = Color(0xFFFFEBEE); // Material Red 50
+  static const Color onError = Color(0xFFFFFFFF); // White
+  static const Color onErrorContainer = Color(0xFFB71C1C); // Material Red 900
+
+  // Outline colors
+  static const Color outline = Color(0xFF79747E); // Medium gray
+  static const Color outlineVariant = Color(0xFFCAC4D0); // Light gray
+
+  // Chat bubble colors - Modern and clean
+  static const Color userBubble = Color(0xFF1976D2); // Primary blue
+  static const Color aiBubble = Color(0xFFFFFFFF); // Pure white
+  static const Color userBubbleContainer = Color(0xFFE3F2FD); // Light blue
+  static const Color aiBubbleContainer = Color(0xFFF8F9FA); // Very light gray
+
+  // Code block colors
+  static const Color codeBlock = Color(0xFFF5F5F5); // Light gray background
+  static const Color codeBlockBorder = Color(0xFFE0E0E0); // Border gray
+
+  // Shadow colors
+  static const Color shadow = Color(0xFF000000); // Black
+  static const Color scrim = Color(0xFF000000); // Black
+
+  // Success color
+  static const Color success = Color(0xFF388E3C); // Material Green 700
+  static const Color successContainer = Color(0xFFE8F5E8); // Light green
+
+  // Warning color
+  static const Color warning = Color(0xFFF57C00); // Material Orange 700
+  static const Color warningContainer = Color(0xFFFFF3E0); // Light orange
 }
 
-/// Creates a Dracula-themed ThemeData for dark mode
-ThemeData draculaDarkTheme() {
+/// Creates a modern Material Design 3 inspired light theme
+ThemeData materialLightTheme() {
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: DraculaColors.background,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: MaterialLightColors.background,
     fontFamily: 'Roboto',
 
     // Color scheme
-    colorScheme: const ColorScheme.dark(
-      primary: DraculaColors.purple,
-      secondary: DraculaColors.pink,
-      tertiary: DraculaColors.cyan,
-      surface: DraculaColors.background,
-      error: DraculaColors.red,
-      onPrimary: DraculaColors.foreground,
-      onSecondary: DraculaColors.foreground,
-      onTertiary: DraculaColors.foreground,
-      onSurface: DraculaColors.foreground,
-      onError: DraculaColors.foreground,
-      brightness: Brightness.dark,
+    colorScheme: const ColorScheme.light(
+      primary: MaterialLightColors.primary,
+      onPrimary: MaterialLightColors.onPrimary,
+      primaryContainer: MaterialLightColors.primaryContainer,
+      onPrimaryContainer: MaterialLightColors.onPrimaryContainer,
+      secondary: MaterialLightColors.secondary,
+      onSecondary: MaterialLightColors.onSecondary,
+      secondaryContainer: MaterialLightColors.secondaryContainer,
+      onSecondaryContainer: MaterialLightColors.onSecondaryContainer,
+      tertiary: MaterialLightColors.tertiary,
+      onTertiary: MaterialLightColors.onTertiary,
+      tertiaryContainer: MaterialLightColors.tertiaryContainer,
+      onTertiaryContainer: MaterialLightColors.onTertiaryContainer,
+      error: MaterialLightColors.error,
+      onError: MaterialLightColors.onError,
+      errorContainer: MaterialLightColors.errorContainer,
+      onErrorContainer: MaterialLightColors.onErrorContainer,
+      surface: MaterialLightColors.surface,
+      onSurface: MaterialLightColors.onSurface,
+      onSurfaceVariant: MaterialLightColors.onSurfaceVariant,
+      outline: MaterialLightColors.outline,
+      outlineVariant: MaterialLightColors.outlineVariant,
+      shadow: MaterialLightColors.shadow,
+      scrim: MaterialLightColors.scrim,
+      brightness: Brightness.light,
     ),
 
-    // AppBar theme
+    // AppBar theme - Clean and modern
     appBarTheme: const AppBarTheme(
-      backgroundColor: DraculaColors.background,
-      foregroundColor: DraculaColors.foreground,
+      backgroundColor: MaterialLightColors.surface,
+      foregroundColor: MaterialLightColors.onSurface,
       elevation: 0,
+      scrolledUnderElevation: 1,
+      shadowColor: MaterialLightColors.shadow,
+      surfaceTintColor: MaterialLightColors.primary,
       titleTextStyle: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 22,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
         letterSpacing: 0,
         height: 1.27,
       ),
+      iconTheme: IconThemeData(
+        color: MaterialLightColors.onSurface,
+        size: 24,
+      ),
     ),
 
-    // Card theme - Elevated and clean (matching Material Light)
+    // Card theme - Elevated and clean
     cardTheme: CardThemeData(
-      color: DraculaColors.currentLine,
-      shadowColor: Colors.black.withValues(alpha: 0.2),
+      color: MaterialLightColors.surface,
+      shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.1),
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -85,18 +138,18 @@ ThemeData draculaDarkTheme() {
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
     ),
 
-    // Dialog theme (matching Material Light shapes)
+    // Dialog theme
     dialogTheme: DialogThemeData(
-      backgroundColor: DraculaColors.background,
-      surfaceTintColor: DraculaColors.purple,
+      backgroundColor: MaterialLightColors.surface,
+      surfaceTintColor: MaterialLightColors.primary,
       elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
       titleTextStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 24,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -105,7 +158,7 @@ ThemeData draculaDarkTheme() {
       ),
       contentTextStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurfaceVariant,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -114,10 +167,10 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Floating action button theme (matching Material Light shapes)
+    // Floating action button theme
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: DraculaColors.purple,
-      foregroundColor: DraculaColors.foreground,
+      backgroundColor: MaterialLightColors.primary,
+      foregroundColor: MaterialLightColors.onPrimary,
       elevation: 6,
       focusElevation: 8,
       hoverElevation: 8,
@@ -127,48 +180,48 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Input decoration theme - Modern and clean (matching Material Light shapes)
+    // Input decoration theme - Modern and clean
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: DraculaColors.currentLine,
+      fillColor: MaterialLightColors.surfaceVariant,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: DraculaColors.comment,
+          color: MaterialLightColors.outline,
           width: 1,
         ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: DraculaColors.comment,
+          color: MaterialLightColors.outline,
           width: 1,
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(
-          color: DraculaColors.purple,
+          color: MaterialLightColors.primary,
           width: 2,
         ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(
-          color: DraculaColors.red,
+          color: MaterialLightColors.error,
           width: 1,
         ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(
-          color: DraculaColors.red,
+          color: MaterialLightColors.error,
           width: 2,
         ),
       ),
       labelStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurfaceVariant,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -177,7 +230,7 @@ ThemeData draculaDarkTheme() {
       ),
       hintStyle: TextStyle(
         inherit: true,
-        color: DraculaColors.comment.withValues(alpha: 0.6),
+        color: MaterialLightColors.onSurfaceVariant.withValues(alpha: 0.6),
         fontSize: 16,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -190,11 +243,11 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Text theme
+    // Text theme - Clean and readable
     textTheme: const TextTheme(
       displayLarge: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 57,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -203,7 +256,7 @@ ThemeData draculaDarkTheme() {
       ),
       displayMedium: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 45,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -212,7 +265,7 @@ ThemeData draculaDarkTheme() {
       ),
       displaySmall: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 36,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -221,7 +274,7 @@ ThemeData draculaDarkTheme() {
       ),
       headlineLarge: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 32,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -230,7 +283,7 @@ ThemeData draculaDarkTheme() {
       ),
       headlineMedium: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 28,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -239,7 +292,7 @@ ThemeData draculaDarkTheme() {
       ),
       headlineSmall: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 24,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -248,7 +301,7 @@ ThemeData draculaDarkTheme() {
       ),
       titleLarge: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 22,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -257,7 +310,7 @@ ThemeData draculaDarkTheme() {
       ),
       titleMedium: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 16,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -266,7 +319,7 @@ ThemeData draculaDarkTheme() {
       ),
       titleSmall: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 14,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -275,7 +328,7 @@ ThemeData draculaDarkTheme() {
       ),
       bodyLarge: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -284,7 +337,7 @@ ThemeData draculaDarkTheme() {
       ),
       bodyMedium: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 14,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -293,7 +346,7 @@ ThemeData draculaDarkTheme() {
       ),
       bodySmall: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurfaceVariant,
         fontSize: 12,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -302,7 +355,7 @@ ThemeData draculaDarkTheme() {
       ),
       labelLarge: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 14,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -311,7 +364,7 @@ ThemeData draculaDarkTheme() {
       ),
       labelMedium: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 12,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -320,7 +373,7 @@ ThemeData draculaDarkTheme() {
       ),
       labelSmall: TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 11,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -330,15 +383,18 @@ ThemeData draculaDarkTheme() {
     ),
 
     // Icon theme
-    iconTheme: const IconThemeData(color: DraculaColors.foreground),
+    iconTheme: const IconThemeData(
+      color: MaterialLightColors.onSurface,
+      size: 24,
+    ),
 
-    // Button themes - Modern and accessible (matching Material Light shapes)
+    // Button themes - Modern and accessible
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: DraculaColors.purple,
-        foregroundColor: DraculaColors.foreground,
+        backgroundColor: MaterialLightColors.primary,
+        foregroundColor: MaterialLightColors.onPrimary,
         elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.15),
+        shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.15),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -359,8 +415,8 @@ ThemeData draculaDarkTheme() {
 
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: DraculaColors.purple,
-        foregroundColor: DraculaColors.foreground,
+        backgroundColor: MaterialLightColors.primary,
+        foregroundColor: MaterialLightColors.onPrimary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -381,9 +437,9 @@ ThemeData draculaDarkTheme() {
 
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: DraculaColors.purple,
+        foregroundColor: MaterialLightColors.primary,
         side: const BorderSide(
-          color: DraculaColors.purple,
+          color: MaterialLightColors.outline,
           width: 1,
         ),
         shape: RoundedRectangleBorder(
@@ -406,7 +462,7 @@ ThemeData draculaDarkTheme() {
 
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: DraculaColors.purple,
+        foregroundColor: MaterialLightColors.primary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -425,61 +481,26 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Divider theme (matching Material Light)
+    // Divider theme
     dividerTheme: DividerThemeData(
-      color: DraculaColors.comment,
+      color: MaterialLightColors.outlineVariant,
       thickness: 1,
       space: 1,
     ),
 
-    // List tile theme (matching Material Light shapes)
-    listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(8)),
-      ),
-      titleTextStyle: TextStyle(
-        inherit: true,
-        color: DraculaColors.foreground,
-        fontSize: 16,
-        fontWeight: FontWeight.w500,
-        fontFamily: 'Roboto',
-        letterSpacing: 0.15,
-        height: 1.5,
-      ),
-      subtitleTextStyle: TextStyle(
-        inherit: true,
-        color: DraculaColors.comment,
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        fontFamily: 'Roboto',
-        letterSpacing: 0.25,
-        height: 1.43,
-      ),
-      leadingAndTrailingTextStyle: TextStyle(
-        inherit: true,
-        color: DraculaColors.comment,
-        fontSize: 14,
-        fontWeight: FontWeight.w400,
-        fontFamily: 'Roboto',
-        letterSpacing: 0.25,
-        height: 1.43,
-      ),
-    ),
-
-    // Checkbox theme (matching Material Light shapes)
+    // Checkbox theme
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith<Color>((
         Set<WidgetState> states,
       ) {
         if (states.contains(WidgetState.selected)) {
-          return DraculaColors.purple;
+          return MaterialLightColors.primary;
         }
-        return DraculaColors.background;
+        return MaterialLightColors.surface;
       }),
-      checkColor: WidgetStateProperty.all(DraculaColors.foreground),
+      checkColor: WidgetStateProperty.all(MaterialLightColors.onPrimary),
       side: const BorderSide(
-        color: DraculaColors.comment,
+        color: MaterialLightColors.outline,
         width: 2,
       ),
       shape: RoundedRectangleBorder(
@@ -487,41 +508,41 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Switch theme (matching Material Light)
+    // Switch theme
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith<Color>((
         Set<WidgetState> states,
       ) {
         if (states.contains(WidgetState.selected)) {
-          return DraculaColors.purple;
+          return MaterialLightColors.primary;
         }
-        return DraculaColors.comment;
+        return MaterialLightColors.outline;
       }),
       trackColor: WidgetStateProperty.resolveWith<Color>((
         Set<WidgetState> states,
       ) {
         if (states.contains(WidgetState.selected)) {
-          return DraculaColors.purple.withValues(alpha: 0.5);
+          return MaterialLightColors.primary.withValues(alpha: 0.5);
         }
-        return DraculaColors.currentLine;
+        return MaterialLightColors.surfaceVariant;
       }),
       trackOutlineColor: WidgetStateProperty.resolveWith<Color>((
         Set<WidgetState> states,
       ) {
-        return DraculaColors.comment;
+        return MaterialLightColors.outline;
       }),
     ),
 
-    // Slider theme (matching Material Light)
+    // Slider theme
     sliderTheme: SliderThemeData(
-      activeTrackColor: DraculaColors.purple,
-      inactiveTrackColor: DraculaColors.currentLine,
-      thumbColor: DraculaColors.purple,
-      overlayColor: DraculaColors.purple.withValues(alpha: 0.12),
-      valueIndicatorColor: DraculaColors.purple,
+      activeTrackColor: MaterialLightColors.primary,
+      inactiveTrackColor: MaterialLightColors.surfaceVariant,
+      thumbColor: MaterialLightColors.primary,
+      overlayColor: MaterialLightColors.primary.withValues(alpha: 0.12),
+      valueIndicatorColor: MaterialLightColors.primary,
       valueIndicatorTextStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onPrimary,
         fontSize: 14,
         fontWeight: FontWeight.w500,
         fontFamily: 'Roboto',
@@ -530,12 +551,12 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Drawer theme (matching Material Light)
+    // Drawer theme
     drawerTheme: DrawerThemeData(
-      backgroundColor: DraculaColors.background,
-      surfaceTintColor: DraculaColors.purple,
+      backgroundColor: MaterialLightColors.surface,
+      surfaceTintColor: MaterialLightColors.primary,
       elevation: 1,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.15),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topRight: Radius.circular(16),
@@ -544,12 +565,45 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Snackbar theme (matching Material Light)
+    // List tile theme
+    listTileTheme: const ListTileThemeData(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+      ),
+      titleTextStyle: TextStyle(
+        inherit: true,
+        color: MaterialLightColors.onSurface,
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        fontFamily: 'Roboto',
+        letterSpacing: 0.15,
+        height: 1.5,
+      ),
+      subtitleTextStyle: TextStyle(
+        inherit: true,
+        color: MaterialLightColors.onSurfaceVariant,
+        fontSize: 14,
+        fontFamily: 'Roboto',
+        letterSpacing: 0.25,
+        height: 1.43,
+      ),
+      leadingAndTrailingTextStyle: TextStyle(
+        inherit: true,
+        color: MaterialLightColors.onSurfaceVariant,
+        fontSize: 14,
+        fontFamily: 'Roboto',
+        letterSpacing: 0.25,
+        height: 1.43,
+      ),
+    ),
+
+    // Snackbar theme
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: DraculaColors.foreground,
+      backgroundColor: MaterialLightColors.onSurface,
       contentTextStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.background,
+        color: MaterialLightColors.surface,
         fontSize: 14,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -563,12 +617,12 @@ ThemeData draculaDarkTheme() {
       elevation: 6,
     ),
 
-    // Bottom sheet theme (matching Material Light)
+    // Bottom sheet theme
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: DraculaColors.background,
-      surfaceTintColor: DraculaColors.purple,
+      backgroundColor: MaterialLightColors.surface,
+      surfaceTintColor: MaterialLightColors.primary,
       elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.15),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(16),
@@ -581,7 +635,7 @@ ThemeData draculaDarkTheme() {
     dropdownMenuTheme: DropdownMenuThemeData(
       textStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -590,14 +644,14 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Menu theme (matching Material Light)
+    // Menu theme
     menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: WidgetStateProperty.all(DraculaColors.background),
-        surfaceTintColor: WidgetStateProperty.all(DraculaColors.purple),
+        backgroundColor: WidgetStateProperty.all(MaterialLightColors.surface),
+        surfaceTintColor: WidgetStateProperty.all(MaterialLightColors.primary),
         elevation: WidgetStateProperty.all(8),
         shadowColor: WidgetStateProperty.all(
-          Colors.black.withValues(alpha: 0.15),
+          MaterialLightColors.shadow.withValues(alpha: 0.15),
         ),
         shape: WidgetStateProperty.all(
           RoundedRectangleBorder(
@@ -607,18 +661,18 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Popup menu theme (matching Material Light)
+    // Popup menu theme
     popupMenuTheme: PopupMenuThemeData(
-      color: DraculaColors.background,
-      surfaceTintColor: DraculaColors.purple,
+      color: MaterialLightColors.surface,
+      surfaceTintColor: MaterialLightColors.primary,
       elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      shadowColor: MaterialLightColors.shadow.withValues(alpha: 0.15),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
       textStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         fontSize: 14,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -627,15 +681,15 @@ ThemeData draculaDarkTheme() {
       ),
     ),
 
-    // Tooltip theme (matching Material Light)
+    // Tooltip theme
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
-        color: DraculaColors.foreground,
+        color: MaterialLightColors.onSurface,
         borderRadius: BorderRadius.circular(8),
       ),
       textStyle: const TextStyle(
         inherit: true,
-        color: DraculaColors.background,
+        color: MaterialLightColors.surface,
         fontSize: 12,
         fontWeight: FontWeight.w400,
         fontFamily: 'Roboto',
@@ -646,9 +700,9 @@ ThemeData draculaDarkTheme() {
 
     // Text selection theme - Visible selection colors
     textSelectionTheme: TextSelectionThemeData(
-      cursorColor: DraculaColors.purple,
-      selectionColor: DraculaColors.purple.withValues(alpha: 0.3),
-      selectionHandleColor: DraculaColors.purple,
+      cursorColor: MaterialLightColors.primary,
+      selectionColor: MaterialLightColors.primary.withValues(alpha: 0.3),
+      selectionHandleColor: MaterialLightColors.primary,
     ),
   );
 }

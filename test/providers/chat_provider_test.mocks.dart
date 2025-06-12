@@ -4,17 +4,17 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
-import 'dart:ui' as _i9;
+import 'dart:ui' as _i11;
 
-import 'package:flutter/material.dart' as _i8;
+import 'package:flutter/material.dart' as _i10;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i6;
+import 'package:mockito/src/dummies.dart' as _i5;
 import 'package:ollamaverse/models/app_settings.dart' as _i2;
-import 'package:ollamaverse/models/chat.dart' as _i11;
-import 'package:ollamaverse/models/ollama_model.dart' as _i5;
-import 'package:ollamaverse/providers/settings_provider.dart' as _i7;
+import 'package:ollamaverse/models/chat.dart' as _i7;
+import 'package:ollamaverse/providers/settings_provider.dart' as _i9;
+import 'package:ollamaverse/services/chat_history_service.dart' as _i6;
 import 'package:ollamaverse/services/ollama_service.dart' as _i3;
-import 'package:ollamaverse/services/storage_service.dart' as _i10;
+import 'package:ollamaverse/services/settings_service.dart' as _i8;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -31,140 +31,353 @@ import 'package:ollamaverse/services/storage_service.dart' as _i10;
 // ignore_for_file: subtype_of_sealed_class
 
 class _FakeAppSettings_0 extends _i1.SmartFake implements _i2.AppSettings {
-  _FakeAppSettings_0(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeAppSettings_0(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
 }
 
 class _FakeOllamaService_1 extends _i1.SmartFake implements _i3.OllamaService {
-  _FakeOllamaService_1(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
+  _FakeOllamaService_1(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
 }
 
 /// A class which mocks [OllamaService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockOllamaService extends _i1.Mock implements _i3.OllamaService {
-  MockOllamaService() {
+class MockOllamaServiceTest extends _i1.Mock implements _i3.OllamaService {
+  MockOllamaServiceTest() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i2.AppSettings get settings =>
-      (super.noSuchMethod(
-            Invocation.getter(#settings),
-            returnValue: _FakeAppSettings_0(this, Invocation.getter(#settings)),
-          )
-          as _i2.AppSettings);
-
-  @override
-  set settings(_i2.AppSettings? _settings) => super.noSuchMethod(
-    Invocation.setter(#settings, _settings),
-    returnValueForMissingStub: null,
-  );
-
-  @override
-  void updateSettings(_i2.AppSettings? newSettings, {String? newAuthToken}) =>
-      super.noSuchMethod(
+  _i4.Future<List<String>> getModels() => (super.noSuchMethod(
         Invocation.method(
-          #updateSettings,
-          [newSettings],
-          {#newAuthToken: newAuthToken},
+          #getModels,
+          [],
+        ),
+        returnValue: _i4.Future<List<String>>.value(<String>[]),
+      ) as _i4.Future<List<String>>);
+
+  @override
+  _i4.Future<bool> testConnection() => (super.noSuchMethod(
+        Invocation.method(
+          #testConnection,
+          [],
+        ),
+        returnValue: _i4.Future<bool>.value(false),
+      ) as _i4.Future<bool>);
+
+  @override
+  _i4.Future<void> refreshModels() => (super.noSuchMethod(
+        Invocation.method(
+          #refreshModels,
+          [],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String> generateResponse(
+    String? prompt, {
+    String? model,
+    List<int>? context,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #generateResponse,
+          [prompt],
+          {
+            #model: model,
+            #context: context,
+          },
+        ),
+        returnValue: _i4.Future<String>.value(_i5.dummyValue<String>(
+          this,
+          Invocation.method(
+            #generateResponse,
+            [prompt],
+            {
+              #model: model,
+              #context: context,
+            },
+          ),
+        )),
+      ) as _i4.Future<String>);
+
+  @override
+  _i4.Stream<String> generateStreamingResponse(
+    String? prompt, {
+    String? model,
+    List<int>? context,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #generateStreamingResponse,
+          [prompt],
+          {
+            #model: model,
+            #context: context,
+          },
+        ),
+        returnValue: _i4.Stream<String>.empty(),
+      ) as _i4.Stream<String>);
+
+  @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
         ),
         returnValueForMissingStub: null,
       );
+}
+
+/// A class which mocks [ChatHistoryService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockChatHistoryServiceTest extends _i1.Mock
+    implements _i6.ChatHistoryService {
+  MockChatHistoryServiceTest() {
+    _i1.throwOnMissingStub(this);
+  }
 
   @override
-  void cancelGeneration() => super.noSuchMethod(
-    Invocation.method(#cancelGeneration, []),
-    returnValueForMissingStub: null,
-  );
+  _i4.Stream<List<_i7.Chat>> get chatStream => (super.noSuchMethod(
+        Invocation.getter(#chatStream),
+        returnValue: _i4.Stream<List<_i7.Chat>>.empty(),
+      ) as _i4.Stream<List<_i7.Chat>>);
 
   @override
-  _i4.Future<bool> testConnection() =>
-      (super.noSuchMethod(
-            Invocation.method(#testConnection, []),
-            returnValue: _i4.Future<bool>.value(false),
-          )
-          as _i4.Future<bool>);
+  List<_i7.Chat> get chats => (super.noSuchMethod(
+        Invocation.getter(#chats),
+        returnValue: <_i7.Chat>[],
+      ) as List<_i7.Chat>);
 
   @override
-  _i4.Future<List<_i5.OllamaModel>> getModels() =>
-      (super.noSuchMethod(
-            Invocation.method(#getModels, []),
-            returnValue: _i4.Future<List<_i5.OllamaModel>>.value(
-              <_i5.OllamaModel>[],
-            ),
-          )
-          as _i4.Future<List<_i5.OllamaModel>>);
+  _i4.Future<void> saveChat(_i7.Chat? chat) => (super.noSuchMethod(
+        Invocation.method(
+          #saveChat,
+          [chat],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i4.Future<String> generateResponse({
-    required String? modelName,
-    required String? prompt,
-    List<String>? attachedFiles,
-    List<dynamic>? context,
-    bool? stream = false,
-    dynamic Function(String)? onStreamResponse,
-  }) =>
-      (super.noSuchMethod(
-            Invocation.method(#generateResponse, [], {
-              #modelName: modelName,
-              #prompt: prompt,
-              #attachedFiles: attachedFiles,
-              #context: context,
-              #stream: stream,
-              #onStreamResponse: onStreamResponse,
-            }),
-            returnValue: _i4.Future<String>.value(
-              _i6.dummyValue<String>(
-                this,
-                Invocation.method(#generateResponse, [], {
-                  #modelName: modelName,
-                  #prompt: prompt,
-                  #attachedFiles: attachedFiles,
-                  #context: context,
-                  #stream: stream,
-                  #onStreamResponse: onStreamResponse,
-                }),
-              ),
-            ),
-          )
-          as _i4.Future<String>);
+  _i4.Future<_i7.Chat?> loadChat(String? chatId) => (super.noSuchMethod(
+        Invocation.method(
+          #loadChat,
+          [chatId],
+        ),
+        returnValue: _i4.Future<_i7.Chat?>.value(),
+      ) as _i4.Future<_i7.Chat?>);
+
+  @override
+  _i4.Future<void> deleteChat(String? chatId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteChat,
+          [chatId],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> dispose() => (super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+}
+
+/// A class which mocks [SettingsService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockSettingsServiceTest extends _i1.Mock implements _i8.SettingsService {
+  MockSettingsServiceTest() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  String get selectedModel => (super.noSuchMethod(
+        Invocation.getter(#selectedModel),
+        returnValue: _i5.dummyValue<String>(
+          this,
+          Invocation.getter(#selectedModel),
+        ),
+      ) as String);
+
+  @override
+  String get systemPrompt => (super.noSuchMethod(
+        Invocation.getter(#systemPrompt),
+        returnValue: _i5.dummyValue<String>(
+          this,
+          Invocation.getter(#systemPrompt),
+        ),
+      ) as String);
+
+  @override
+  int get maxTokens => (super.noSuchMethod(
+        Invocation.getter(#maxTokens),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  double get temperature => (super.noSuchMethod(
+        Invocation.getter(#temperature),
+        returnValue: 0.0,
+      ) as double);
+
+  @override
+  double get topP => (super.noSuchMethod(
+        Invocation.getter(#topP),
+        returnValue: 0.0,
+      ) as double);
+
+  @override
+  int get topK => (super.noSuchMethod(
+        Invocation.getter(#topK),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  _i4.Future<void> setSelectedModel(String? model) => (super.noSuchMethod(
+        Invocation.method(
+          #setSelectedModel,
+          [model],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setLastSelectedModel(String? model) => (super.noSuchMethod(
+        Invocation.method(
+          #setLastSelectedModel,
+          [model],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<String?> getLastSelectedModel() => (super.noSuchMethod(
+        Invocation.method(
+          #getLastSelectedModel,
+          [],
+        ),
+        returnValue: _i4.Future<String?>.value(),
+      ) as _i4.Future<String?>);
+
+  @override
+  _i4.Future<void> setSystemPrompt(String? prompt) => (super.noSuchMethod(
+        Invocation.method(
+          #setSystemPrompt,
+          [prompt],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setMaxTokens(int? tokens) => (super.noSuchMethod(
+        Invocation.method(
+          #setMaxTokens,
+          [tokens],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setTemperature(double? temp) => (super.noSuchMethod(
+        Invocation.method(
+          #setTemperature,
+          [temp],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setTopP(double? value) => (super.noSuchMethod(
+        Invocation.method(
+          #setTopP,
+          [value],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> setTopK(int? value) => (super.noSuchMethod(
+        Invocation.method(
+          #setTopK,
+          [value],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> clearSettings() => (super.noSuchMethod(
+        Invocation.method(
+          #clearSettings,
+          [],
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 }
 
 /// A class which mocks [SettingsProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockSettingsProvider extends _i1.Mock implements _i7.SettingsProvider {
-  MockSettingsProvider() {
+class MockSettingsProviderTest extends _i1.Mock
+    implements _i9.SettingsProvider {
+  MockSettingsProviderTest() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i2.AppSettings get settings =>
-      (super.noSuchMethod(
-            Invocation.getter(#settings),
-            returnValue: _FakeAppSettings_0(this, Invocation.getter(#settings)),
-          )
-          as _i2.AppSettings);
+  _i2.AppSettings get settings => (super.noSuchMethod(
+        Invocation.getter(#settings),
+        returnValue: _FakeAppSettings_0(
+          this,
+          Invocation.getter(#settings),
+        ),
+      ) as _i2.AppSettings);
 
   @override
-  bool get isLoading =>
-      (super.noSuchMethod(Invocation.getter(#isLoading), returnValue: false)
-          as bool);
+  bool get isLoading => (super.noSuchMethod(
+        Invocation.getter(#isLoading),
+        returnValue: false,
+      ) as bool);
 
   @override
-  _i8.ThemeMode get themeMode =>
-      (super.noSuchMethod(
-            Invocation.getter(#themeMode),
-            returnValue: _i8.ThemeMode.system,
-          )
-          as _i8.ThemeMode);
+  _i10.ThemeMode get themeMode => (super.noSuchMethod(
+        Invocation.getter(#themeMode),
+        returnValue: _i10.ThemeMode.system,
+      ) as _i10.ThemeMode);
 
   @override
-  bool get hasListeners =>
-      (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
-          as bool);
+  bool get hasListeners => (super.noSuchMethod(
+        Invocation.getter(#hasListeners),
+        returnValue: false,
+      ) as bool);
 
   @override
   _i4.Future<void> updateSettings({
@@ -178,115 +391,72 @@ class MockSettingsProvider extends _i1.Mock implements _i7.SettingsProvider {
     String? systemPrompt,
   }) =>
       (super.noSuchMethod(
-            Invocation.method(#updateSettings, [], {
-              #ollamaHost: ollamaHost,
-              #ollamaPort: ollamaPort,
-              #authToken: authToken,
-              #fontSize: fontSize,
-              #darkMode: darkMode,
-              #showLiveResponse: showLiveResponse,
-              #contextLength: contextLength,
-              #systemPrompt: systemPrompt,
-            }),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
-          )
-          as _i4.Future<void>);
+        Invocation.method(
+          #updateSettings,
+          [],
+          {
+            #ollamaHost: ollamaHost,
+            #ollamaPort: ollamaPort,
+            #authToken: authToken,
+            #fontSize: fontSize,
+            #darkMode: darkMode,
+            #showLiveResponse: showLiveResponse,
+            #contextLength: contextLength,
+            #systemPrompt: systemPrompt,
+          },
+        ),
+        returnValue: _i4.Future<void>.value(),
+        returnValueForMissingStub: _i4.Future<void>.value(),
+      ) as _i4.Future<void>);
 
   @override
-  _i3.OllamaService getOllamaService() =>
-      (super.noSuchMethod(
-            Invocation.method(#getOllamaService, []),
-            returnValue: _FakeOllamaService_1(
-              this,
-              Invocation.method(#getOllamaService, []),
-            ),
-          )
-          as _i3.OllamaService);
+  _i3.OllamaService getOllamaService() => (super.noSuchMethod(
+        Invocation.method(
+          #getOllamaService,
+          [],
+        ),
+        returnValue: _FakeOllamaService_1(
+          this,
+          Invocation.method(
+            #getOllamaService,
+            [],
+          ),
+        ),
+      ) as _i3.OllamaService);
 
   @override
-  void addListener(_i9.VoidCallback? listener) => super.noSuchMethod(
-    Invocation.method(#addListener, [listener]),
-    returnValueForMissingStub: null,
-  );
+  void addListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #addListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
-  void removeListener(_i9.VoidCallback? listener) => super.noSuchMethod(
-    Invocation.method(#removeListener, [listener]),
-    returnValueForMissingStub: null,
-  );
+  void removeListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+        Invocation.method(
+          #removeListener,
+          [listener],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void dispose() => super.noSuchMethod(
-    Invocation.method(#dispose, []),
-    returnValueForMissingStub: null,
-  );
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void notifyListeners() => super.noSuchMethod(
-    Invocation.method(#notifyListeners, []),
-    returnValueForMissingStub: null,
-  );
-}
-
-/// A class which mocks [StorageService].
-///
-/// See the documentation for Mockito's code generation for more information.
-class MockStorageService extends _i1.Mock implements _i10.StorageService {
-  MockStorageService() {
-    _i1.throwOnMissingStub(this);
-  }
-
-  @override
-  _i4.Future<void> saveSettings(_i2.AppSettings? settings) =>
-      (super.noSuchMethod(
-            Invocation.method(#saveSettings, [settings]),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
-          )
-          as _i4.Future<void>);
-
-  @override
-  _i4.Future<_i2.AppSettings> loadSettings() =>
-      (super.noSuchMethod(
-            Invocation.method(#loadSettings, []),
-            returnValue: _i4.Future<_i2.AppSettings>.value(
-              _FakeAppSettings_0(this, Invocation.method(#loadSettings, [])),
-            ),
-          )
-          as _i4.Future<_i2.AppSettings>);
-
-  @override
-  _i4.Future<void> saveChat(_i11.Chat? chat) =>
-      (super.noSuchMethod(
-            Invocation.method(#saveChat, [chat]),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
-          )
-          as _i4.Future<void>);
-
-  @override
-  _i4.Future<_i11.Chat?> loadChat(String? chatId) =>
-      (super.noSuchMethod(
-            Invocation.method(#loadChat, [chatId]),
-            returnValue: _i4.Future<_i11.Chat?>.value(),
-          )
-          as _i4.Future<_i11.Chat?>);
-
-  @override
-  _i4.Future<List<_i11.Chat>> loadAllChats() =>
-      (super.noSuchMethod(
-            Invocation.method(#loadAllChats, []),
-            returnValue: _i4.Future<List<_i11.Chat>>.value(<_i11.Chat>[]),
-          )
-          as _i4.Future<List<_i11.Chat>>);
-
-  @override
-  _i4.Future<void> deleteChat(String? chatId) =>
-      (super.noSuchMethod(
-            Invocation.method(#deleteChat, [chatId]),
-            returnValue: _i4.Future<void>.value(),
-            returnValueForMissingStub: _i4.Future<void>.value(),
-          )
-          as _i4.Future<void>);
+        Invocation.method(
+          #notifyListeners,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 }
