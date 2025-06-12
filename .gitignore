@@ -150,3 +150,7 @@ app.*.map.json
 # Cursor and Specstory files
 .specstory
 .cursor
+
+# Project-specific ignore files
+.cursorindexingignore
+THEME_OPTIMIZATION_TASKS.md
