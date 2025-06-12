@@ -456,7 +456,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     // Use the displayableMessages getter from ChatProvider
                     final displayMessages = chatProvider.displayableMessages;
 
-                    return ListView.builder(
+                    return RepaintBoundary(
+                        child: ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.only(
                         left: 16.0,
@@ -511,7 +512,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         final message = displayMessages[index];
                         return _buildMessageBubble(message, fontSize);
                       },
-                    );
+                    ));
                   },
                 ),
               ),
@@ -692,7 +693,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final isUser = message.isUser;
     final isSmallScreen = MediaQuery.of(context).size.width <= 600;
 
-    return Align(
+    return RepaintBoundary(
+        child: Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8.0),
@@ -771,13 +773,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
             // Message content with selectable text
             isUser
-                ? SelectableText(
-                    message.content,
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : MaterialLightColors.onPrimary,
+                ? Theme(
+                    data: Theme.of(context).copyWith(
+                      textSelectionTheme: TextSelectionThemeData(
+                        cursorColor: Colors.white,
+                        selectionColor: Colors.white.withValues(
+                            alpha: 0.3), // White selection on blue background
+                        selectionHandleColor: Colors.white,
+                      ),
+                    ),
+                    child: SelectableText(
+                      message.content,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        color: Colors.white, // White text on blue user bubble
+                      ),
                     ),
                   )
                 : CustomMarkdownBody(
@@ -814,6 +824,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }

@@ -4,9 +4,8 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i4;
-import 'dart:ui' as _i11;
+import 'dart:ui' as _i10;
 
-import 'package:flutter/material.dart' as _i10;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i5;
 import 'package:ollamaverse/models/app_settings.dart' as _i2;
@@ -368,16 +367,19 @@ class MockSettingsProviderTest extends _i1.Mock
       ) as bool);
 
   @override
-  _i10.ThemeMode get themeMode => (super.noSuchMethod(
-        Invocation.getter(#themeMode),
-        returnValue: _i10.ThemeMode.system,
-      ) as _i10.ThemeMode);
-
-  @override
   bool get hasListeners => (super.noSuchMethod(
         Invocation.getter(#hasListeners),
         returnValue: false,
       ) as bool);
+
+  @override
+  void dispose() => super.noSuchMethod(
+        Invocation.method(
+          #dispose,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   _i4.Future<void> updateSettings({
@@ -385,7 +387,6 @@ class MockSettingsProviderTest extends _i1.Mock
     int? ollamaPort,
     String? authToken,
     double? fontSize,
-    bool? darkMode,
     bool? showLiveResponse,
     int? contextLength,
     String? systemPrompt,
@@ -399,7 +400,6 @@ class MockSettingsProviderTest extends _i1.Mock
             #ollamaPort: ollamaPort,
             #authToken: authToken,
             #fontSize: fontSize,
-            #darkMode: darkMode,
             #showLiveResponse: showLiveResponse,
             #contextLength: contextLength,
             #systemPrompt: systemPrompt,
@@ -425,7 +425,7 @@ class MockSettingsProviderTest extends _i1.Mock
       ) as _i3.OllamaService);
 
   @override
-  void addListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i10.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
           [listener],
@@ -434,19 +434,10 @@ class MockSettingsProviderTest extends _i1.Mock
       );
 
   @override
-  void removeListener(_i11.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i10.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #removeListener,
           [listener],
-        ),
-        returnValueForMissingStub: null,
-      );
-
-  @override
-  void dispose() => super.noSuchMethod(
-        Invocation.method(
-          #dispose,
-          [],
         ),
         returnValueForMissingStub: null,
       );

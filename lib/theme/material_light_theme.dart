@@ -701,7 +701,7 @@ ThemeData materialLightTheme() {
     // Text selection theme - Visible selection colors
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: MaterialLightColors.primary,
-      selectionColor: MaterialLightColors.primary.withValues(alpha: 0.3),
+      selectionColor: MaterialLightColors.primary.withValues(alpha: 0.25),
       selectionHandleColor: MaterialLightColors.primary,
     ),
   );

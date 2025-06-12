@@ -33,20 +33,39 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **PDF Support**: Extract and process text from PDF files
 - **Image Support**: Process images as part of your prompts
 - **Multiple File Types**: Support for various text and document formats
-- **File Size Limits**: Automatic handling of large files
-- **File Cleanup**: Automatic cleanup of temporary files
+- **File Size Limits**: Automatic handling of large files with 10MB limit
+- **Smart File Cleanup**: Advanced automatic cleanup system with intelligent monitoring
+- **Storage Management**: Real-time file size monitoring with configurable thresholds
+- **Background Cleanup**: Isolate-based cleanup operations for better performance
+
+### Storage & Security
+- **Secure Authentication Storage**: Bearer auth tokens stored using encrypted secure storage
+- **Dual Storage System**: Sensitive data in secure storage, regular settings in standard storage
+- **Storage Statistics**: Monitor cache, logs, and attachment storage usage
+- **Manual Cleanup Control**: Force cleanup of temporary files through settings
+- **Cache Management**: Intelligent caching system for frequently accessed data
 
 ### Code Display
 - **Copy Code Button**: Easily copy code snippets
 - **Language Labels**: Code blocks show the programming language
 - **LaTeX Support**: Render mathematical formulas and equations
 
-### Appearance
-- **Dark Mode**: Toggle between light and dark themes
-- **Font Size Control**: Adjust text size for better readability
-- **Responsive Design**: Works on different screen sizes
-- **Custom Themes**: Support for custom color schemes
-- **Accessibility**: High contrast mode and screen reader support
+### Appearance & Themes
+- **Dark Mode**: Toggle between light and dark themes with instant switching
+- **System Theme Sync**: Automatic theme detection on Windows (follows system preferences)
+- **Font Size Control**: Adjust text size for better readability (12-24px range)
+- **Responsive Design**: Fully responsive layout optimized for mobile, tablet, and desktop
+- **Adaptive UI**: Different layouts for small screens (≤600px) and large screens
+- **Custom Themes**: Support for Dracula dark theme and Material light theme
+- **Performance-Optimized Animations**: Smooth transitions with minimal frame drops
+
+### Performance Monitoring
+- **Real-Time Performance Tracking**: Monitor frame rates, theme switching speed, and UI responsiveness
+- **Performance Dashboard**: View detailed metrics in settings with recommendations
+- **Frame Drop Detection**: Automatic detection and logging of performance issues
+- **Theme Switch Optimization**: Ultra-fast theme switching (<50ms target)
+- **Performance Logging**: Console output with detailed performance summaries
+- **Metrics Reset**: Reset performance counters and export performance data
 
 ### Settings
 - **Server Configuration**: Configure Ollama server host and port
@@ -56,12 +75,28 @@ A cross-platform GUI client for Ollama with advanced features for chat managemen
 - **Dark Mode**: Toggle between light and dark themes
 - **Live Response**: Toggle real-time response streaming
 - **System Prompt**: Configure default system prompt for new chats
+- **Performance Settings**: Monitor and configure app performance
+- **Storage Settings**: Manage file cleanup and storage usage
+
+### Accessibility & Navigation
+- **Keyboard Shortcuts**: Ctrl+Enter to send messages, system menu shortcuts
+- **Responsive Navigation**: Adaptive drawer/menu system based on screen size
+- **Touch-Friendly**: Optimized touch targets for mobile devices
+- **High Contrast Support**: Enhanced contrast modes for better visibility
 
 ### Server Configuration
 - **Custom Host/Port**: Connect to any Ollama server
 - **Model Refresh**: Update the available model list
 - **Connection Status**: Real-time server connection status
 - **Error Handling**: Detailed error messages for connection issues
+- **Network Security**: Configured for both HTTP and HTTPS connections
+- **Timeout Handling**: Robust connection timeout management
+
+### Cross-Platform Features
+- **Windows Integration**: Native window decorations with theme sync
+- **Android Optimization**: Network security configuration for local connections
+- **macOS Support**: Native menu integration and system preferences
+- **Adaptive Icons**: Platform-specific app icons and launch screens
 
 ## Getting Started
 
@@ -157,6 +192,10 @@ flutter test integration_test
 - **path_provider**: Accessing system directories for file storage
 - **path**: File path manipulation and management
 
+### Security & Storage
+- **flutter_secure_storage**: Encrypted storage for sensitive data like auth tokens
+- **package_info_plus**: App version and metadata information
+
 ### UI and Rendering
 - **gpt_markdown**: Rendering markdown content with LaTeX support
 - **flutter_highlighter**: Code syntax highlighting for various programming languages
@@ -171,6 +210,7 @@ flutter test integration_test
 
 ### Utilities
 - **logging**: Application logging and debugging
+- **logger**: Enhanced logging capabilities
 - **flutter_launcher_icons**: App icon generation
 
 ## License

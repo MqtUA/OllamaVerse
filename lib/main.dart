@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/settings_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/theme_notifier.dart';
 import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
@@ -13,6 +14,8 @@ import 'services/settings_service.dart';
 import 'services/file_cleanup_service.dart';
 import 'services/performance_monitor.dart';
 import 'widgets/animated_theme_switcher.dart';
+import 'theme/material_light_theme.dart';
+import 'theme/dracula_theme.dart';
 
 Future<void> main() async {
   // Ensure Flutter is initialized
@@ -61,22 +64,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Handle app lifecycle changes
-    if (state == AppLifecycleState.resumed) {
-      // Trigger cleanup when app is resumed
-      FileCleanupService.instance.forceCleanup();
-    } else if (state == AppLifecycleState.paused ||
+    // Handle app lifecycle changes - removed excessive cleanup triggering
+    if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       // Dispose cleanup service when app is paused/closed
       FileCleanupService.instance.dispose();
     }
+    // Note: Cleanup now only runs on app start and manual triggers
   }
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Create the SettingsProvider first
+        // Create the ThemeNotifier first (simple theme management)
+        ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+
+        // Create the SettingsProvider
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
 
         // Create the ChatProvider with the required parameters
@@ -109,25 +113,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           },
         ),
       ],
-      child: Consumer<SettingsProvider>(
-        builder: (context, settingsProvider, child) {
+      child: Consumer<ThemeNotifier>(
+        builder: (context, themeNotifier, child) {
           return MaterialApp(
             title: 'OllamaVerse',
-            theme: settingsProvider.lightTheme,
-            darkTheme: settingsProvider.darkTheme,
-            themeMode: settingsProvider.themeMode,
+            theme: materialLightTheme(),
+            darkTheme: draculaDarkTheme(),
+            themeMode:
+                themeNotifier.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             initialRoute: '/',
             routes: {
               '/': (context) => AnimatedThemeSwitcher(
-                    themeMode: settingsProvider.themeMode,
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOutCubic,
+                    themeMode: themeNotifier.isDarkMode
+                        ? ThemeMode.dark
+                        : ThemeMode.light,
+                    duration: const Duration(milliseconds: 30), // Ultra-fast
+                    curve: Curves.linear,
                     child: const ChatScreen(),
                   ),
               '/settings': (context) => AnimatedThemeSwitcher(
-                    themeMode: settingsProvider.themeMode,
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOutCubic,
+                    themeMode: themeNotifier.isDarkMode
+                        ? ThemeMode.dark
+                        : ThemeMode.light,
+                    duration: const Duration(milliseconds: 30), // Ultra-fast
+                    curve: Curves.linear,
                     child: const SettingsScreen(),
                   ),
             },

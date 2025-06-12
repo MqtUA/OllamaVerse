@@ -23,8 +23,6 @@ class AnimatedThemeSwitcher extends StatefulWidget {
 class _AnimatedThemeSwitcherState extends State<AnimatedThemeSwitcher>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
 
   // Performance optimization: only animate when actually changing
   bool _isAnimating = false;
@@ -38,22 +36,7 @@ class _AnimatedThemeSwitcherState extends State<AnimatedThemeSwitcher>
       vsync: this,
     );
 
-    // Performance optimization: use more efficient animation curves
-    _fadeAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95, // Reduced effect for better performance
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Interval(0.0, 0.5, curve: widget.curve),
-    ));
-
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.99, // Reduced scale for smoother animation
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Interval(0.0, 0.5, curve: widget.curve),
-    ));
+    // Performance optimization: no animations for instant switching
 
     // Performance optimization: add animation status listener
     _controller.addStatusListener((status) {
@@ -84,25 +67,8 @@ class _AnimatedThemeSwitcherState extends State<AnimatedThemeSwitcher>
   }
 
   void _animateThemeChange() async {
-    if (!mounted || _isAnimating) return;
-
-    setState(() {
-      _isAnimating = true;
-    });
-
-    try {
-      await _controller.forward();
-      if (mounted) {
-        await _controller.reverse();
-      }
-    } catch (e) {
-      // Handle animation errors gracefully
-      if (mounted) {
-        setState(() {
-          _isAnimating = false;
-        });
-      }
-    }
+    // No animation needed - instant theme switching for maximum performance
+    return;
   }
 
   @override
@@ -113,20 +79,9 @@ class _AnimatedThemeSwitcherState extends State<AnimatedThemeSwitcher>
 
   @override
   Widget build(BuildContext context) {
-    // Performance optimization: avoid unnecessary rebuilds
+    // Performance optimization: instant theme switching with no animation overhead
     return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: Opacity(
-              opacity: _fadeAnimation.value,
-              child: widget.child,
-            ),
-          );
-        },
-      ),
+      child: widget.child, // Direct rendering for maximum performance
     );
   }
 }

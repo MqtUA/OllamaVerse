@@ -17,7 +17,8 @@ class PerformanceMonitor {
 
   // Performance thresholds
   static const double _frameDropThreshold = 16.67; // 60 FPS threshold
-  static const double _themeSwitchThreshold = 100.0; // 100ms threshold
+  static const double _themeSwitchThreshold =
+      50.0; // 50ms threshold (more strict)
 
   bool _isMonitoring = false;
   DateTime? _themeChangeStartTime;
@@ -171,20 +172,68 @@ class PerformanceMonitor {
 
   /// Log current performance summary
   void logPerformanceSummary() {
-    if (!kDebugMode) return;
-
     final stats = getStats();
 
-    developer.log(
-      'Performance Summary:\n'
-      '  Average Frame Time: ${stats.averageFrameTime.toStringAsFixed(1)}ms\n'
-      '  Max Frame Time: ${stats.maxFrameTime.toStringAsFixed(1)}ms\n'
-      '  Frame Drops: ${stats.frameDropCount}\n'
-      '  Average Theme Switch: ${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms\n'
-      '  Max Theme Switch: ${stats.maxThemeSwitchTime.toStringAsFixed(1)}ms\n'
-      '  Performance: ${stats.isPerformant ? "GOOD" : "NEEDS IMPROVEMENT"}',
-      name: 'PerformanceMonitor',
-    );
+    final summary = '''
+📊 PERFORMANCE SUMMARY 📊
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 Overall Status: ${stats.isPerformant ? "✅ EXCELLENT" : "⚠️ NEEDS IMPROVEMENT"}
+
+🖼️ Frame Rendering:
+   • Average Frame Time: ${stats.averageFrameTime.toStringAsFixed(1)}ms (target: <16.67ms)
+   • Max Frame Time: ${stats.maxFrameTime.toStringAsFixed(1)}ms
+   • Frame Drops: ${stats.frameDropCount} (target: <5)
+   • Frame Performance: ${stats.averageFrameTime < 8.0 ? "🟢 EXCELLENT" : stats.averageFrameTime < 12.0 ? "🟡 GOOD" : "🔴 POOR"}
+
+🎨 Theme Switching:
+   • Average Speed: ${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms (target: <50ms)
+   • Max Speed: ${stats.maxThemeSwitchTime.toStringAsFixed(1)}ms
+   • Theme Performance: ${stats.averageThemeSwitchTime < 30.0 ? "🟢 INSTANT" : stats.averageThemeSwitchTime < 50.0 ? "🟡 FAST" : "🔴 SLOW"}
+
+📈 Recommendations:
+${_getPerformanceRecommendations(stats)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+''';
+
+    // Use developer.log for production-safe logging
+    if (kDebugMode) {
+      // Use print only in debug mode for immediate console visibility
+      print(summary);
+      developer.log(summary, name: 'PerformanceMonitor');
+    } else {
+      // Production: use developer.log only
+      developer.log(summary, name: 'PerformanceMonitor');
+    }
+  }
+
+  /// Get performance recommendations
+  String _getPerformanceRecommendations(PerformanceStats stats) {
+    final recommendations = <String>[];
+
+    if (stats.frameDropCount > 5) {
+      recommendations.add(
+          '   • 🎯 Add RepaintBoundary widgets around complex UI components');
+      recommendations.add('   • 🎯 Use const constructors for static widgets');
+      recommendations.add('   • 🎯 Minimize setState() calls in hot paths');
+    }
+    if (stats.averageThemeSwitchTime > 50) {
+      recommendations.add(
+          '   • 🎨 Theme switches taking too long - consider instant switching');
+      recommendations
+          .add('   • 🎨 Cache theme data to avoid repeated calculations');
+    }
+    if (stats.averageFrameTime > 12.0) {
+      recommendations
+          .add('   • ⚡ Move expensive operations to isolates or async methods');
+      recommendations
+          .add('   • ⚡ Profile widget rebuilds using Flutter Inspector');
+    }
+
+    if (recommendations.isEmpty) {
+      return '   • Performance is excellent! 🚀';
+    }
+
+    return recommendations.join('\n');
   }
 }
 

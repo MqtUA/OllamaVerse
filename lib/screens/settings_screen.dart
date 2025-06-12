@@ -5,6 +5,7 @@ import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
 import '../services/file_cleanup_service.dart';
 import '../services/performance_monitor.dart';
+import '../widgets/simple_theme_switch.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,10 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _portController;
   late TextEditingController _authTokenController;
   late TextEditingController _systemPromptController;
-  late double _fontSize;
-  late bool _darkMode;
-  late bool _showLiveResponse;
-  late int _contextLength;
+
   bool _isTesting = false;
   String _appVersion = '';
   bool _showAuthToken = false;
@@ -29,24 +27,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final settings =
-        Provider.of<SettingsProvider>(context, listen: false).settings;
-    _hostController = TextEditingController(text: settings.ollamaHost);
-    _portController = TextEditingController(
-      text: settings.ollamaPort.toString(),
-    );
+
+    // Initialize controllers without values - will be set from Consumer
+    _hostController = TextEditingController();
+    _portController = TextEditingController();
     _authTokenController = TextEditingController();
-    _systemPromptController = TextEditingController(
-      text: settings.systemPrompt,
-    );
-    _fontSize = settings.fontSize;
-    _darkMode = settings.darkMode;
-    _showLiveResponse = settings.showLiveResponse;
-    _contextLength = settings.contextLength;
+    _systemPromptController = TextEditingController();
 
     // Load app version and auth token
     _loadAppVersion();
     _loadAuthToken();
+
+    // Initialize values from provider after first frame to avoid race condition
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final settings =
+            Provider.of<SettingsProvider>(context, listen: false).settings;
+        _hostController.text = settings.ollamaHost;
+        _portController.text = settings.ollamaPort.toString();
+        _systemPromptController.text = settings.systemPrompt;
+
+        // Variables are now read directly from provider - no local state needed
+      }
+    });
   }
 
   // Load auth token securely
@@ -259,53 +262,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Text('Font Size:'),
                           Expanded(
                             child: Slider(
-                              value: _fontSize,
+                              value: settingsProvider.settings.fontSize,
                               min: 12,
                               max: 24,
                               divisions: 12,
-                              label: _fontSize.toStringAsFixed(1),
+                              label: settingsProvider.settings.fontSize
+                                  .toStringAsFixed(1),
                               onChanged: (value) {
-                                setState(() {
-                                  _fontSize = value;
-                                });
-                              },
-                              onChangeEnd: (value) {
+                                // Update provider directly - no local state needed
                                 settingsProvider.updateSettings(
-                                  fontSize: value,
-                                );
+                                    fontSize: value);
                               },
                             ),
                           ),
-                          Text(_fontSize.toStringAsFixed(1)),
+                          Text(settingsProvider.settings.fontSize
+                              .toStringAsFixed(1)),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      SwitchListTile(
-                        title: const Text('Dark Mode'),
-                        subtitle: const Text(
-                            'Smooth transition between light and dark themes'),
-                        value: _darkMode,
-                        onChanged: (value) {
-                          setState(() {
-                            _darkMode = value;
-                          });
-                          settingsProvider.updateSettings(darkMode: value);
-                        },
-                      ),
+                      const SimpleThemeSwitch(),
                       const Divider(),
                       SwitchListTile(
                         title: const Text('Show Live Response'),
                         subtitle: const Text(
                           'See responses as they are generated',
                         ),
-                        value: _showLiveResponse,
+                        value: settingsProvider.settings.showLiveResponse,
                         onChanged: (value) {
-                          setState(() {
-                            _showLiveResponse = value;
-                          });
                           settingsProvider.updateSettings(
-                            showLiveResponse: value,
-                          );
+                              showLiveResponse: value);
                         },
                       ),
                       const Divider(),
@@ -315,7 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'Maximum token context window (default: 4096)',
                         ),
                         trailing: DropdownButton<int>(
-                          value: _contextLength,
+                          value: settingsProvider.settings.contextLength,
                           items:
                               [2048, 4096, 8192, 16384, 32768].map((int value) {
                             return DropdownMenuItem<int>(
@@ -325,12 +310,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }).toList(),
                           onChanged: (int? newValue) {
                             if (newValue != null) {
-                              setState(() {
-                                _contextLength = newValue;
-                              });
                               settingsProvider.updateSettings(
-                                contextLength: newValue,
-                              );
+                                  contextLength: newValue);
                             }
                           },
                         ),
@@ -398,15 +379,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // Performance monitoring display
-                      ListTile(
+                      // Performance monitoring display with real-time stats
+                      SwitchListTile(
                         title: const Text('Performance Monitoring'),
                         subtitle: const Text(
-                          'Real-time performance tracking is active',
+                          'Track frame rates and theme switching performance',
                         ),
-                        trailing: const Icon(
+                        value: true, // Always enabled in debug mode
+                        onChanged: null, // Read-only for now
+                        secondary: const Icon(
                           Icons.speed,
-                          color: Colors.green,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      // Real-time performance statistics
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: StreamBuilder<PerformanceStats>(
+                          stream: Stream.periodic(
+                            const Duration(seconds: 2),
+                            (_) => PerformanceMonitor.instance.getStats(),
+                          ),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Card(
+                                margin: EdgeInsets.symmetric(vertical: 8.0),
+                                child: Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: Text(
+                                    'Loading performance data...',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final stats = snapshot.data!;
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          stats.isPerformant
+                                              ? Icons.check_circle
+                                              : Icons.warning,
+                                          color: stats.isPerformant
+                                              ? Colors.green
+                                              : Colors.orange,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Status: ${stats.isPerformant ? "Excellent" : "Needs Improvement"}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: stats.isPerformant
+                                                ? Colors.green
+                                                : Colors.orange,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildPerformanceRow(
+                                        'Frame Time',
+                                        '${stats.averageFrameTime.toStringAsFixed(1)}ms',
+                                        stats.averageFrameTime < 16.67),
+                                    _buildPerformanceRow(
+                                        'Frame Drops',
+                                        '${stats.frameDropCount}',
+                                        stats.frameDropCount < 5),
+                                    _buildPerformanceRow(
+                                        'Theme Switch',
+                                        '${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms',
+                                        stats.averageThemeSwitchTime < 100),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      // Performance actions
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  PerformanceMonitor.instance.resetMetrics();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content:
+                                          Text('Performance metrics reset'),
+                                      backgroundColor: Colors.blue,
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Reset'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  PerformanceMonitor.instance
+                                      .logPerformanceSummary();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content:
+                                          Text('Performance logged to console'),
+                                      backgroundColor: Colors.blue,
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.bug_report, size: 16),
+                                label: const Text('Log'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const Divider(),
@@ -418,11 +516,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: ElevatedButton(
                           onPressed: () async {
+                            // Store the context before async operation
+                            final scaffoldMessenger =
+                                ScaffoldMessenger.of(context);
+
                             // Trigger manual cleanup
                             await FileCleanupService.instance.forceCleanup();
 
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              scaffoldMessenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Storage cleanup completed'),
                                   backgroundColor: Colors.green,
@@ -553,6 +655,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Text('Test Connection'),
+      ),
+    );
+  }
+
+  // Helper method to build performance metric rows
+  Widget _buildPerformanceRow(String label, String value, bool isGood) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isGood ? Colors.green : Colors.orange,
+            ),
+          ),
+        ],
       ),
     );
   }

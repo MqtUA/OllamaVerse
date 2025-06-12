@@ -31,11 +31,12 @@ class FileCleanupService {
     _monitoringController =
         StreamController<FileSizeMonitoringData>.broadcast();
 
-    // Start periodic cleanup and monitoring
+    // Start periodic cleanup and monitoring (now with conservative intervals)
     _startPeriodicCleanup();
     _startFileSizeMonitoring();
 
-    AppLogger.info('File cleanup service initialized with monitoring');
+    AppLogger.info(
+        'File cleanup service initialized - conservative cleanup intervals enabled');
   }
 
   /// Stream for cleanup progress updates
@@ -61,7 +62,7 @@ class FileCleanupService {
     _isMonitoring = true;
     _monitoringTimer?.cancel();
     _monitoringTimer = Timer.periodic(
-      const Duration(minutes: 5), // Monitor every 5 minutes
+      const Duration(hours: 2), // Monitor every 2 hours instead of 5 minutes
       (_) => _performFileSizeMonitoring(),
     );
   }
@@ -489,13 +490,14 @@ class FileCleanupConfig {
 
   factory FileCleanupConfig.defaultConfig() {
     return const FileCleanupConfig(
-      cleanupInterval: Duration(hours: 6), // Every 6 hours
-      maxFileAge: Duration(days: 7), // Delete files older than 7 days
-      maxLogAge: Duration(days: 30), // Keep logs for 30 days
-      maxCacheAge: Duration(days: 3), // Cache files expire after 3 days
-      maxDirectorySize: 100 * 1024 * 1024, // 100MB max for attachments
-      maxLogSize: 50 * 1024 * 1024, // 50MB max for logs
-      maxCacheSize: 25 * 1024 * 1024, // 25MB max for cache
+      cleanupInterval: Duration(days: 1), // Only check once per day
+      maxFileAge: Duration(days: 30), // Keep files for 30 days (much longer)
+      maxLogAge: Duration(days: 90), // Keep logs for 90 days
+      maxCacheAge: Duration(days: 14), // Cache files expire after 2 weeks
+      maxDirectorySize:
+          500 * 1024 * 1024, // 500MB max for attachments (much higher)
+      maxLogSize: 200 * 1024 * 1024, // 200MB max for logs
+      maxCacheSize: 100 * 1024 * 1024, // 100MB max for cache
     );
   }
 }

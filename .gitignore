@@ -154,3 +154,4 @@ app.*.map.json
 # Project-specific ignore files
 .cursorindexingignore
 THEME_OPTIMIZATION_TASKS.md
+ToDo/
