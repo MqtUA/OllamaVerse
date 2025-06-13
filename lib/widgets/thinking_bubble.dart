@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/message.dart';
-import '../services/thinking_model_detection_service.dart';
+import '../widgets/custom_markdown_body.dart';
+import '../widgets/thinking_indicator.dart';
 import '../theme/dracula_theme.dart';
 import '../theme/material_light_theme.dart';
-import 'custom_markdown_body.dart';
-import 'thinking_indicator.dart';
+import '../services/thinking_model_detection_service.dart';
 
 /// A widget that displays thinking content with expand/collapse functionality
 class ThinkingBubble extends StatefulWidget {
@@ -218,13 +218,6 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
               data: thinkingContent.thinkingText!,
               fontSize: widget.fontSize * 0.9,
               selectable: true,
-              onTapLink: (text, href, title) {
-                if (href != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Link tapped: $href')),
-                  );
-                }
-              },
             ),
         ],
       ),

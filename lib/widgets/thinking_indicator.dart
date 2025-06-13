@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// A widget that displays an animated thinking indicator
+/// Optimized thinking indicator with shared animation controller
 class ThinkingIndicator extends StatefulWidget {
-  final Color? color;
+  final Color color;
   final double size;
   final Duration duration;
 
   const ThinkingIndicator({
     super.key,
-    this.color,
-    this.size = 24.0,
+    this.color = Colors.grey,
+    this.size = 16.0,
     this.duration = const Duration(milliseconds: 1200),
   });
 
@@ -18,27 +18,109 @@ class ThinkingIndicator extends StatefulWidget {
 }
 
 class _ThinkingIndicatorState extends State<ThinkingIndicator>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat();
 
     _animation = Tween<double>(
       begin: 0.0,
       end: 1.0,
+    ).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildDot(0.0),
+          const SizedBox(width: 4),
+          _buildDot(0.15),
+          const SizedBox(width: 4),
+          _buildDot(0.3),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDot(double delay) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final progress = (_animation.value + delay) % 1.0;
+        final opacity = (progress < 0.5) ? (progress * 2) : (2 - progress * 2);
+
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: widget.color.withValues(alpha: opacity.clamp(0.3, 1.0)),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Optimized pulsing thinking indicator for heavy thinking operations
+class PulsingThinkingIndicator extends StatefulWidget {
+  final Color color;
+  final double size;
+  final Duration duration;
+
+  const PulsingThinkingIndicator({
+    super.key,
+    this.color = Colors.grey,
+    this.size = 20.0,
+    this.duration = const Duration(milliseconds: 800),
+  });
+
+  @override
+  State<PulsingThinkingIndicator> createState() =>
+      _PulsingThinkingIndicatorState();
+}
+
+class _PulsingThinkingIndicatorState extends State<PulsingThinkingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
     ).animate(CurvedAnimation(
       parent: _controller,
       curve: Curves.easeInOut,
     ));
 
-    _controller.repeat(reverse: true);
+    _opacityAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
   }
 
   @override
@@ -49,206 +131,56 @@ class _ThinkingIndicatorState extends State<ThinkingIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = widget.color ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? Colors.purple.shade300
-            : Colors.blue.shade600);
-
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return SizedBox(
-          width: widget.size,
-          height: widget.size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer pulsing circle
-              Container(
-                width: widget.size,
-                height: widget.size,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: effectiveColor.withValues(
-                      alpha: 0.1 + _animation.value * 0.1),
-                  border: Border.all(
-                    color: effectiveColor.withValues(
-                        alpha: 0.3 + _animation.value * 0.4),
-                    width: 1.0,
-                  ),
-                ),
-              ),
-
-              // Inner brain icon
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 0.7 + _animation.value * 0.1,
-                    child: Icon(
-                      Icons.psychology,
-                      size: widget.size * 0.6,
-                      color: effectiveColor.withValues(
-                          alpha: 0.7 + _animation.value * 0.3),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// A more complex thinking indicator with multiple dots
-class ThinkingDotsIndicator extends StatefulWidget {
-  final Color? color;
-  final double size;
-  final Duration duration;
-  final int dotCount;
-
-  const ThinkingDotsIndicator({
-    super.key,
-    this.color,
-    this.size = 24.0,
-    this.duration = const Duration(milliseconds: 1500),
-    this.dotCount = 3,
-  });
-
-  @override
-  State<ThinkingDotsIndicator> createState() => _ThinkingDotsIndicatorState();
-}
-
-class _ThinkingDotsIndicatorState extends State<ThinkingDotsIndicator>
-    with TickerProviderStateMixin {
-  late List<AnimationController> _controllers;
-  late List<Animation<double>> _animations;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controllers = List.generate(widget.dotCount, (index) {
-      return AnimationController(
-        duration: widget.duration,
-        vsync: this,
-      );
-    });
-
-    _animations = _controllers.map((controller) {
-      return Tween<double>(
-        begin: 0.4,
-        end: 1.0,
-      ).animate(CurvedAnimation(
-        parent: controller,
-        curve: Curves.easeInOut,
-      ));
-    }).toList();
-
-    // Start animations with delays
-    for (int i = 0; i < _controllers.length; i++) {
-      Future.delayed(Duration(milliseconds: i * 200), () {
-        if (mounted) {
-          _controllers[i].repeat(reverse: true);
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _controllers) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor = widget.color ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? Colors.purple.shade300
-            : Colors.blue.shade600);
-
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(widget.dotCount, (index) {
-          return AnimatedBuilder(
-            animation: _animations[index],
-            builder: (context, child) {
-              return Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: widget.size * 0.05,
-                ),
-                child: Transform.scale(
-                  scale: _animations[index].value,
-                  child: Container(
-                    width: widget.size * 0.2,
-                    height: widget.size * 0.2,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: effectiveColor.withValues(
-                          alpha: _animations[index].value),
-                    ),
-                  ),
-                ),
-              );
-            },
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: Icon(
+              Icons.psychology,
+              color: widget.color.withValues(alpha: _opacityAnimation.value),
+              size: widget.size,
+            ),
           );
-        }),
+        },
       ),
     );
   }
 }
 
-/// A text-based thinking indicator
-class ThinkingTextIndicator extends StatefulWidget {
-  final Color? color;
-  final double fontSize;
+/// Optimized wave thinking indicator with single controller
+class WaveThinkingIndicator extends StatefulWidget {
+  final Color color;
+  final double size;
   final Duration duration;
 
-  const ThinkingTextIndicator({
+  const WaveThinkingIndicator({
     super.key,
-    this.color,
-    this.fontSize = 14.0,
-    this.duration = const Duration(milliseconds: 2000),
+    this.color = Colors.grey,
+    this.size = 16.0,
+    this.duration = const Duration(milliseconds: 1000),
   });
 
   @override
-  State<ThinkingTextIndicator> createState() => _ThinkingTextIndicatorState();
+  State<WaveThinkingIndicator> createState() => _WaveThinkingIndicatorState();
 }
 
-class _ThinkingTextIndicatorState extends State<ThinkingTextIndicator>
+class _WaveThinkingIndicatorState extends State<WaveThinkingIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<int> _animation;
-
-  final List<String> _thinkingTexts = [
-    'Thinking...',
-    'Analyzing...',
-    'Reasoning...',
-    'Processing...',
-  ];
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat();
 
-    _animation = IntTween(
-      begin: 0,
-      end: _thinkingTexts.length - 1,
+    _animation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
     ).animate(_controller);
-
-    _controller.repeat();
   }
 
   @override
@@ -259,23 +191,94 @@ class _ThinkingTextIndicatorState extends State<ThinkingTextIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = widget.color ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? Colors.purple.shade300
-            : Colors.blue.shade600);
+    return RepaintBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(5, (index) => _buildWaveDot(index)),
+      ),
+    );
+  }
 
+  Widget _buildWaveDot(int index) {
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        return Text(
-          _thinkingTexts[_animation.value],
-          style: TextStyle(
-            color: effectiveColor,
-            fontSize: widget.fontSize,
-            fontStyle: FontStyle.italic,
+        final progress = (_animation.value + index * 0.1) % 1.0;
+        final height = widget.size *
+            (0.5 + 0.5 * (1 - (progress - 0.5).abs() * 2).clamp(0.0, 1.0));
+
+        return Container(
+          width: 3,
+          height: height,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: widget.color,
+            borderRadius: BorderRadius.circular(1.5),
           ),
         );
       },
+    );
+  }
+}
+
+/// Optimized typing indicator for text generation
+class TypingThinkingIndicator extends StatefulWidget {
+  final Color color;
+  final double size;
+  final Duration duration;
+
+  const TypingThinkingIndicator({
+    super.key,
+    this.color = Colors.grey,
+    this.size = 16.0,
+    this.duration = const Duration(milliseconds: 1500),
+  });
+
+  @override
+  State<TypingThinkingIndicator> createState() =>
+      _TypingThinkingIndicatorState();
+}
+
+class _TypingThinkingIndicatorState extends State<TypingThinkingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<int> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat();
+
+    _animation = IntTween(
+      begin: 0,
+      end: 3,
+    ).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          final text = '.' * (_animation.value + 1);
+          return Text(
+            'Thinking$text',
+            style: TextStyle(
+              color: widget.color,
+              fontSize: widget.size * 0.8,
+              fontStyle: FontStyle.italic,
+            ),
+          );
+        },
+      ),
     );
   }
 }

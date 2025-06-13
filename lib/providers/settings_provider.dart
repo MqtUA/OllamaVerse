@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../services/storage_service.dart';
-import '../services/secure_storage_service.dart';
 import '../services/ollama_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
   AppSettings _settings = AppSettings();
   final StorageService _storageService = StorageService();
-  final SecureStorageService _secureStorageService = SecureStorageService();
   bool _isLoading = true;
   String? _authToken;
   bool _disposed = false;
@@ -37,7 +35,7 @@ class SettingsProvider extends ChangeNotifier {
     _safeNotifyListeners();
 
     _settings = await _storageService.loadSettings();
-    _authToken = await _secureStorageService.getAuthToken();
+    _authToken = await _storageService.getAuthToken();
 
     _isLoading = false;
     _safeNotifyListeners();
@@ -53,6 +51,7 @@ class SettingsProvider extends ChangeNotifier {
     String? systemPrompt,
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
+    bool? darkMode,
   }) async {
     _settings = _settings.copyWith(
       ollamaHost: ollamaHost,
@@ -63,11 +62,12 @@ class SettingsProvider extends ChangeNotifier {
       systemPrompt: systemPrompt,
       thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
       thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
+      darkMode: darkMode,
     );
 
     if (authToken != null) {
       _authToken = authToken;
-      await _secureStorageService.saveAuthToken(authToken);
+      await _storageService.saveAuthToken(authToken);
     }
 
     // Save settings and notify listeners

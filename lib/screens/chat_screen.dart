@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -105,46 +106,68 @@ class _ChatScreenState extends State<ChatScreen> {
     final chatProvider = _chatProvider;
     if (chatProvider == null || !mounted) return;
 
-    // If the chat provider is generating a message and the user hasn't manually scrolled up
-    if (chatProvider.isGenerating && !_userHasScrolled) {
-      // Use a small delay to ensure the UI has updated with the new content
-      Future.delayed(const Duration(milliseconds: 50), () {
-        if (mounted) {
-          _scrollToBottom();
+    // Check if we should scroll to bottom due to chat switching
+    if (chatProvider.shouldScrollToBottomOnChatSwitch) {
+      // Reset user scroll flag since we're switching chats
+      setState(() {
+        _userHasScrolled = false;
+      });
+
+      // Scroll to bottom with a delay to ensure UI is rendered
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Add extra delay for startup case to ensure full rendering
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && _scrollController.hasClients) {
+            // Use jumpTo for immediate positioning when switching chats
+            _scrollController
+                .jumpTo(_scrollController.position.maxScrollExtent);
+            // Reset the flag after scrolling
+            chatProvider.resetScrollToBottomFlag();
+          }
+        });
+      });
+    }
+
+    // Simple auto-scroll during generation: if generating and user hasn't scrolled, scroll to bottom
+    if (chatProvider.isActiveChatGenerating && !_userHasScrolled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _scrollController.hasClients &&
+            chatProvider.isActiveChatGenerating &&
+            !_userHasScrolled) {
+          final position = _scrollController.position;
+          final maxExtent = position.maxScrollExtent;
+          if (maxExtent > 0) {
+            _scrollController.jumpTo(maxExtent);
+          }
         }
       });
     }
   }
 
-  // Detect when the user has manually scrolled
+  // Improved scroll detection with auto-scroll interference prevention
   void _onScrollChange() {
-    if (_scrollController.hasClients) {
-      // Check if we're at the bottom
-      final isAtBottom = _scrollController.position.pixels >=
-          (_scrollController.position.maxScrollExtent - 20); // 20px threshold
+    if (!_scrollController.hasClients) return;
 
-      // If we're not at the bottom and not during initial load, user has scrolled up
-      if (!isAtBottom && !_scrollController.position.outOfRange) {
-        setState(() {
-          _userHasScrolled = true;
-        });
-      } else if (isAtBottom) {
-        // If we reach the bottom again, reset the flag
-        setState(() {
-          _userHasScrolled = false;
-        });
-      }
-    }
-  }
+    final position = _scrollController.position;
+    if (position.maxScrollExtent == 0) return; // No content to scroll
 
-  // Scroll to the bottom of the chat with a smooth animation
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-      );
+    // Check if we're near the bottom (reduced threshold for better precision)
+    final threshold = 20.0; // Reduced from 50px for better precision
+    final isNearBottom =
+        position.pixels >= (position.maxScrollExtent - threshold);
+
+    // Only update state if there's a meaningful change and we're not auto-scrolling
+    if (!isNearBottom && !_userHasScrolled) {
+      // User scrolled up from bottom
+      setState(() {
+        _userHasScrolled = true;
+      });
+    } else if (isNearBottom && _userHasScrolled) {
+      // User scrolled back to bottom
+      setState(() {
+        _userHasScrolled = false;
+      });
     }
   }
 
@@ -204,13 +227,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
     setState(() {
       _attachedFiles = [];
+      // Reset user scroll flag when sending a new message to ensure auto-scroll works
+      _userHasScrolled = false;
     });
 
-    // Only scroll to bottom if the user hasn't manually scrolled up
-    if (!_userHasScrolled) {
-      // Scroll to bottom after a short delay to ensure the new message is rendered
-      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
-    }
+    // Immediately scroll to show the user's message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   // Show dialog to rename a chat
@@ -471,11 +497,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: displayMessages.length +
-                          (chatProvider.isGenerating ? 1 : 0),
+                          (chatProvider.isActiveChatGenerating ? 1 : 0),
                       itemBuilder: (context, index) {
                         // Show typing indicator or streaming response as the last item when generating
                         if (index == displayMessages.length &&
-                            chatProvider.isGenerating) {
+                            chatProvider.isActiveChatGenerating) {
                           final settings = Provider.of<SettingsProvider>(
                             context,
                             listen: false,
@@ -494,7 +520,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   child: LiveThinkingBubble(
                                     fontSize: fontSize,
                                     showThinkingIndicator:
-                                        chatProvider.isGenerating,
+                                        chatProvider.isActiveChatGenerating,
                                   ),
                                 ),
 
@@ -693,7 +719,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                       const SizedBox(width: 8.0),
                       IconButton(
-                        icon: chatProvider.isGenerating
+                        icon: chatProvider.isActiveChatGenerating
                             ? Stack(
                                 alignment: Alignment.center,
                                 children: [
@@ -722,13 +748,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                     : Theme.of(context).primaryColor,
                               ),
                         onPressed: () {
-                          if (chatProvider.isGenerating) {
+                          if (chatProvider.isActiveChatGenerating) {
                             chatProvider.cancelGeneration();
                           } else {
                             _sendMessage();
                           }
                         },
-                        tooltip: chatProvider.isGenerating
+                        tooltip: chatProvider.isActiveChatGenerating
                             ? 'Stop generation'
                             : 'Send message',
                       ),
@@ -867,14 +893,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     data: message.displayContent,
                     fontSize: fontSize,
                     selectable: !isStreaming,
-                    onTapLink: (text, href, title) {
-                      if (href != null) {
-                        // Handle link taps - could open a browser or in-app webview
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Link tapped: $href')),
-                        );
-                      }
-                    },
                   ),
 
             // Timestamp

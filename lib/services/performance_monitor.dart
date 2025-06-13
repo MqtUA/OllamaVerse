@@ -120,6 +120,10 @@ class PerformanceMonitor {
 
   /// Get performance statistics
   PerformanceStats getStats() {
+    // Calculate frame drop count - actual dropped frames from recent renders
+    final droppedFrames =
+        _frameRenderTimes.where((time) => time > _frameDropThreshold).length;
+
     return PerformanceStats(
       averageFrameTime: _frameRenderTimes.isEmpty
           ? 0.0
@@ -128,7 +132,8 @@ class PerformanceMonitor {
       maxFrameTime: _frameRenderTimes.isEmpty
           ? 0.0
           : _frameRenderTimes.reduce((a, b) => a > b ? a : b),
-      frameDropCount: _animationFrameDrops.length,
+      frameDropCount:
+          droppedFrames, // Fixed: show actual dropped frames, not accumulated drops
       averageThemeSwitchTime: _themeSwitchTimes.isEmpty
           ? 0.0
           : _themeSwitchTimes.reduce((a, b) => a + b) /
@@ -142,7 +147,9 @@ class PerformanceMonitor {
 
   /// Check if current performance is good
   bool _isPerformanceGood() {
-    final recentFrameDrops = _animationFrameDrops
+    if (_frameRenderTimes.isEmpty) return true;
+
+    final recentFrameDrops = _frameRenderTimes
         .where(
           (time) => time > _frameDropThreshold,
         )
@@ -155,8 +162,14 @@ class PerformanceMonitor {
         .length;
 
     // Performance is good if we have less than 10% frame drops and fast theme switches
-    return recentFrameDrops < (_frameRenderTimes.length * 0.1) &&
-        recentSlowThemeSwitches < (_themeSwitchTimes.length * 0.1);
+    final frameDropRate = _frameRenderTimes.isEmpty
+        ? 0.0
+        : recentFrameDrops / _frameRenderTimes.length;
+    final slowThemeRate = _themeSwitchTimes.isEmpty
+        ? 0.0
+        : recentSlowThemeSwitches / _themeSwitchTimes.length;
+
+    return frameDropRate < 0.1 && slowThemeRate < 0.1;
   }
 
   /// Reset all performance metrics

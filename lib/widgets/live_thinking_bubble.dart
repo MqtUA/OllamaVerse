@@ -97,7 +97,7 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
         final settings = settingsProvider.settings;
 
         // Auto-collapse logic: if thinking is complete and auto-collapse is enabled
-        if (!chatProvider.isGenerating &&
+        if (!chatProvider.isActiveChatGenerating &&
             !chatProvider.isInsideThinkingBlock &&
             settings.thinkingBubbleAutoCollapse &&
             chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId)) {
@@ -139,7 +139,7 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
                     children: [
                       // Thinking indicator
                       if (widget.showThinkingIndicator ||
-                          chatProvider.isGenerating)
+                          chatProvider.isActiveChatGenerating)
                         ThinkingIndicator(
                           color: isDark
                               ? DraculaColors.purple
@@ -159,7 +159,7 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
                       // Title
                       Expanded(
                         child: Text(
-                          chatProvider.isGenerating
+                          chatProvider.isActiveChatGenerating
                               ? 'Thinking...'
                               : 'Thought Process',
                           style: TextStyle(
@@ -210,13 +210,6 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
                           fontSize: widget.fontSize * 0.9,
                           selectable: !chatProvider
                               .isGenerating, // Disable selection during streaming
-                          onTapLink: (text, href, title) {
-                            if (href != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Link tapped: $href')),
-                              );
-                            }
-                          },
                         )
                       else
                         Text(

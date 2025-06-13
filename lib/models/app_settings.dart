@@ -34,6 +34,7 @@ class AppSettings {
     String? systemPrompt,
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
+    bool? darkMode,
   }) {
     return AppSettings(
       ollamaHost: ollamaHost ?? this.ollamaHost,
@@ -46,6 +47,7 @@ class AppSettings {
           thinkingBubbleDefaultExpanded ?? this.thinkingBubbleDefaultExpanded,
       thinkingBubbleAutoCollapse:
           thinkingBubbleAutoCollapse ?? this.thinkingBubbleAutoCollapse,
+      darkMode: darkMode ?? this.darkMode,
     );
   }
 

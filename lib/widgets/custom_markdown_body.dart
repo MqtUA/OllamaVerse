@@ -8,14 +8,12 @@ class CustomMarkdownBody extends StatelessWidget {
   final String data;
   final double fontSize;
   final bool selectable;
-  final Function(String, String?, String?)? onTapLink;
 
   const CustomMarkdownBody({
     super.key,
     required this.data,
     this.fontSize = 14.0,
     this.selectable = true,
-    this.onTapLink,
   });
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // Added for kDebugMode
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
@@ -26,9 +27,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersion = '';
   bool _showAuthToken = false;
 
-  // Stream controller for performance monitoring
-  late StreamController<PerformanceStats> _performanceStreamController;
-  late Timer _performanceTimer;
+  // Stream controller for performance monitoring (only in debug builds)
+  StreamController<PerformanceStats>? _performanceStreamController;
+  Timer? _performanceTimer;
 
   @override
   void initState() {
@@ -40,18 +41,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _authTokenController = TextEditingController();
     _systemPromptController = TextEditingController();
 
-    // Initialize performance monitoring stream
-    _performanceStreamController =
-        StreamController<PerformanceStats>.broadcast();
-    _performanceTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) {
-        if (mounted && !_performanceStreamController.isClosed) {
-          _performanceStreamController
-              .add(PerformanceMonitor.instance.getStats());
-        }
-      },
-    );
+    // Initialize performance monitoring stream only in debug builds
+    if (kDebugMode) {
+      _performanceStreamController =
+          StreamController<PerformanceStats>.broadcast();
+      _performanceTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) {
+          if (mounted &&
+              _performanceStreamController != null &&
+              !_performanceStreamController!.isClosed) {
+            _performanceStreamController!
+                .add(PerformanceMonitor.instance.getStats());
+          }
+        },
+      );
+    }
 
     // Load app version and auth token
     _loadAppVersion();
@@ -105,8 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _systemPromptController.dispose();
 
     // Dispose of performance monitoring resources
-    _performanceTimer.cancel();
-    _performanceStreamController.close();
+    _performanceTimer?.cancel();
+    _performanceStreamController?.close();
 
     super.dispose();
   }
@@ -331,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         leading: Icon(Icons.psychology, color: Colors.purple),
                       ),
                       SwitchListTile(
-                        title: const Text('Default Expanded'),
+                        title: const Text('Expanded by default'),
                         subtitle: const Text(
                           'Show thinking bubbles expanded by default',
                         ),
@@ -342,18 +347,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               thinkingBubbleDefaultExpanded: value);
                         },
                       ),
-                      SwitchListTile(
-                        title: const Text('Auto-collapse After Thinking'),
-                        subtitle: const Text(
-                          'Automatically collapse thinking bubble when answer appears',
+                      // Only show auto-collapse setting if thinking bubbles are expanded by default
+                      if (settingsProvider
+                          .settings.thinkingBubbleDefaultExpanded)
+                        SwitchListTile(
+                          title: const Text('Auto-collapse After Thinking'),
+                          subtitle: const Text(
+                            'Automatically collapse thinking bubble when answer appears',
+                          ),
+                          value: settingsProvider
+                              .settings.thinkingBubbleAutoCollapse,
+                          onChanged: (value) {
+                            settingsProvider.updateSettings(
+                                thinkingBubbleAutoCollapse: value);
+                          },
                         ),
-                        value: settingsProvider
-                            .settings.thinkingBubbleAutoCollapse,
-                        onChanged: (value) {
-                          settingsProvider.updateSettings(
-                              thinkingBubbleAutoCollapse: value);
-                        },
-                      ),
                       const Divider(),
                       ListTile(
                         title: const Text('Context Length'),
@@ -425,7 +433,158 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 16),
 
-              // Performance Settings Section
+              // Performance Settings Section (only in debug builds)
+              if (kDebugMode) ...[
+                Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Performance Monitoring',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Performance monitoring display with real-time stats
+                        SwitchListTile(
+                          title: const Text('Performance Monitoring'),
+                          subtitle: const Text(
+                            'Track frame rates and theme switching performance',
+                          ),
+                          value: true, // Always enabled in debug mode
+                          onChanged: null, // Read-only for now
+                          secondary: const Icon(
+                            Icons.speed,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        // Real-time performance statistics
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: StreamBuilder<PerformanceStats>(
+                            stream: _performanceStreamController?.stream,
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return const Card(
+                                  margin: EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Padding(
+                                    padding: EdgeInsets.all(12.0),
+                                    child: Text(
+                                      'Loading performance data...',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              final stats = snapshot.data!;
+                              return Card(
+                                margin:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            stats.isPerformant
+                                                ? Icons.check_circle
+                                                : Icons.warning,
+                                            color: stats.isPerformant
+                                                ? Colors.green
+                                                : Colors.orange,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Status: ${stats.isPerformant ? "Excellent" : "Needs Improvement"}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              color: stats.isPerformant
+                                                  ? Colors.green
+                                                  : Colors.orange,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildPerformanceRow(
+                                          'Frame Time',
+                                          '${stats.averageFrameTime.toStringAsFixed(1)}ms',
+                                          stats.averageFrameTime < 16.67),
+                                      _buildPerformanceRow(
+                                          'Frame Drops',
+                                          '${stats.frameDropCount}',
+                                          stats.frameDropCount < 5),
+                                      _buildPerformanceRow(
+                                          'Theme Switch',
+                                          '${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms',
+                                          stats.averageThemeSwitchTime <
+                                              50.0), // Fixed threshold to match code
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        // Performance actions
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    PerformanceMonitor.instance.resetMetrics();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content:
+                                            Text('Performance metrics reset'),
+                                        backgroundColor: Colors.blue,
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('Reset'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    PerformanceMonitor.instance
+                                        .logPerformanceSummary();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Performance logged to console'),
+                                        backgroundColor: Colors.blue,
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.bug_report, size: 16),
+                                  label: const Text('Log'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Storage Settings Section
               Card(
                 child: Padding(
                   padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
@@ -433,148 +592,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Performance & Storage',
+                        'Storage Management',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      // Performance monitoring display with real-time stats
-                      SwitchListTile(
-                        title: const Text('Performance Monitoring'),
-                        subtitle: const Text(
-                          'Track frame rates and theme switching performance',
-                        ),
-                        value: true, // Always enabled in debug mode
-                        onChanged: null, // Read-only for now
-                        secondary: const Icon(
-                          Icons.speed,
-                          color: Colors.blue,
-                        ),
-                      ),
-                      // Real-time performance statistics
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: StreamBuilder<PerformanceStats>(
-                          stream: _performanceStreamController.stream,
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const Card(
-                                margin: EdgeInsets.symmetric(vertical: 8.0),
-                                child: Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: Text(
-                                    'Loading performance data...',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                              );
-                            }
 
-                            final stats = snapshot.data!;
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 8.0),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          stats.isPerformant
-                                              ? Icons.check_circle
-                                              : Icons.warning,
-                                          color: stats.isPerformant
-                                              ? Colors.green
-                                              : Colors.orange,
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Status: ${stats.isPerformant ? "Excellent" : "Needs Improvement"}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            color: stats.isPerformant
-                                                ? Colors.green
-                                                : Colors.orange,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildPerformanceRow(
-                                        'Frame Time',
-                                        '${stats.averageFrameTime.toStringAsFixed(1)}ms',
-                                        stats.averageFrameTime < 16.67),
-                                    _buildPerformanceRow(
-                                        'Frame Drops',
-                                        '${stats.frameDropCount}',
-                                        stats.frameDropCount < 5),
-                                    _buildPerformanceRow(
-                                        'Theme Switch',
-                                        '${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms',
-                                        stats.averageThemeSwitchTime < 100),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      // Performance actions
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  PerformanceMonitor.instance.resetMetrics();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content:
-                                          Text('Performance metrics reset'),
-                                      backgroundColor: Colors.blue,
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.refresh, size: 16),
-                                label: const Text('Reset'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  PerformanceMonitor.instance
-                                      .logPerformanceSummary();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content:
-                                          Text('Performance logged to console'),
-                                      backgroundColor: Colors.blue,
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.bug_report, size: 16),
-                                label: const Text('Log'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(),
-                      // Storage management section
-                      const Text(
-                        'Storage Management',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
                       // File cache statistics
                       FutureBuilder<CacheStats>(
                         future: FileContentCache.instance.getCacheStats(),

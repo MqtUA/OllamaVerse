@@ -37,6 +37,12 @@ class ChatProvider with ChangeNotifier {
   final Map<String, bool> _expandedThinkingBubbles = {};
   bool _isThinkingPhase = false;
 
+  // Chat switching state
+  bool _shouldScrollToBottomOnChatSwitch = false;
+
+  // Stream management - track which chat is currently generating
+  String? _currentGeneratingChatId;
+
   // Getters
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
@@ -50,7 +56,13 @@ class ChatProvider with ChangeNotifier {
   bool get hasActiveThinkingBubble => _hasActiveThinkingBubble;
   bool get isThinkingPhase => _isThinkingPhase;
   bool get isInsideThinkingBlock => _isInsideThinkingBlock;
+  bool get shouldScrollToBottomOnChatSwitch =>
+      _shouldScrollToBottomOnChatSwitch;
   SettingsProvider get settingsProvider => _settingsProvider;
+
+  /// Check if the currently active chat is the one that's generating
+  bool get isActiveChatGenerating =>
+      _isGenerating && _currentGeneratingChatId == _activeChat?.id;
 
   /// Check if a thinking bubble is expanded
   bool isThinkingBubbleExpanded(String messageId) {
@@ -184,12 +196,27 @@ class ChatProvider with ChangeNotifier {
         },
       );
 
-      // Load initial data
-      await Future.wait([
-        _loadModels(),
-        _loadLastSelectedModel(),
-        _loadExistingChats(), // Load existing chats on startup
-      ]);
+      // Load chat history immediately (synchronous local operation)
+      // This ensures UI shows chats quickly even if Ollama is offline
+      await _loadExistingChats();
+      await _loadLastSelectedModel();
+
+      // Update UI with loaded chats first
+      _safeNotifyListeners();
+      AppLogger.info('Chat history loaded successfully, now loading models...');
+
+      // Load models in parallel (network operation that may fail)
+      // Don't wait for this to complete - let it load in background
+      _loadModels().then((_) {
+        // Update UI when models are loaded
+        _safeNotifyListeners();
+        AppLogger.info('Models loaded successfully after chat history');
+      }).catchError((e) {
+        // Models failed to load, but app is still functional with chat history
+        AppLogger.error(
+            'Models failed to load, but chat history is available', e);
+        _safeNotifyListeners();
+      });
 
       _isLoading = false;
       _safeNotifyListeners();
@@ -273,14 +300,27 @@ class ChatProvider with ChangeNotifier {
       final sortedChats = List<Chat>.from(_chats);
       sortedChats.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
 
-      _activeChat = sortedChats.first;
+      // Use setActiveChat to properly trigger scroll flags and other logic
+      setActiveChat(sortedChats.first.id);
       AppLogger.info('Set active chat to most recent: ${_activeChat?.title}');
     }
   }
 
   void cancelGeneration() {
+    _cancelOngoingGeneration();
+  }
+
+  /// Internal method to cancel ongoing generation and reset streaming state
+  void _cancelOngoingGeneration() {
+    AppLogger.info('Cancelling ongoing generation');
     _isGenerating = false;
+    _isThinkingPhase = false;
     _currentStreamingResponse = '';
+    _currentDisplayResponse = '';
+    _currentThinkingContent = '';
+    _hasActiveThinkingBubble = false;
+    _isInsideThinkingBlock = false;
+    _currentGeneratingChatId = null;
     _safeNotifyListeners();
   }
 
@@ -291,10 +331,7 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> _updateChatInList(Chat updatedChat) async {
     try {
-      final index = _chats.indexWhere((c) => c.id == updatedChat.id);
-      if (index >= 0) {
-        _chats[index] = updatedChat;
-      }
+      // Save to service - this will trigger the stream update
       await _chatHistoryService.saveChat(updatedChat);
       _safeNotifyListeners();
     } catch (e) {
@@ -337,9 +374,11 @@ class ChatProvider with ChangeNotifier {
         newChat.messages.add(systemMessage);
       }
 
-      _chats.insert(0, newChat);
-      _activeChat = newChat;
+      // Save the chat to the service - this will trigger the stream update
       await _chatHistoryService.saveChat(newChat);
+
+      // Set as active chat
+      _activeChat = newChat;
       _safeNotifyListeners();
     } catch (e) {
       _error = 'Failed to create new chat: ${e.toString()}';
@@ -351,7 +390,31 @@ class ChatProvider with ChangeNotifier {
   void setActiveChat(String chatId) {
     try {
       final chat = _chats.firstWhere((c) => c.id == chatId);
+      final previousActiveChat = _activeChat;
+
+      // Don't cancel generation - let it continue in background for original chat
+      // Just log that we're switching away from a generating chat
+      if (_isGenerating &&
+          previousActiveChat?.id != chatId &&
+          _currentGeneratingChatId != null) {
+        AppLogger.info(
+            'Switching away from generating chat $_currentGeneratingChatId to $chatId (generation continues in background)');
+      }
+
       _activeChat = chat;
+
+      // Check if we're switching to a different chat with existing messages
+      // and should trigger auto-scroll to bottom
+      // Handle startup case where previousActiveChat is null
+      if ((previousActiveChat?.id != chatId || previousActiveChat == null) &&
+          chat.messages.isNotEmpty) {
+        _shouldScrollToBottomOnChatSwitch = true;
+        AppLogger.info(
+            'Triggering auto-scroll for chat switch to: ${chat.title}');
+      } else {
+        _shouldScrollToBottomOnChatSwitch = false;
+      }
+
       _safeNotifyListeners();
     } catch (e) {
       _error = 'Failed to set active chat: ${e.toString()}';
@@ -360,20 +423,29 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
+  // Method to reset the scroll flag after scrolling is complete
+  void resetScrollToBottomFlag() {
+    _shouldScrollToBottomOnChatSwitch = false;
+  }
+
   Future<void> updateChatTitle(String chatId, String newTitle) async {
     try {
-      final index = _chats.indexWhere((c) => c.id == chatId);
-      if (index >= 0) {
-        final updatedChat = _chats[index].copyWith(
+      // Find the chat in the current list
+      final currentChats = _chatHistoryService.chats;
+      final chatIndex = currentChats.indexWhere((c) => c.id == chatId);
+
+      if (chatIndex >= 0) {
+        final updatedChat = currentChats[chatIndex].copyWith(
           title: newTitle,
           lastUpdatedAt: DateTime.now(),
         );
-        _chats[index] = updatedChat;
 
+        // Update active chat if this is the active one
         if (_activeChat?.id == chatId) {
           _activeChat = updatedChat;
         }
 
+        // Save to service - this will trigger the stream update
         await _chatHistoryService.saveChat(updatedChat);
         _safeNotifyListeners();
       }
@@ -386,29 +458,33 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> updateChatModel(String chatId, String newModelName) async {
     try {
-      final index = _chats.indexWhere((c) => c.id == chatId);
-      if (index >= 0) {
-        bool isDefaultTitle = _chats[index].messages.isEmpty &&
-            (_chats[index].title == 'New Chat' ||
-                _chats[index].title.startsWith('New chat with'));
+      // Find the chat in the current list
+      final currentChats = _chatHistoryService.chats;
+      final chatIndex = currentChats.indexWhere((c) => c.id == chatId);
+
+      if (chatIndex >= 0) {
+        final currentChat = currentChats[chatIndex];
+        bool isDefaultTitle = currentChat.messages.isEmpty &&
+            (currentChat.title == 'New Chat' ||
+                currentChat.title.startsWith('New chat with'));
 
         _lastSelectedModel = newModelName;
         await _settingsService.setLastSelectedModel(newModelName);
 
-        final updatedChat = _chats[index].copyWith(
+        final updatedChat = currentChat.copyWith(
           modelName: newModelName,
           title: isDefaultTitle
               ? 'New chat with $newModelName'
-              : _chats[index].title,
+              : currentChat.title,
           lastUpdatedAt: DateTime.now(),
         );
 
-        _chats[index] = updatedChat;
-
+        // Update active chat if this is the active one
         if (_activeChat?.id == chatId) {
           _activeChat = updatedChat;
         }
 
+        // Save to service - this will trigger the stream update
         await _chatHistoryService.saveChat(updatedChat);
         _safeNotifyListeners();
       }
@@ -421,13 +497,16 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> deleteChat(String chatId) async {
     try {
-      _chats.removeWhere((c) => c.id == chatId);
+      // First delete from the service - this will trigger the stream update
+      await _chatHistoryService.deleteChat(chatId);
 
+      // Update active chat if the deleted chat was active
       if (_activeChat?.id == chatId) {
-        _activeChat = _chats.isNotEmpty ? _chats.first : null;
+        // Get the updated chats from the service
+        final updatedChats = _chatHistoryService.chats;
+        _activeChat = updatedChats.isNotEmpty ? updatedChats.first : null;
       }
 
-      await _chatHistoryService.deleteChat(chatId);
       _safeNotifyListeners();
     } catch (e) {
       _error = 'Failed to delete chat: ${e.toString()}';
@@ -444,7 +523,9 @@ class ChatProvider with ChangeNotifier {
       return;
     }
     if (_isGenerating) {
-      _error = 'Already generating a response';
+      _error = _currentGeneratingChatId == _activeChat?.id
+          ? 'Already generating a response for this chat'
+          : 'Already generating a response for another chat. Please wait.';
       _safeNotifyListeners();
       return;
     }
@@ -488,6 +569,8 @@ class ChatProvider with ChangeNotifier {
       _currentStreamingResponse = '';
       _currentDisplayResponse = '';
       _isInsideThinkingBlock = false;
+      _currentGeneratingChatId =
+          _activeChat!.id; // Track which chat is generating
       _safeNotifyListeners();
 
       final model = _activeChat!.modelName;
@@ -513,6 +596,12 @@ class ChatProvider with ChangeNotifier {
               context: _activeChat!.context,
               conversationHistory: _activeChat!.messages,
             )) {
+          // CRITICAL: Check if generation was explicitly cancelled (but allow chat switching)
+          if (!_isGenerating) {
+            AppLogger.warning('Stream cancelled: generation was stopped');
+            break; // Exit the stream loop only if generation was explicitly cancelled
+          }
+
           if (streamResponse.response.isNotEmpty) {
             _currentStreamingResponse += streamResponse.response;
 
@@ -595,15 +684,30 @@ class ChatProvider with ChangeNotifier {
             'No thinking content detected in response from model: $model');
       }
 
-      final updatedWithAiMessages = [...updatedMessages, aiMessage];
-      final updatedWithAiChat = _activeChat!.copyWith(
+      // Find the chat that initiated the generation (it might not be the active chat anymore)
+      final generatingChat = _chats.firstWhere(
+        (chat) => chat.id == _currentGeneratingChatId,
+        orElse: () => _activeChat!,
+      );
+
+      final updatedWithAiMessages = [...generatingChat.messages, aiMessage];
+      final updatedWithAiChat = generatingChat.copyWith(
         messages: updatedWithAiMessages,
         lastUpdatedAt: DateTime.now(),
         context: newContext, // Store the context for future requests
       );
 
-      _activeChat = updatedWithAiChat;
+      // Update the generating chat, not necessarily the active chat
       await _updateChatInList(updatedWithAiChat);
+
+      // If the generating chat is currently active, update the active chat reference
+      if (_activeChat?.id == _currentGeneratingChatId) {
+        _activeChat = updatedWithAiChat;
+      }
+
+      // Auto-generate chat title if this is the first AI response and chat has default title
+      await _autoGenerateChatTitleIfNeeded(
+          updatedWithAiChat, userMessage.content, finalResponse);
     } on OllamaConnectionException catch (e) {
       _error = 'Cannot connect to Ollama server. Please check your connection.';
       AppLogger.error('Connection error sending message', e);
@@ -621,6 +725,7 @@ class ChatProvider with ChangeNotifier {
       _currentThinkingContent = '';
       _hasActiveThinkingBubble = false;
       _isInsideThinkingBlock = false;
+      _currentGeneratingChatId = null; // Clear tracking
       _safeNotifyListeners();
     }
   }
@@ -691,6 +796,98 @@ class ChatProvider with ChangeNotifier {
       AppLogger.error('Error retrying connection', e);
       _safeNotifyListeners();
       return false;
+    }
+  }
+
+  /// Auto-generate chat title if this is the first AI response and chat has default title
+  Future<void> _autoGenerateChatTitleIfNeeded(
+      Chat chat, String userMessageContent, String aiResponseContent) async {
+    try {
+      // Only auto-name if the chat has a default title
+      if (chat.title == 'New Chat' || chat.title.startsWith('New chat with')) {
+        AppLogger.info('Auto-generating title for chat: ${chat.id}');
+
+        final newTitle = await _generateChatTitle(
+            userMessageContent, aiResponseContent, chat.modelName);
+        if (newTitle.isNotEmpty && newTitle != chat.title) {
+          await updateChatTitle(chat.id, newTitle);
+          AppLogger.info('Auto-generated title: $newTitle');
+        }
+      }
+    } catch (e) {
+      AppLogger.error('Error auto-generating chat title', e);
+      // Don't throw - auto-naming is not critical functionality
+    }
+  }
+
+  /// Generate a concise chat title using the same Ollama model
+  Future<String> _generateChatTitle(
+      String userMessage, String aiResponse, String modelName) async {
+    try {
+      // Filter thinking content from AI response for better title generation
+      String processedAiResponse = aiResponse;
+
+      // Check if the response contains thinking content and extract final answer
+      if (ThinkingModelDetectionService.hasThinkingContent(aiResponse)) {
+        final thinkingContent =
+            ThinkingModelDetectionService.extractThinkingContent(aiResponse);
+        processedAiResponse = thinkingContent.finalAnswer.isNotEmpty
+            ? thinkingContent.finalAnswer
+            : aiResponse;
+        AppLogger.info(
+            'Filtered thinking content for title generation. Original length: ${aiResponse.length}, Filtered length: ${processedAiResponse.length}');
+      }
+
+      // Improved prompt for better title generation (2-5 words as requested)
+      final prompt =
+          '''Based on this conversation, create a concise 2-5 word title without quotes or explanation:
+
+User: $userMessage
+
+Assistant: $processedAiResponse
+
+Model: $modelName
+''';
+
+      final ollamaService = _settingsProvider.getOllamaService();
+      final titleResponse = await ollamaService
+          .generateResponseWithFiles(prompt, model: modelName);
+
+      // Clean up the response - remove quotes, extra whitespace, and limit length
+      // Also filter any thinking content that might appear in the title response itself
+      String cleanTitle = titleResponse;
+
+      // Filter thinking content from title response if present
+      if (ThinkingModelDetectionService.hasThinkingContent(titleResponse)) {
+        final titleThinkingContent =
+            ThinkingModelDetectionService.extractThinkingContent(titleResponse);
+        cleanTitle = titleThinkingContent.finalAnswer.isNotEmpty
+            ? titleThinkingContent.finalAnswer
+            : titleResponse;
+      }
+
+      cleanTitle = cleanTitle
+          .trim()
+          .replaceAll('"', '') // Remove quotes
+          .replaceAll("'", '') // Remove single quotes
+          .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
+          .trim();
+
+      // Limit to 5 words as requested (2-5 word range)
+      final words = cleanTitle.split(' ');
+      if (words.length > 5) {
+        cleanTitle = words.take(5).join(' ');
+      }
+
+      // Fallback if title is empty or too short
+      if (cleanTitle.isEmpty || cleanTitle.length < 3) {
+        return 'Chat about ${userMessage.split(' ').take(3).join(' ')}';
+      }
+
+      return cleanTitle;
+    } catch (e) {
+      AppLogger.error('Error generating chat title', e);
+      return '';
     }
   }
 }

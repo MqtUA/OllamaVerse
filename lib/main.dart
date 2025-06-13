@@ -11,6 +11,7 @@ import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
 import 'services/chat_history_service.dart';
 import 'services/settings_service.dart';
+import 'services/storage_service.dart';
 import 'services/file_cleanup_service.dart';
 import 'services/performance_monitor.dart';
 import 'widgets/animated_theme_switcher.dart';
@@ -23,6 +24,9 @@ Future<void> main() async {
 
   // Initialize logger
   await AppLogger.init();
+
+  // Initialize StorageService (must be first)
+  await StorageService.initialize();
 
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();

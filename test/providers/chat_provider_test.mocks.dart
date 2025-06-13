@@ -392,6 +392,7 @@ class MockSettingsProviderTest extends _i1.Mock
     String? systemPrompt,
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
+    bool? darkMode,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -407,6 +408,7 @@ class MockSettingsProviderTest extends _i1.Mock
             #systemPrompt: systemPrompt,
             #thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
             #thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
+            #darkMode: darkMode,
           },
         ),
         returnValue: _i4.Future<void>.value(),
