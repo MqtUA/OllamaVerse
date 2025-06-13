@@ -318,6 +318,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
                       const Divider(),
+
+                      // Thinking Bubble Settings Section
+                      const ListTile(
+                        title: Text(
+                          'Thinking Bubble Settings',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          'Configure how thinking processes are displayed',
+                        ),
+                        leading: Icon(Icons.psychology, color: Colors.purple),
+                      ),
+                      SwitchListTile(
+                        title: const Text('Default Expanded'),
+                        subtitle: const Text(
+                          'Show thinking bubbles expanded by default',
+                        ),
+                        value: settingsProvider
+                            .settings.thinkingBubbleDefaultExpanded,
+                        onChanged: (value) {
+                          settingsProvider.updateSettings(
+                              thinkingBubbleDefaultExpanded: value);
+                        },
+                      ),
+                      SwitchListTile(
+                        title: const Text('Auto-collapse After Thinking'),
+                        subtitle: const Text(
+                          'Automatically collapse thinking bubble when answer appears',
+                        ),
+                        value: settingsProvider
+                            .settings.thinkingBubbleAutoCollapse,
+                        onChanged: (value) {
+                          settingsProvider.updateSettings(
+                              thinkingBubbleAutoCollapse: value);
+                        },
+                      ),
+                      const Divider(),
                       ListTile(
                         title: const Text('Context Length'),
                         subtitle: const Text(
@@ -529,7 +566,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const Divider(),
-                      // Storage cleanup section
+                      // Storage management section
                       const Text(
                         'Storage Management',
                         style: TextStyle(

@@ -11,6 +11,9 @@ import '../widgets/custom_markdown_body.dart';
 import '../widgets/markdown_title.dart';
 import '../widgets/model_selector.dart';
 import '../widgets/typing_indicator.dart';
+import '../widgets/thinking_bubble.dart';
+import '../widgets/thinking_indicator.dart';
+import '../widgets/live_thinking_bubble.dart';
 import '../theme/dracula_theme.dart';
 import '../theme/material_light_theme.dart';
 
@@ -479,32 +482,82 @@ class _ChatScreenState extends State<ChatScreen> {
                           ).settings;
 
                           if (settings.showLiveResponse &&
-                              chatProvider
-                                  .currentStreamingResponse.isNotEmpty) {
-                            // Show streaming response
-                            return _buildMessageBubble(
-                              Message(
-                                id: 'streaming',
-                                content: chatProvider.currentStreamingResponse,
-                                role: MessageRole.assistant,
-                                timestamp: DateTime.now(),
-                              ),
-                              fontSize,
+                              (chatProvider.currentDisplayResponse.isNotEmpty ||
+                                  chatProvider.hasActiveThinkingBubble)) {
+                            // Show live thinking bubble and/or filtered streaming response
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Live thinking bubble (appears when thinking content is detected)
+                                RepaintBoundary(
+                                  key: const ValueKey('live_thinking_bubble'),
+                                  child: LiveThinkingBubble(
+                                    fontSize: fontSize,
+                                    showThinkingIndicator:
+                                        chatProvider.isGenerating,
+                                  ),
+                                ),
+
+                                // Streaming response content (filtered, without thinking)
+                                if (chatProvider
+                                    .currentDisplayResponse.isNotEmpty)
+                                  RepaintBoundary(
+                                    key: const ValueKey('streaming_message'),
+                                    child: _buildMessageBubble(
+                                      Message(
+                                        id: 'streaming',
+                                        content:
+                                            chatProvider.currentDisplayResponse,
+                                        role: MessageRole.assistant,
+                                        timestamp: DateTime.now(),
+                                      ),
+                                      fontSize,
+                                      isStreaming:
+                                          true, // Add flag to disable selection
+                                    ),
+                                  ),
+                              ],
                             );
                           } else {
-                            // Show typing indicator
+                            // Show thinking or typing indicator
                             return Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 8.0,
                                 ),
-                                child: TypingIndicator(
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.grey.shade300
-                                      : Colors.grey.shade700,
-                                ),
+                                child: chatProvider.isThinkingPhase
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          ThinkingIndicator(
+                                            color:
+                                                Theme.of(context).brightness ==
+                                                        Brightness.dark
+                                                    ? Colors.purple.shade300
+                                                    : Colors.blue.shade600,
+                                            size: 20.0,
+                                          ),
+                                          const SizedBox(width: 8.0),
+                                          Text(
+                                            'Thinking...',
+                                            style: TextStyle(
+                                              color: Theme.of(context)
+                                                          .brightness ==
+                                                      Brightness.dark
+                                                  ? Colors.purple.shade300
+                                                  : Colors.blue.shade600,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : TypingIndicator(
+                                        color: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.grey.shade300
+                                            : Colors.grey.shade700,
+                                      ),
                               ),
                             );
                           }
@@ -690,7 +743,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Message message, double fontSize) {
+  Widget _buildMessageBubble(Message message, double fontSize,
+      {bool isStreaming = false}) {
     final isUser = message.isUser;
     final isSmallScreen = MediaQuery.of(context).size.width <= 600;
 
@@ -730,6 +784,23 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Display thinking bubble for AI messages with thinking content
+            if (!isUser && message.hasThinking)
+              Consumer<ChatProvider>(
+                builder: (context, chatProvider, child) {
+                  return ThinkingBubble(
+                    message: message,
+                    fontSize: fontSize,
+                    isExpanded:
+                        chatProvider.isThinkingBubbleExpanded(message.id),
+                    onToggleExpanded: () =>
+                        chatProvider.toggleThinkingBubble(message.id),
+                    showThinkingIndicator: chatProvider.isThinkingPhase &&
+                        message.id == 'streaming',
+                  );
+                },
+              ),
+
             // Display attached files if any
             if (message.attachedFiles.isNotEmpty) ...[
               Wrap(
@@ -792,9 +863,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   )
                 : CustomMarkdownBody(
-                    data: message.content,
+                    // Use displayContent which returns finalAnswer for thinking messages
+                    data: message.displayContent,
                     fontSize: fontSize,
-                    selectable: true,
+                    selectable: !isStreaming,
                     onTapLink: (text, href, title) {
                       if (href != null) {
                         // Handle link taps - could open a browser or in-app webview

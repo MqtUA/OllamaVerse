@@ -51,6 +51,8 @@ class SettingsProvider extends ChangeNotifier {
     bool? showLiveResponse,
     int? contextLength,
     String? systemPrompt,
+    bool? thinkingBubbleDefaultExpanded,
+    bool? thinkingBubbleAutoCollapse,
   }) async {
     _settings = _settings.copyWith(
       ollamaHost: ollamaHost,
@@ -59,6 +61,8 @@ class SettingsProvider extends ChangeNotifier {
       showLiveResponse: showLiveResponse,
       contextLength: contextLength,
       systemPrompt: systemPrompt,
+      thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
+      thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
     );
 
     if (authToken != null) {

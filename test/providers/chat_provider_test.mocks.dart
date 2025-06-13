@@ -390,6 +390,8 @@ class MockSettingsProviderTest extends _i1.Mock
     bool? showLiveResponse,
     int? contextLength,
     String? systemPrompt,
+    bool? thinkingBubbleDefaultExpanded,
+    bool? thinkingBubbleAutoCollapse,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -403,6 +405,8 @@ class MockSettingsProviderTest extends _i1.Mock
             #showLiveResponse: showLiveResponse,
             #contextLength: contextLength,
             #systemPrompt: systemPrompt,
+            #thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
+            #thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
           },
         ),
         returnValue: _i4.Future<void>.value(),

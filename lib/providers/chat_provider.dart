@@ -7,6 +7,7 @@ import '../services/ollama_service.dart';
 import '../services/chat_history_service.dart';
 import '../services/settings_service.dart';
 import '../services/file_content_processor.dart';
+import '../services/thinking_model_detection_service.dart';
 import '../providers/settings_provider.dart';
 import '../utils/logger.dart';
 
@@ -23,8 +24,18 @@ class ChatProvider with ChangeNotifier {
   String? _error;
   String _lastSelectedModel = '';
   String _currentStreamingResponse = '';
+  String _currentDisplayResponse = '';
+  String _currentThinkingContent = ''; // Live thinking content being streamed
+  bool _isInsideThinkingBlock =
+      false; // Track if we're currently inside a thinking block
+  bool _hasActiveThinkingBubble =
+      false; // Track if there's an active thinking bubble
   StreamSubscription? _chatStreamSubscription;
   bool _disposed = false;
+
+  // Thinking-related state
+  final Map<String, bool> _expandedThinkingBubbles = {};
+  bool _isThinkingPhase = false;
 
   // Getters
   List<Chat> get chats => _chats;
@@ -34,6 +45,95 @@ class ChatProvider with ChangeNotifier {
   bool get isGenerating => _isGenerating;
   String? get error => _error;
   String get currentStreamingResponse => _currentStreamingResponse;
+  String get currentDisplayResponse => _currentDisplayResponse;
+  String get currentThinkingContent => _currentThinkingContent;
+  bool get hasActiveThinkingBubble => _hasActiveThinkingBubble;
+  bool get isThinkingPhase => _isThinkingPhase;
+  bool get isInsideThinkingBlock => _isInsideThinkingBlock;
+  SettingsProvider get settingsProvider => _settingsProvider;
+
+  /// Check if a thinking bubble is expanded
+  bool isThinkingBubbleExpanded(String messageId) {
+    return _expandedThinkingBubbles[messageId] ?? false;
+  }
+
+  /// Toggle thinking bubble expansion
+  void toggleThinkingBubble(String messageId) {
+    _expandedThinkingBubbles[messageId] =
+        !(_expandedThinkingBubbles[messageId] ?? false);
+    _safeNotifyListeners();
+  }
+
+  /// Filter thinking content from streaming response for real-time display
+  /// Also extracts live thinking content for the thinking bubble
+  String _filterThinkingFromStream(String fullResponse) {
+    if (fullResponse.isEmpty) return fullResponse;
+
+    // Reset thinking content
+    _currentThinkingContent = '';
+    _hasActiveThinkingBubble = false;
+
+    // Check for thinking markers
+    final thinkingMarkers = [
+      {'open': '<think>', 'close': '</think>'},
+      {'open': '<thinking>', 'close': '</thinking>'},
+      {'open': '<reasoning>', 'close': '</reasoning>'},
+      {'open': '<analysis>', 'close': '</analysis>'},
+      {'open': '<reflection>', 'close': '</reflection>'},
+    ];
+
+    String result = fullResponse;
+
+    // Process each type of thinking marker
+    for (final markerPair in thinkingMarkers) {
+      final openMarker = markerPair['open']!;
+      final closeMarker = markerPair['close']!;
+
+      // Keep processing until no more markers of this type
+      while (true) {
+        final openIndex =
+            result.toLowerCase().indexOf(openMarker.toLowerCase());
+        if (openIndex == -1) break;
+
+        final closeIndex = result
+            .toLowerCase()
+            .indexOf(closeMarker.toLowerCase(), openIndex + openMarker.length);
+
+        if (closeIndex == -1) {
+          // Opening marker found but no closing marker yet
+          // Extract thinking content and hide from main display
+          final thinkingStart = openIndex + openMarker.length;
+          _currentThinkingContent =
+              fullResponse.substring(thinkingStart).trim();
+          _hasActiveThinkingBubble = true;
+          _isInsideThinkingBlock = true;
+
+          // Hide everything from the opening marker onwards
+          result = result.substring(0, openIndex).trim();
+          break;
+        } else {
+          // Complete thinking block found
+          final thinkingStart = openIndex + openMarker.length;
+          _currentThinkingContent =
+              fullResponse.substring(thinkingStart, closeIndex).trim();
+          _hasActiveThinkingBubble = _currentThinkingContent.isNotEmpty;
+          _isInsideThinkingBlock = false;
+
+          // Remove the complete thinking block from display
+          final beforeThinking = result.substring(0, openIndex);
+          final afterThinking =
+              result.substring(closeIndex + closeMarker.length);
+          result = (beforeThinking + afterThinking).trim();
+        }
+      }
+    }
+
+    // Clean up any extra whitespace
+    result = result.replaceAll(
+        RegExp(r'\n\s*\n\s*\n'), '\n\n'); // Remove excessive newlines
+
+    return result;
+  }
 
   ChatProvider({
     required ChatHistoryService chatHistoryService,
@@ -62,6 +162,11 @@ class ChatProvider with ChangeNotifier {
     try {
       _isLoading = true;
       _safeNotifyListeners();
+
+      // Wait for settings to load before attempting any network operations
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
 
       // Listen to chat updates
       _chatStreamSubscription = _chatHistoryService.chatStream.listen(
@@ -100,19 +205,23 @@ class ChatProvider with ChangeNotifier {
     try {
       final ollamaService = _settingsProvider.getOllamaService();
       _availableModels = await ollamaService.getModels();
+      AppLogger.info('Successfully loaded ${_availableModels.length} models');
     } on OllamaConnectionException catch (e) {
       _error =
           'Cannot connect to Ollama server. Please check your connection settings.';
       AppLogger.error('Connection error loading models', e);
-      rethrow;
+      // Don't rethrow - allow app to continue with empty model list
+      _availableModels = [];
     } on OllamaApiException catch (e) {
       _error = 'Error communicating with Ollama: ${e.message}';
       AppLogger.error('API error loading models', e);
-      rethrow;
+      // Don't rethrow - allow app to continue with empty model list
+      _availableModels = [];
     } catch (e) {
       _error = 'Unexpected error loading models: ${e.toString()}';
       AppLogger.error('Error loading models', e);
-      rethrow;
+      // Don't rethrow - allow app to continue with empty model list
+      _availableModels = [];
     }
   }
 
@@ -130,9 +239,27 @@ class ChatProvider with ChangeNotifier {
   /// Load existing chats on app startup
   Future<void> _loadExistingChats() async {
     try {
-      // Chat history service will automatically load chats via stream
-      // This method ensures we wait for initial loading to complete
       AppLogger.info('Loading existing chats on startup');
+
+      // Wait for chat history service to finish initializing
+      int attempts = 0;
+      const maxAttempts = 50; // 5 seconds max wait
+
+      while (attempts < maxAttempts && !_chatHistoryService.isInitialized) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+
+      if (!_chatHistoryService.isInitialized) {
+        AppLogger.warning(
+            'ChatHistoryService initialization timed out after 5 seconds');
+      }
+
+      // Force an initial update with current chats
+      _chats = _chatHistoryService.chats;
+      _setActiveToMostRecentIfNeeded();
+
+      AppLogger.info('Successfully loaded ${_chats.length} existing chats');
     } catch (e) {
       AppLogger.error('Error loading existing chats', e);
     }
@@ -359,9 +486,15 @@ class ChatProvider with ChangeNotifier {
 
       _isGenerating = true;
       _currentStreamingResponse = '';
+      _currentDisplayResponse = '';
+      _isInsideThinkingBlock = false;
       _safeNotifyListeners();
 
       final model = _activeChat!.modelName;
+
+      // Initially assume any model might have thinking capability
+      // We'll detect it from the actual response content
+      _isThinkingPhase = true; // Start in thinking phase for all models
 
       // Check if live response is enabled in settings
       final showLiveResponse = _settingsProvider.settings.showLiveResponse;
@@ -382,7 +515,21 @@ class ChatProvider with ChangeNotifier {
             )) {
           if (streamResponse.response.isNotEmpty) {
             _currentStreamingResponse += streamResponse.response;
-            _safeNotifyListeners(); // Update UI with each chunk
+
+            // Filter thinking content for display
+            _currentDisplayResponse =
+                _filterThinkingFromStream(_currentStreamingResponse);
+
+            // Update thinking phase based on content
+            if (_isThinkingPhase &&
+                _currentDisplayResponse.isNotEmpty &&
+                !_isInsideThinkingBlock) {
+              // We have visible content and we're not inside a thinking block
+              // This means the model has moved on to the actual answer
+              _isThinkingPhase = false;
+            }
+
+            _safeNotifyListeners(); // Update UI with filtered content
           }
           // Capture the final context when streaming is done
           if (streamResponse.done && streamResponse.context != null) {
@@ -405,12 +552,48 @@ class ChatProvider with ChangeNotifier {
         newContext = ollamaResponse.context;
       }
 
-      final aiMessage = Message(
+      // Create AI message and detect thinking content from the actual response
+      var aiMessage = Message(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         content: finalResponse,
         role: MessageRole.assistant,
         timestamp: DateTime.now(),
       );
+
+      // Check if this response contains thinking content
+      final hasThinkingContent =
+          ThinkingModelDetectionService.hasThinkingContent(finalResponse);
+
+      if (hasThinkingContent && finalResponse.isNotEmpty) {
+        AppLogger.info(
+            'Detected thinking content in response from model: $model');
+        AppLogger.info('Response length: ${finalResponse.length}');
+        AppLogger.info(
+            'Response preview: ${finalResponse.substring(0, 200.clamp(0, finalResponse.length))}');
+
+        // Extract thinking content and get the filtered final answer
+        final thinkingContent =
+            ThinkingModelDetectionService.extractThinkingContent(finalResponse);
+
+        // Create message with thinking content and filtered content
+        aiMessage = Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: thinkingContent.finalAnswer,
+          role: MessageRole.assistant,
+          timestamp: DateTime.now(),
+          thinkingContent: thinkingContent,
+        );
+
+        AppLogger.info('Thinking extraction result:');
+        AppLogger.info('  hasThinking: ${aiMessage.hasThinking}');
+        AppLogger.info(
+            '  thinkingText length: ${aiMessage.thinkingText?.length ?? 0}');
+        AppLogger.info('  finalAnswer length: ${aiMessage.finalAnswer.length}');
+        AppLogger.info('  message content length: ${aiMessage.content.length}');
+      } else {
+        AppLogger.info(
+            'No thinking content detected in response from model: $model');
+      }
 
       final updatedWithAiMessages = [...updatedMessages, aiMessage];
       final updatedWithAiChat = _activeChat!.copyWith(
@@ -432,7 +615,12 @@ class ChatProvider with ChangeNotifier {
       AppLogger.error('Error sending message', e);
     } finally {
       _isGenerating = false;
+      _isThinkingPhase = false;
       _currentStreamingResponse = '';
+      _currentDisplayResponse = '';
+      _currentThinkingContent = '';
+      _hasActiveThinkingBubble = false;
+      _isInsideThinkingBlock = false;
       _safeNotifyListeners();
     }
   }
@@ -467,22 +655,42 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> refreshModels() async {
     try {
-      _error = null;
+      _error = null; // Clear any previous errors
+      _safeNotifyListeners();
+
       await _loadModels();
       _safeNotifyListeners();
-    } on OllamaConnectionException catch (e) {
-      _error =
-          'Cannot connect to Ollama server. Please check your connection settings.';
-      AppLogger.error('Connection error refreshing models', e);
-      _safeNotifyListeners();
-    } on OllamaApiException catch (e) {
-      _error = 'Error communicating with Ollama: ${e.message}';
-      AppLogger.error('API error refreshing models', e);
-      _safeNotifyListeners();
+
+      if (_availableModels.isNotEmpty) {
+        AppLogger.info(
+            'Models refreshed successfully: ${_availableModels.length} models available');
+      }
     } catch (e) {
-      _error = 'Failed to refresh models: ${e.toString()}';
+      // _loadModels now handles its own errors gracefully
       AppLogger.error('Error refreshing models', e);
       _safeNotifyListeners();
+    }
+  }
+
+  /// Retry connection and model loading (useful after settings changes)
+  Future<bool> retryConnection() async {
+    try {
+      _error = null;
+      _safeNotifyListeners();
+
+      // Wait for settings to be ready
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      await _loadModels();
+      _safeNotifyListeners();
+
+      return _availableModels.isNotEmpty;
+    } catch (e) {
+      AppLogger.error('Error retrying connection', e);
+      _safeNotifyListeners();
+      return false;
     }
   }
 }

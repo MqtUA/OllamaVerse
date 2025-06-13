@@ -18,6 +18,9 @@ class ChatHistoryService {
   List<Chat> _chats = [];
   List<Chat> get chats => List.unmodifiable(_chats);
 
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+
   DateTime? _lastCleanup;
   Timer? _cleanupTimer;
 
@@ -29,8 +32,13 @@ class ChatHistoryService {
     try {
       await _loadChats();
       _startCleanupTimer();
+      _isInitialized = true;
+      AppLogger.info(
+          'ChatHistoryService initialized successfully with ${_chats.length} chats');
     } catch (e) {
       AppLogger.error('Error initializing chat history service', e);
+      _isInitialized =
+          true; // Mark as initialized even if failed to prevent infinite waiting
       rethrow;
     }
   }

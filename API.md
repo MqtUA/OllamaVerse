@@ -129,10 +129,24 @@ class OllamaService {
 }
 ```
 
+### ThinkingModelDetectionService
+Service for detecting and processing thinking content from AI model responses.
+
+```dart
+class ThinkingModelDetectionService {
+  static ThinkingModelDetectionService get instance;
+  
+  ThinkingContent? extractThinkingContent(String response);
+  bool hasThinkingContent(String response);
+  String filterThinkingFromResponse(String response);
+  void clearCache();
+}
+```
+
 ## Providers
 
 ### ChatProvider
-Manages chat state and operations with streaming support.
+Manages chat state and operations with streaming support and live thinking bubbles.
 
 ```dart
 class ChatProvider extends ChangeNotifier {
@@ -144,6 +158,12 @@ class ChatProvider extends ChangeNotifier {
   bool get isGenerating;
   String? get error;
   String get currentStreamingResponse;
+  
+  // Live Thinking Bubble Support
+  String get currentThinkingContent;
+  bool get hasActiveThinkingBubble;
+  bool get isInsideThinkingBlock;
+  bool get isThinkingBubbleExpanded;
 
   Future<void> createNewChat([String? modelName]);
   void setActiveChat(String chatId);
@@ -153,11 +173,15 @@ class ChatProvider extends ChangeNotifier {
   Future<void> refreshModels();
   Future<void> sendMessage(String content, {List<String>? attachedFiles});
   void stopGeneration();
+  
+  // Live Thinking Bubble Methods
+  void toggleThinkingBubbleExpansion();
+  void setThinkingBubbleExpanded(bool expanded);
 }
 ```
 
 ### SettingsProvider
-Manages application settings with theme caching and performance optimization.
+Manages application settings with theme caching, performance optimization, and thinking bubble preferences.
 
 ```dart
 class SettingsProvider extends ChangeNotifier {
@@ -177,6 +201,8 @@ class SettingsProvider extends ChangeNotifier {
     bool? showLiveResponse,
     int? contextLength,
     String? systemPrompt,
+    bool? thinkingBubbleDefaultExpanded,
+    bool? thinkingBubbleAutoCollapse,
   });
   void clearThemeCache();
   OllamaService getOllamaService();
@@ -186,7 +212,7 @@ class SettingsProvider extends ChangeNotifier {
 ## Models
 
 ### AppSettings
-Application settings model with all configuration options.
+Application settings model with all configuration options including thinking bubble preferences.
 
 ```dart
 class AppSettings {
@@ -197,6 +223,8 @@ class AppSettings {
   double fontSize;
   bool showLiveResponse;
   String systemPrompt;
+  bool thinkingBubbleDefaultExpanded;
+  bool thinkingBubbleAutoCollapse;
 
   AppSettings copyWith({...});
   Map<String, dynamic> toJson();
@@ -223,7 +251,7 @@ class Chat {
 ```
 
 ### ChatMessage
-Individual chat message model with file attachments.
+Individual chat message model with file attachments and thinking content support.
 
 ```dart
 class ChatMessage {
@@ -233,9 +261,32 @@ class ChatMessage {
   DateTime timestamp;
   List<String>? attachedFiles;
   List<Map<String, dynamic>>? context;
+  ThinkingContent? thinkingContent;
+
+  // Helper methods for thinking content
+  bool get hasThinkingContent;
+  String get displayContent;
 
   Map<String, dynamic> toJson();
   factory ChatMessage.fromJson(Map<String, dynamic> json);
+}
+```
+
+### ThinkingContent
+Model for storing AI thinking process and final answers.
+
+```dart
+class ThinkingContent {
+  String thinkingText;
+  String finalAnswer;
+
+  ThinkingContent({
+    required this.thinkingText,
+    required this.finalAnswer,
+  });
+
+  Map<String, dynamic> toJson();
+  factory ThinkingContent.fromJson(Map<String, dynamic> json);
 }
 ```
 
@@ -476,6 +527,49 @@ class TypingIndicator extends StatefulWidget {
   final Color color;
   final double size;
   final Duration duration;
+}
+```
+
+### LiveThinkingBubble
+Real-time thinking bubble widget that displays AI thinking process during streaming.
+
+```dart
+class LiveThinkingBubble extends StatefulWidget {
+  final String thinkingContent;
+  final bool isExpanded;
+  final VoidCallback onToggleExpansion;
+  final bool isDarkMode;
+  final double fontSize;
+}
+```
+
+### ThinkingBubble
+Static thinking bubble widget for displaying completed thinking content.
+
+```dart
+class ThinkingBubble extends StatefulWidget {
+  final ThinkingContent thinkingContent;
+  final bool isDarkMode;
+  final double fontSize;
+  final bool initiallyExpanded;
+}
+```
+
+### ThinkingIndicator
+Animated indicator for thinking process with multiple animation styles.
+
+```dart
+class ThinkingIndicator extends StatefulWidget {
+  final ThinkingIndicatorType type;
+  final Color color;
+  final double size;
+  final Duration duration;
+}
+
+enum ThinkingIndicatorType {
+  brainIcon,
+  dots,
+  text,
 }
 ```
 

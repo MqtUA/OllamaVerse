@@ -1,4 +1,5 @@
 import 'processed_file.dart';
+import '../services/thinking_model_detection_service.dart';
 
 enum MessageRole { user, assistant, system }
 
@@ -9,6 +10,8 @@ class Message {
   final DateTime timestamp;
   final bool isSystem;
   final List<ProcessedFile> processedFiles; // Files attached to this message
+  final ThinkingContent?
+      thinkingContent; // Extracted thinking content if available
 
   Message({
     required this.id,
@@ -16,6 +19,7 @@ class Message {
     required this.role,
     required this.timestamp,
     List<ProcessedFile>? processedFiles,
+    this.thinkingContent,
   })  : isSystem = role == MessageRole.system,
         processedFiles = processedFiles ?? [];
 
@@ -26,10 +30,33 @@ class Message {
       'role': role.toString().split('.').last,
       'timestamp': timestamp.toIso8601String(),
       'processedFiles': processedFiles.map((file) => file.toJson()).toList(),
+      'thinkingContent': thinkingContent != null
+          ? {
+              'originalResponse': thinkingContent!.originalResponse,
+              'thinkingText': thinkingContent!.thinkingText,
+              'finalAnswer': thinkingContent!.finalAnswer,
+              'hasThinking': thinkingContent!.hasThinking,
+              'thinkingStartIndex': thinkingContent!.thinkingStartIndex,
+              'thinkingEndIndex': thinkingContent!.thinkingEndIndex,
+            }
+          : null,
     };
   }
 
   factory Message.fromJson(Map<String, dynamic> json) {
+    ThinkingContent? thinkingContent;
+    if (json['thinkingContent'] != null) {
+      final thinkingData = json['thinkingContent'] as Map<String, dynamic>;
+      thinkingContent = ThinkingContent(
+        originalResponse: thinkingData['originalResponse'] as String,
+        thinkingText: thinkingData['thinkingText'] as String?,
+        finalAnswer: thinkingData['finalAnswer'] as String,
+        hasThinking: thinkingData['hasThinking'] as bool,
+        thinkingStartIndex: thinkingData['thinkingStartIndex'] as int?,
+        thinkingEndIndex: thinkingData['thinkingEndIndex'] as int?,
+      );
+    }
+
     return Message(
       id: json['id'] as String,
       content: json['content'] as String,
@@ -44,6 +71,7 @@ class Message {
                   ProcessedFile.fromJson(fileJson as Map<String, dynamic>))
               .toList()
           : [],
+      thinkingContent: thinkingContent,
     );
   }
 
@@ -65,6 +93,34 @@ class Message {
   List<ProcessedFile> get textFiles =>
       processedFiles.where((file) => file.hasTextContent).toList();
 
+  /// Check if this message has thinking content
+  bool get hasThinking => thinkingContent?.hasDisplayableThinking ?? false;
+
+  /// Get the thinking text for display
+  String? get thinkingText => thinkingContent?.thinkingText;
+
+  /// Get the final answer (separate from thinking)
+  String get finalAnswer {
+    // If we have thinking content, return the stored final answer or the message content
+    if (hasThinking) {
+      // If thinkingContent has a non-empty finalAnswer, use it
+      if (thinkingContent!.finalAnswer.isNotEmpty) {
+        return thinkingContent!.finalAnswer;
+      }
+      // Otherwise, the message content should already be filtered
+      return content;
+    }
+
+    // No thinking content, return original content
+    return content;
+  }
+
+  /// Get a summary of the thinking for display
+  String get thinkingSummary => thinkingContent?.thinkingSummary ?? '';
+
+  /// Get content appropriate for display based on thinking availability
+  String get displayContent => hasThinking ? finalAnswer : content;
+
   // UI Helper properties - for direct use in widgets instead of ChatMessage conversion
 
   /// UI helper: Check if this is a user message (for bubble alignment)
@@ -85,6 +141,7 @@ class Message {
     MessageRole? role,
     DateTime? timestamp,
     List<ProcessedFile>? processedFiles,
+    ThinkingContent? thinkingContent,
   }) {
     return Message(
       id: id ?? this.id,
@@ -92,7 +149,20 @@ class Message {
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       processedFiles: processedFiles ?? this.processedFiles,
+      thinkingContent: thinkingContent ?? this.thinkingContent,
     );
+  }
+
+  /// Create a copy of this message with thinking content extracted
+  Message withThinkingContent() {
+    if (role != MessageRole.assistant || content.isEmpty) {
+      return this;
+    }
+
+    final extractedThinking =
+        ThinkingModelDetectionService.extractThinkingContent(content);
+
+    return copyWith(thinkingContent: extractedThinking);
   }
 
   @override
