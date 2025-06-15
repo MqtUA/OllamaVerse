@@ -82,4 +82,16 @@ class SettingsProvider extends ChangeNotifier {
       authToken: _authToken,
     );
   }
+
+  // === LAST SELECTED MODEL METHODS ===
+
+  /// Load the last selected model from storage
+  Future<String> getLastSelectedModel() async {
+    return await _storageService.loadLastSelectedModel();
+  }
+
+  /// Save the last selected model to storage
+  Future<void> setLastSelectedModel(String modelName) async {
+    await _storageService.saveLastSelectedModel(modelName);
+  }
 }

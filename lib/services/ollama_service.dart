@@ -167,6 +167,7 @@ class OllamaService {
     List<ProcessedFile>? processedFiles,
     List<int>? context,
     List<Message>? conversationHistory,
+    int? contextLength,
   }) async {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
@@ -183,6 +184,13 @@ class OllamaService {
         'stream': false,
       };
 
+      // Add context length if specified
+      if (contextLength != null && contextLength > 0) {
+        requestBody['options'] = {
+          'num_ctx': contextLength,
+        };
+      }
+
       // Handle vision models with images
       final imageFiles = processedFiles
               ?.where((file) => file.type == FileType.image)
@@ -197,24 +205,53 @@ class OllamaService {
         // Use chat endpoint for vision models - build full conversation history
         final messages = <Map<String, dynamic>>[];
 
-        // Add conversation history first (excluding system messages for context preservation)
+        // Add conversation history including system messages
+        if (conversationHistory != null) {
+          int systemMessageCount = 0;
+          for (final msg in conversationHistory) {
+            String role;
+            switch (msg.role) {
+              case MessageRole.system:
+                role = 'system';
+                systemMessageCount++;
+                break;
+              case MessageRole.user:
+                role = 'user';
+                break;
+              case MessageRole.assistant:
+                role = 'assistant';
+                break;
+            }
+
+            final messageMap = <String, dynamic>{
+              'role': role,
+              'content': msg.content,
+            };
+
+            // Add images if this was a user message with images
+            if (msg.hasImages && msg.role == MessageRole.user) {
+              final images =
+                  msg.imageFiles.map((f) => f.base64Content!).toList();
+              if (images.isNotEmpty) {
+                messageMap['images'] = images;
+              }
+            }
+            messages.add(messageMap);
+          }
+
+          if (systemMessageCount > 0) {
+            AppLogger.info(
+                'Chat endpoint: Including $systemMessageCount system message(s) in conversation');
+          }
+        }
+
+        // Handle system prompts based on model capabilities
+        String systemPromptContent = '';
         if (conversationHistory != null) {
           for (final msg in conversationHistory) {
-            if (msg.role != MessageRole.system) {
-              final messageMap = <String, dynamic>{
-                'role': msg.role == MessageRole.user ? 'user' : 'assistant',
-                'content': msg.content,
-              };
-
-              // Add images if this was a user message with images
-              if (msg.hasImages && msg.role == MessageRole.user) {
-                final images =
-                    msg.imageFiles.map((f) => f.base64Content!).toList();
-                if (images.isNotEmpty) {
-                  messageMap['images'] = images;
-                }
-              }
-              messages.add(messageMap);
+            if (msg.role == MessageRole.system) {
+              systemPromptContent = msg.content;
+              break;
             }
           }
         }
@@ -227,6 +264,25 @@ class OllamaService {
             if (file.hasTextContent) {
               content += 'File: ${file.fileName}\n${file.textContent}\n\n';
             }
+          }
+        }
+
+        // Add system prompt handling based on model capabilities
+        if (systemPromptContent.isNotEmpty) {
+          if (capabilities.supportsSystemPrompts) {
+            // Add system message at the beginning for models that support it
+            messages.insert(0, {
+              'role': 'system',
+              'content': systemPromptContent,
+            });
+            AppLogger.info(
+                'Chat endpoint (non-streaming): Including system message (${systemPromptContent.length} chars) - Model supports system prompts');
+          } else {
+            // For models with limited system prompt support, prepend to user message
+            content =
+                'Instructions: $systemPromptContent\n\nPlease follow the above instructions when responding.\n\n$content';
+            AppLogger.info(
+                'Chat endpoint (non-streaming): Converting system prompt to instruction (${systemPromptContent.length} chars) - Model has limited system prompt support');
           }
         }
 
@@ -274,7 +330,34 @@ class OllamaService {
         }
       } else {
         // Use generate endpoint for text-only models with context
-        String finalPrompt = prompt;
+        String finalPrompt = '';
+
+        // Add system prompt first if available and supported by the model
+        String systemPrompt = '';
+        if (conversationHistory != null) {
+          for (final msg in conversationHistory) {
+            if (msg.role == MessageRole.system) {
+              systemPrompt = msg.content;
+
+              // Check if model supports system prompts
+              if (capabilities.supportsSystemPrompts) {
+                finalPrompt += '${msg.content}\n\n';
+                AppLogger.info(
+                    'Generate endpoint (streaming): Including system prompt (${systemPrompt.length} chars) - Model supports system prompts');
+              } else {
+                // For models that don't support system prompts, prepend as instruction
+                finalPrompt +=
+                    'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
+                AppLogger.info(
+                    'Generate endpoint (streaming): Converting system prompt to instruction (${systemPrompt.length} chars) - Model has limited system prompt support');
+              }
+              break; // Only use the first system message
+            }
+          }
+        }
+
+        // Add the current user prompt
+        finalPrompt += prompt;
 
         // Include text file content in the prompt
         if (processedFiles != null && processedFiles.isNotEmpty) {
@@ -341,6 +424,7 @@ class OllamaService {
     List<ProcessedFile>? processedFiles,
     List<int>? context,
     List<Message>? conversationHistory,
+    int? contextLength,
   }) async* {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
@@ -368,12 +452,26 @@ class OllamaService {
         // Use chat endpoint for vision models with conversation history
         final messages = <Map<String, dynamic>>[];
 
-        // Add conversation history first (excluding system messages)
+        // Add conversation history (excluding system messages initially)
         if (conversationHistory != null) {
           for (final msg in conversationHistory) {
             if (msg.role != MessageRole.system) {
+              String role;
+              switch (msg.role) {
+                case MessageRole.user:
+                  role = 'user';
+                  break;
+                case MessageRole.assistant:
+                  role = 'assistant';
+                  break;
+                case MessageRole.system:
+                  role =
+                      'system'; // This won't be reached due to the if condition
+                  break;
+              }
+
               final messageMap = <String, dynamic>{
-                'role': msg.role == MessageRole.user ? 'user' : 'assistant',
+                'role': role,
                 'content': msg.content,
               };
 
@@ -390,6 +488,17 @@ class OllamaService {
           }
         }
 
+        // Handle system prompts based on model capabilities
+        String systemPromptContent = '';
+        if (conversationHistory != null) {
+          for (final msg in conversationHistory) {
+            if (msg.role == MessageRole.system) {
+              systemPromptContent = msg.content;
+              break;
+            }
+          }
+        }
+
         String content = prompt;
         if (textFiles.isNotEmpty) {
           content += '\n\n';
@@ -397,6 +506,25 @@ class OllamaService {
             if (file.hasTextContent) {
               content += 'File: ${file.fileName}\n${file.textContent}\n\n';
             }
+          }
+        }
+
+        // Add system prompt handling based on model capabilities
+        if (systemPromptContent.isNotEmpty) {
+          if (capabilities.supportsSystemPrompts) {
+            // Add system message at the beginning for models that support it
+            messages.insert(0, {
+              'role': 'system',
+              'content': systemPromptContent,
+            });
+            AppLogger.info(
+                'Chat endpoint (streaming): Including system message (${systemPromptContent.length} chars) - Model supports system prompts');
+          } else {
+            // For models with limited system prompt support, prepend to user message
+            content =
+                'Instructions: $systemPromptContent\n\nPlease follow the above instructions when responding.\n\n$content';
+            AppLogger.info(
+                'Chat endpoint (streaming): Converting system prompt to instruction (${systemPromptContent.length} chars) - Model has limited system prompt support');
           }
         }
 
@@ -419,10 +547,44 @@ class OllamaService {
           'stream': true,
         };
 
+        // Add context length if specified
+        if (contextLength != null && contextLength > 0) {
+          requestBody['options'] = {
+            'num_ctx': contextLength,
+          };
+        }
+
         request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
       } else {
         // Use generate endpoint for text-only models with context
-        String finalPrompt = prompt;
+        String finalPrompt = '';
+
+        // Add system prompt first if available and supported by the model
+        String systemPrompt = '';
+        if (conversationHistory != null) {
+          for (final msg in conversationHistory) {
+            if (msg.role == MessageRole.system) {
+              systemPrompt = msg.content;
+
+              // Check if model supports system prompts
+              if (capabilities.supportsSystemPrompts) {
+                finalPrompt += '${msg.content}\n\n';
+                AppLogger.info(
+                    'Generate endpoint (streaming): Including system prompt (${systemPrompt.length} chars) - Model supports system prompts');
+              } else {
+                // For models that don't support system prompts, prepend as instruction
+                finalPrompt +=
+                    'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
+                AppLogger.info(
+                    'Generate endpoint (streaming): Converting system prompt to instruction (${systemPrompt.length} chars) - Model has limited system prompt support');
+              }
+              break; // Only use the first system message
+            }
+          }
+        }
+
+        // Add the current user prompt
+        finalPrompt += prompt;
 
         // Include text file content in the prompt
         if (processedFiles != null && processedFiles.isNotEmpty) {
@@ -439,6 +601,13 @@ class OllamaService {
           'prompt': finalPrompt,
           'stream': true,
         };
+
+        // Add context length if specified
+        if (contextLength != null && contextLength > 0) {
+          requestBody['options'] = {
+            'num_ctx': contextLength,
+          };
+        }
 
         // Add context if available for conversation memory
         if (context != null && context.isNotEmpty) {
@@ -531,6 +700,52 @@ class OllamaService {
       context: context,
       processedFiles: null,
     );
+  }
+
+  /// Check if a model supports system prompts and provide feedback
+  Future<Map<String, dynamic>> validateSystemPromptSupport(
+      String modelName) async {
+    try {
+      final capabilities =
+          ModelCapabilityService.getModelCapabilities(modelName);
+
+      return {
+        'supported': capabilities.supportsSystemPrompts,
+        'modelName': modelName,
+        'fallbackMethod': capabilities.supportsSystemPrompts
+            ? 'native'
+            : 'instruction-prepend',
+        'recommendation': capabilities.supportsSystemPrompts
+            ? 'This model has excellent system prompt support. System messages will be sent natively.'
+            : 'This model has limited system prompt support. System prompts will be converted to instructions for better compatibility.',
+        'capabilities': {
+          'vision': capabilities.supportsVision,
+          'code': capabilities.supportsCode,
+          'multimodal': capabilities.supportsMultimodal,
+          'systemPrompts': capabilities.supportsSystemPrompts,
+        }
+      };
+    } catch (e) {
+      AppLogger.error(
+          'Error validating system prompt support for $modelName', e);
+      return {
+        'supported':
+            true, // Default to supported to avoid breaking functionality
+        'modelName': modelName,
+        'fallbackMethod': 'native',
+        'recommendation':
+            'Unable to determine system prompt support. Assuming native support.',
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Get system prompt handling strategy for current model
+  String getSystemPromptStrategy(String modelName) {
+    final capabilities = ModelCapabilityService.getModelCapabilities(modelName);
+    return capabilities.supportsSystemPrompts
+        ? 'native'
+        : 'instruction-prepend';
   }
 
   void dispose() {

@@ -5,7 +5,7 @@ import '../models/message.dart';
 import '../models/processed_file.dart';
 import '../services/ollama_service.dart';
 import '../services/chat_history_service.dart';
-import '../services/settings_service.dart';
+
 import '../services/file_content_processor.dart';
 import '../services/thinking_model_detection_service.dart';
 import '../providers/settings_provider.dart';
@@ -13,7 +13,6 @@ import '../utils/logger.dart';
 
 class ChatProvider with ChangeNotifier {
   final ChatHistoryService _chatHistoryService;
-  final SettingsService _settingsService;
   final SettingsProvider _settingsProvider;
 
   List<Chat> _chats = [];
@@ -149,10 +148,8 @@ class ChatProvider with ChangeNotifier {
 
   ChatProvider({
     required ChatHistoryService chatHistoryService,
-    required SettingsService settingsService,
     required SettingsProvider settingsProvider,
   })  : _chatHistoryService = chatHistoryService,
-        _settingsService = settingsService,
         _settingsProvider = settingsProvider {
     _initialize();
   }
@@ -254,8 +251,8 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> _loadLastSelectedModel() async {
     try {
-      final lastModel = await _settingsService.getLastSelectedModel();
-      if (lastModel != null) {
+      final lastModel = await _settingsProvider.getLastSelectedModel();
+      if (lastModel.isNotEmpty) {
         _lastSelectedModel = lastModel;
       }
     } catch (e) {
@@ -351,7 +348,7 @@ class ChatProvider with ChangeNotifier {
                   : 'unknown'));
 
       _lastSelectedModel = selectedModel;
-      await _settingsService.setLastSelectedModel(selectedModel);
+      await _settingsProvider.setLastSelectedModel(selectedModel);
 
       final newChat = Chat(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -363,7 +360,7 @@ class ChatProvider with ChangeNotifier {
       );
 
       // Add system prompt if available
-      final systemPrompt = _settingsService.systemPrompt;
+      final systemPrompt = _settingsProvider.settings.systemPrompt;
       if (systemPrompt.isNotEmpty) {
         final systemMessage = Message(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -383,6 +380,111 @@ class ChatProvider with ChangeNotifier {
     } catch (e) {
       _error = 'Failed to create new chat: ${e.toString()}';
       AppLogger.error('Error creating new chat', e);
+      _safeNotifyListeners();
+    }
+  }
+
+  /// Update system prompt for existing chat
+  /// This will add/update/remove the system prompt for the specified chat
+  Future<void> updateChatSystemPrompt(String chatId) async {
+    try {
+      final currentChats = _chatHistoryService.chats;
+      final chatIndex = currentChats.indexWhere((c) => c.id == chatId);
+
+      if (chatIndex >= 0) {
+        final currentChat = currentChats[chatIndex];
+        final currentSystemPrompt = _settingsProvider.settings.systemPrompt;
+
+        // Create a new messages list
+        List<Message> updatedMessages = [];
+
+        // Remove any existing system messages
+        updatedMessages = currentChat.messages
+            .where((message) => message.role != MessageRole.system)
+            .toList();
+
+        // Add new system prompt if it exists
+        if (currentSystemPrompt.isNotEmpty) {
+          final systemMessage = Message(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: currentSystemPrompt,
+            role: MessageRole.system,
+            timestamp: DateTime.now(),
+          );
+          // Insert system message at the beginning
+          updatedMessages.insert(0, systemMessage);
+        }
+
+        final updatedChat = currentChat.copyWith(
+          messages: updatedMessages,
+          lastUpdatedAt: DateTime.now(),
+        );
+
+        // Update active chat if this is the active one
+        if (_activeChat?.id == chatId) {
+          _activeChat = updatedChat;
+        }
+
+        // Save to service - this will trigger the stream update
+        await _chatHistoryService.saveChat(updatedChat);
+        _safeNotifyListeners();
+
+        AppLogger.info('Updated system prompt for chat: ${currentChat.title}');
+      }
+    } catch (e) {
+      _error = 'Failed to update chat system prompt: ${e.toString()}';
+      AppLogger.error('Error updating chat system prompt', e);
+      _safeNotifyListeners();
+    }
+  }
+
+  /// Update system prompt for all existing chats
+  /// This is useful when the user changes the system prompt and wants to apply it to all chats
+  Future<void> updateAllChatsSystemPrompt() async {
+    try {
+      final currentChats = _chatHistoryService.chats;
+      final currentSystemPrompt = _settingsProvider.settings.systemPrompt;
+
+      for (final chat in currentChats) {
+        // Create a new messages list
+        List<Message> updatedMessages = [];
+
+        // Remove any existing system messages
+        updatedMessages = chat.messages
+            .where((message) => message.role != MessageRole.system)
+            .toList();
+
+        // Add new system prompt if it exists
+        if (currentSystemPrompt.isNotEmpty) {
+          final systemMessage = Message(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: currentSystemPrompt,
+            role: MessageRole.system,
+            timestamp: DateTime.now(),
+          );
+          // Insert system message at the beginning
+          updatedMessages.insert(0, systemMessage);
+        }
+
+        final updatedChat = chat.copyWith(
+          messages: updatedMessages,
+          lastUpdatedAt: DateTime.now(),
+        );
+
+        // Update active chat if this is the active one
+        if (_activeChat?.id == chat.id) {
+          _activeChat = updatedChat;
+        }
+
+        // Save to service - this will trigger the stream update
+        await _chatHistoryService.saveChat(updatedChat);
+      }
+
+      _safeNotifyListeners();
+      AppLogger.info('Updated system prompt for ${currentChats.length} chats');
+    } catch (e) {
+      _error = 'Failed to update system prompt for all chats: ${e.toString()}';
+      AppLogger.error('Error updating system prompt for all chats', e);
       _safeNotifyListeners();
     }
   }
@@ -464,12 +566,15 @@ class ChatProvider with ChangeNotifier {
 
       if (chatIndex >= 0) {
         final currentChat = currentChats[chatIndex];
-        bool isDefaultTitle = currentChat.messages.isEmpty &&
+        // Check if this is a new chat (only has system messages, no user/assistant messages)
+        final hasUserMessages =
+            currentChat.messages.where((msg) => !msg.isSystem).isNotEmpty;
+        bool isDefaultTitle = !hasUserMessages &&
             (currentChat.title == 'New Chat' ||
                 currentChat.title.startsWith('New chat with'));
 
         _lastSelectedModel = newModelName;
-        await _settingsService.setLastSelectedModel(newModelName);
+        await _settingsProvider.setLastSelectedModel(newModelName);
 
         final updatedChat = currentChat.copyWith(
           modelName: newModelName,
@@ -595,6 +700,7 @@ class ChatProvider with ChangeNotifier {
               processedFiles: processedFiles.isNotEmpty ? processedFiles : null,
               context: _activeChat!.context,
               conversationHistory: _activeChat!.messages,
+              contextLength: _settingsProvider.settings.contextLength,
             )) {
           // CRITICAL: Check if generation was explicitly cancelled (but allow chat switching)
           if (!_isGenerating) {
@@ -636,6 +742,7 @@ class ChatProvider with ChangeNotifier {
               processedFiles: processedFiles.isNotEmpty ? processedFiles : null,
               context: _activeChat!.context,
               conversationHistory: _activeChat!.messages,
+              contextLength: _settingsProvider.settings.contextLength,
             );
         finalResponse = ollamaResponse.response;
         newContext = ollamaResponse.context;
@@ -697,6 +804,15 @@ class ChatProvider with ChangeNotifier {
         context: newContext, // Store the context for future requests
       );
 
+      // Clear streaming state immediately to prevent duplicate message bubbles
+      _isGenerating = false;
+      _currentStreamingResponse = '';
+      _currentDisplayResponse = '';
+      _currentThinkingContent = '';
+      _hasActiveThinkingBubble = false;
+      _isInsideThinkingBlock = false;
+      _isThinkingPhase = false;
+
       // Update the generating chat, not necessarily the active chat
       await _updateChatInList(updatedWithAiChat);
 
@@ -705,7 +821,11 @@ class ChatProvider with ChangeNotifier {
         _activeChat = updatedWithAiChat;
       }
 
+      // Notify UI that streaming is complete and message is final
+      _safeNotifyListeners();
+
       // Auto-generate chat title if this is the first AI response and chat has default title
+      // Keep the generating chat ID until title generation is complete
       await _autoGenerateChatTitleIfNeeded(
           updatedWithAiChat, userMessage.content, finalResponse);
     } on OllamaConnectionException catch (e) {
@@ -718,6 +838,7 @@ class ChatProvider with ChangeNotifier {
       _error = 'Failed to generate response: ${e.toString()}';
       AppLogger.error('Error sending message', e);
     } finally {
+      // Clear any remaining streaming state (in case of errors)
       _isGenerating = false;
       _isThinkingPhase = false;
       _currentStreamingResponse = '';
@@ -888,6 +1009,64 @@ Model: $modelName
     } catch (e) {
       AppLogger.error('Error generating chat title', e);
       return '';
+    }
+  }
+
+  /// Validate system prompt support for the current model
+  Future<Map<String, dynamic>> validateCurrentModelSystemPromptSupport() async {
+    final currentModel = _activeChat?.modelName ?? _lastSelectedModel;
+    if (currentModel.isEmpty) {
+      return {
+        'supported': true,
+        'modelName': 'unknown',
+        'fallbackMethod': 'native',
+        'recommendation':
+            'No model selected. System prompt support cannot be determined.',
+      };
+    }
+
+    try {
+      final ollamaService = OllamaService(
+        settings: _settingsProvider.settings,
+        authToken: _settingsProvider.authToken,
+      );
+
+      final validation =
+          await ollamaService.validateSystemPromptSupport(currentModel);
+      ollamaService.dispose();
+
+      return validation;
+    } catch (e) {
+      AppLogger.error('Error validating system prompt support', e);
+      return {
+        'supported': true, // Default to supported
+        'modelName': currentModel,
+        'fallbackMethod': 'native',
+        'recommendation':
+            'Unable to validate system prompt support. Assuming native support.',
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Get system prompt handling strategy for current model
+  String getCurrentModelSystemPromptStrategy() {
+    final currentModel = _activeChat?.modelName ?? _lastSelectedModel;
+    if (currentModel.isEmpty) return 'native';
+
+    try {
+      final ollamaService = OllamaService(
+        settings: _settingsProvider.settings,
+        authToken: _settingsProvider.authToken,
+      );
+
+      final strategy = ollamaService.getSystemPromptStrategy(currentModel);
+      ollamaService.dispose();
+
+      return strategy;
+    } catch (e) {
+      AppLogger.error('Error getting system prompt strategy', e);
+      return 'native'; // Default fallback
     }
   }
 }

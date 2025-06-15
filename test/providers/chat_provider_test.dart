@@ -6,14 +6,13 @@ import 'package:ollamaverse/providers/chat_provider.dart';
 import 'package:ollamaverse/providers/settings_provider.dart';
 import 'package:ollamaverse/services/chat_history_service.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
-import 'package:ollamaverse/services/settings_service.dart';
+
 import 'package:ollamaverse/models/app_settings.dart';
 
 // Generate mocks with custom names to avoid conflicts
 @GenerateMocks([], customMocks: [
   MockSpec<OllamaService>(as: #MockOllamaServiceTest),
   MockSpec<ChatHistoryService>(as: #MockChatHistoryServiceTest),
-  MockSpec<SettingsService>(as: #MockSettingsServiceTest),
   MockSpec<SettingsProvider>(as: #MockSettingsProviderTest),
 ])
 import 'chat_provider_test.mocks.dart';
@@ -28,7 +27,6 @@ void main() {
 
   late MockOllamaServiceTest mockOllamaService;
   late MockChatHistoryServiceTest mockChatHistoryService;
-  late MockSettingsServiceTest mockSettingsService;
   late MockSettingsProviderTest mockSettingsProvider;
   late ChatProvider chatProvider;
 
@@ -37,12 +35,9 @@ void main() {
   setUp(() {
     mockOllamaService = MockOllamaServiceTest();
     mockChatHistoryService = MockChatHistoryServiceTest();
-    mockSettingsService = MockSettingsServiceTest();
     mockSettingsProvider = MockSettingsProviderTest();
 
     // Setup mock behavior
-    when(mockSettingsService.selectedModel).thenReturn('llama2');
-    when(mockSettingsService.systemPrompt).thenReturn('');
     when(mockOllamaService.getModels()).thenAnswer((_) async => testModels);
 
     // Setup mock settings provider
@@ -50,11 +45,12 @@ void main() {
       AppSettings(showLiveResponse: false),
     );
     when(mockSettingsProvider.getOllamaService()).thenReturn(mockOllamaService);
+    when(mockSettingsProvider.getLastSelectedModel())
+        .thenAnswer((_) async => 'llama2');
 
     // Create the provider with the mocks
     chatProvider = ChatProvider(
       chatHistoryService: mockChatHistoryService,
-      settingsService: mockSettingsService,
       settingsProvider: mockSettingsProvider,
     );
   });
@@ -78,8 +74,6 @@ void main() {
     });
 
     test('creates new chat', () async {
-      when(mockSettingsService.systemPrompt).thenReturn('');
-
       await chatProvider.createNewChat('llama2');
 
       expect(chatProvider.activeChat, isNotNull);

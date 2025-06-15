@@ -32,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _attachedFiles = [];
   bool _isCtrlPressed = false;
   bool _userHasScrolled = false;
+  bool _isSendingMessage = false; // Prevent duplicate sends
 
   // Cache provider reference to avoid unsafe lookups during dispose
   ChatProvider? _chatProvider;
@@ -199,7 +200,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() {
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    if (message.isEmpty || _isSendingMessage) return;
+
+    // Prevent duplicate sends
+    setState(() {
+      _isSendingMessage = true;
+    });
 
     // Use cached provider reference or get fresh one if needed
     final chatProvider =
@@ -212,15 +218,24 @@ class _ChatScreenState extends State<ChatScreen> {
       attachedFiles: _attachedFiles,
     )
         .then((_) {
-      // Success case - nothing to do
+      // Success case - reset sending flag
+      if (mounted) {
+        setState(() {
+          _isSendingMessage = false;
+        });
+      }
     }).catchError((error) {
-      // Check if the widget is still mounted before using the context
-      if (!mounted) return; // Early return if widget is no longer mounted
+      // Reset sending flag on error
+      if (mounted) {
+        setState(() {
+          _isSendingMessage = false;
+        });
 
-      // Now it's safe to use the context since we've checked mounted status
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $error')));
+        // Show error message
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $error')));
+      }
     });
 
     // Clear the input field and attachments
@@ -742,21 +757,27 @@ class _ChatScreenState extends State<ChatScreen> {
                               )
                             : Icon(
                                 Icons.send,
-                                color: Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.lightBlueAccent
-                                    : Theme.of(context).primaryColor,
+                                color: _isSendingMessage
+                                    ? Colors.grey
+                                    : Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.lightBlueAccent
+                                        : Theme.of(context).primaryColor,
                               ),
-                        onPressed: () {
-                          if (chatProvider.isActiveChatGenerating) {
-                            chatProvider.cancelGeneration();
-                          } else {
-                            _sendMessage();
-                          }
-                        },
+                        onPressed: _isSendingMessage
+                            ? null
+                            : () {
+                                if (chatProvider.isActiveChatGenerating) {
+                                  chatProvider.cancelGeneration();
+                                } else {
+                                  _sendMessage();
+                                }
+                              },
                         tooltip: chatProvider.isActiveChatGenerating
                             ? 'Stop generation'
-                            : 'Send message',
+                            : _isSendingMessage
+                                ? 'Sending...'
+                                : 'Send message',
                       ),
                     ],
                   ),

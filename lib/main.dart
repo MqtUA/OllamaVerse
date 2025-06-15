@@ -10,7 +10,7 @@ import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
 import 'services/chat_history_service.dart';
-import 'services/settings_service.dart';
+
 import 'services/storage_service.dart';
 import 'services/file_cleanup_service.dart';
 import 'services/performance_monitor.dart';
@@ -81,11 +81,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Create the ThemeNotifier first (simple theme management)
-        ChangeNotifierProvider(create: (_) => ThemeNotifier()),
-
-        // Create the SettingsProvider
+        // Create the SettingsProvider first
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+
+        // Create the ThemeNotifier and sync it with SettingsProvider
+        ChangeNotifierProxyProvider<SettingsProvider, ThemeNotifier>(
+          create: (context) => ThemeNotifier(),
+          update: (context, settingsProvider, themeNotifier) {
+            if (themeNotifier != null && !settingsProvider.isLoading) {
+              // Sync theme notifier with settings provider dark mode
+              final shouldBeDark = settingsProvider.settings.darkMode;
+              if (themeNotifier.isDarkMode != shouldBeDark) {
+                // Use Future.microtask to avoid calling setState during build
+                Future.microtask(() => themeNotifier.setDarkMode(shouldBeDark));
+              }
+            }
+            return themeNotifier ?? ThemeNotifier();
+          },
+        ),
 
         // Create the ChatProvider with the required parameters
         ChangeNotifierProxyProvider<SettingsProvider, ChatProvider>(
@@ -94,10 +107,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             final settingsProvider =
                 Provider.of<SettingsProvider>(context, listen: false);
             final chatHistoryService = ChatHistoryService();
-            final settingsService = SettingsService(widget.prefs);
             return ChatProvider(
               chatHistoryService: chatHistoryService,
-              settingsService: settingsService,
               settingsProvider: settingsProvider,
             );
           },
@@ -105,10 +116,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (context, settingsProvider, previous) {
             if (previous == null) {
               final chatHistoryService = ChatHistoryService();
-              final settingsService = SettingsService(widget.prefs);
               return ChatProvider(
                 chatHistoryService: chatHistoryService,
-                settingsService: settingsService,
                 settingsProvider: settingsProvider,
               );
             }

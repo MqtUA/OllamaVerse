@@ -116,17 +116,20 @@ class ModelSelector extends StatelessWidget {
           },
           onSelected: (modelName) {
             if (activeChat != null) {
-              // Show a dialog to confirm changing the model for an existing chat
-              showDialog(
-                context: context,
-                builder: (BuildContext context) {
-                  return AlertDialog(
-                    title: const Text('Change Model'),
-                    content: Text(activeChat.messages.isEmpty
-                        ? 'Do you want to use $modelName for this chat?'
-                        : 'Do you want to change the model to $modelName for this chat or create a new chat?'),
-                    actions: [
-                      if (activeChat.messages.isNotEmpty)
+              // Check if chat has messages (excluding system messages)
+              final hasUserMessages =
+                  activeChat.messages.where((msg) => !msg.isSystem).isNotEmpty;
+
+              if (hasUserMessages) {
+                // Show confirmation dialog for chats with messages
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return AlertDialog(
+                      title: const Text('Change Model'),
+                      content: Text(
+                          'Do you want to change the model to $modelName for this chat or create a new chat?'),
+                      actions: [
                         TextButton(
                           onPressed: () {
                             Navigator.of(context).pop();
@@ -134,23 +137,27 @@ class ModelSelector extends StatelessWidget {
                           },
                           child: const Text('Create New Chat'),
                         ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          // Update the model for the current chat
-                          chatProvider.updateChatModel(
-                              activeChat.id, modelName);
-                        },
-                        child: const Text('Change Model'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  );
-                },
-              );
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            // Update the model for the current chat
+                            chatProvider.updateChatModel(
+                                activeChat.id, modelName);
+                          },
+                          child: const Text('Change Model'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              } else {
+                // No user messages, directly update the model without confirmation
+                chatProvider.updateChatModel(activeChat.id, modelName);
+              }
             } else {
               // If no active chat, create a new one with the selected model
               chatProvider.createNewChat(modelName);

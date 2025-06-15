@@ -7,6 +7,7 @@ class ModelCapabilities {
   final bool supportsText; // Can process text (all models)
   final bool supportsCode; // Optimized for code
   final bool supportsMultimodal; // Can process both text and images
+  final bool supportsSystemPrompts; // Can handle system messages properly
   final List<String> supportedImageTypes;
   final int maxImageSize; // Maximum image size in MB
   final String? description;
@@ -17,6 +18,7 @@ class ModelCapabilities {
     required this.supportsText,
     required this.supportsCode,
     required this.supportsMultimodal,
+    required this.supportsSystemPrompts,
     required this.supportedImageTypes,
     required this.maxImageSize,
     this.description,
@@ -24,13 +26,16 @@ class ModelCapabilities {
 
   /// Create capabilities for a text-only model
   factory ModelCapabilities.textOnly(String modelName,
-      {String? description, bool supportsCode = false}) {
+      {String? description,
+      bool supportsCode = false,
+      bool supportsSystemPrompts = true}) {
     return ModelCapabilities(
       modelName: modelName,
       supportsVision: false,
       supportsText: true,
       supportsCode: supportsCode,
       supportsMultimodal: false,
+      supportsSystemPrompts: supportsSystemPrompts,
       supportedImageTypes: [],
       maxImageSize: 0,
       description: description,
@@ -43,6 +48,7 @@ class ModelCapabilities {
     String? description,
     List<String>? imageTypes,
     int maxImageSizeMB = 10,
+    bool supportsSystemPrompts = true,
   }) {
     return ModelCapabilities(
       modelName: modelName,
@@ -50,6 +56,7 @@ class ModelCapabilities {
       supportsText: true,
       supportsCode: false,
       supportsMultimodal: true,
+      supportsSystemPrompts: supportsSystemPrompts,
       supportedImageTypes:
           imageTypes ?? ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
       maxImageSize: maxImageSizeMB,
@@ -63,6 +70,7 @@ class ModelCapabilities {
     if (supportsText) capabilities.add('text');
     if (supportsVision) capabilities.add('vision');
     if (supportsCode) capabilities.add('code');
+    if (supportsSystemPrompts) capabilities.add('system-prompts');
     return 'ModelCapabilities($modelName: ${capabilities.join(', ')})';
   }
 }
@@ -98,6 +106,27 @@ class ModelCapabilityService {
     'code-', // Generic code prefix
   ];
 
+  // Models that may have limited or no system prompt support
+  static const List<String> _limitedSystemPromptModels = [
+    'gemma', // Gemma models may have limited system prompt support
+    'phi', // Phi models may have different system prompt handling
+    'tinyllama', // Very small models may not support system prompts well
+    'orca-mini', // Some smaller models may have limited support
+  ];
+
+  // Models known to have excellent system prompt support
+  static const List<String> _excellentSystemPromptModels = [
+    'llama', // Llama family generally has good system prompt support
+    'mistral', // Mistral models have excellent system prompt support
+    'mixtral', // Mixtral models have excellent system prompt support
+    'qwen', // Qwen models support system prompts well
+    'yi', // Yi models support system prompts
+    'solar', // Solar models support system prompts
+    'openchat', // OpenChat models are designed for conversation
+    'vicuna', // Vicuna models support system prompts
+    'wizard', // WizardLM models support system prompts
+  ];
+
   /// Get capabilities for a specific model
   static ModelCapabilities getModelCapabilities(String modelName) {
     // Clear cache once to apply new detection logic
@@ -131,8 +160,28 @@ class ModelCapabilityService {
     // If the model doesn't actually support vision, Ollama will return an error
     bool isVisionModel = true;
     bool isCodeModel = false;
+    bool supportsSystemPrompts =
+        true; // Default to true, but check for exceptions
     String description =
         'Vision-language model capable of processing images and text';
+
+    // Check for models with limited system prompt support
+    for (final pattern in _limitedSystemPromptModels) {
+      if (lowerName.contains(pattern.toLowerCase())) {
+        supportsSystemPrompts = false;
+        AppLogger.info(
+            'Model $modelName may have limited system prompt support');
+        break;
+      }
+    }
+
+    // Override for models known to have excellent system prompt support
+    for (final pattern in _excellentSystemPromptModels) {
+      if (lowerName.contains(pattern.toLowerCase())) {
+        supportsSystemPrompts = true;
+        break;
+      }
+    }
 
     // Check for known vision models to provide better descriptions
     for (final pattern in _visionModelPatterns) {
@@ -159,6 +208,7 @@ class ModelCapabilityService {
       supportsText: true,
       supportsCode: isCodeModel,
       supportsMultimodal: isVisionModel,
+      supportsSystemPrompts: supportsSystemPrompts,
       supportedImageTypes: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
       maxImageSize: 10,
       description: description,
@@ -213,6 +263,11 @@ class ModelCapabilityService {
     return getModelCapabilities(modelName).supportsMultimodal;
   }
 
+  /// Check if a model supports system prompts
+  static bool supportsSystemPrompts(String modelName) {
+    return getModelCapabilities(modelName).supportsSystemPrompts;
+  }
+
   /// Get all models that support vision from a list
   static List<String> getVisionModels(List<String> availableModels) {
     return availableModels.where((model) => supportsVision(model)).toList();
@@ -221,6 +276,13 @@ class ModelCapabilityService {
   /// Get all models that support code from a list
   static List<String> getCodeModels(List<String> availableModels) {
     return availableModels.where((model) => supportsCode(model)).toList();
+  }
+
+  /// Get all models that support system prompts from a list
+  static List<String> getSystemPromptModels(List<String> availableModels) {
+    return availableModels
+        .where((model) => supportsSystemPrompts(model))
+        .toList();
   }
 
   /// Get the best model for a specific task
@@ -254,6 +316,9 @@ class ModelCapabilityService {
         _capabilityCache.values.where((cap) => cap.supportsVision).length;
     final codeCount =
         _capabilityCache.values.where((cap) => cap.supportsCode).length;
+    final systemPromptCount = _capabilityCache.values
+        .where((cap) => cap.supportsSystemPrompts)
+        .length;
     final textCount = _capabilityCache.values
         .where((cap) =>
             cap.supportsText && !cap.supportsVision && !cap.supportsCode)
@@ -263,6 +328,7 @@ class ModelCapabilityService {
       'totalCached': _capabilityCache.length,
       'visionModels': visionCount,
       'codeModels': codeCount,
+      'systemPromptModels': systemPromptCount,
       'textModels': textCount,
     };
   }

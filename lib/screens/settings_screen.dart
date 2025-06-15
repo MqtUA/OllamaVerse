@@ -426,6 +426,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      // Button to apply system prompt to all existing chats
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Consumer<ChatProvider>(
+                          builder: (context, chatProvider, child) {
+                            return OutlinedButton.icon(
+                              onPressed: () async {
+                                // Show confirmation dialog
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Apply System Prompt'),
+                                    content: const Text(
+                                      'This will update all existing chats with the current system prompt. '
+                                      'Any previous system prompts will be replaced. Continue?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('Apply'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirmed == true) {
+                                  await chatProvider
+                                      .updateAllChatsSystemPrompt();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'System prompt applied to all chats'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.update, size: 16),
+                              label: const Text('Apply to All Chats'),
+                            );
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),

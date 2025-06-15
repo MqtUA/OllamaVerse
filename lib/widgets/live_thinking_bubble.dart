@@ -26,6 +26,7 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
   late AnimationController _animationController;
   late Animation<double> _expandAnimation;
   static const String _liveThinkingBubbleId = 'live_thinking_bubble';
+  bool _hasScheduledAutoCollapse = false;
 
   @override
   void initState() {
@@ -100,15 +101,26 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
         if (!chatProvider.isActiveChatGenerating &&
             !chatProvider.isInsideThinkingBlock &&
             settings.thinkingBubbleAutoCollapse &&
-            chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId)) {
-          // Auto-collapse after a short delay to let user see the completion
+            chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId) &&
+            !_hasScheduledAutoCollapse) {
+          // Schedule auto-collapse only once
+          _hasScheduledAutoCollapse = true;
           Future.delayed(const Duration(milliseconds: 500), () {
             // Double-check mounted state before accessing context or state
             if (mounted &&
                 chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId)) {
               _toggleExpansion();
             }
+            // Reset the flag after the delay
+            if (mounted) {
+              _hasScheduledAutoCollapse = false;
+            }
           });
+        }
+
+        // Reset auto-collapse flag when thinking starts again
+        if (chatProvider.isActiveChatGenerating && _hasScheduledAutoCollapse) {
+          _hasScheduledAutoCollapse = false;
         }
 
         return Container(
