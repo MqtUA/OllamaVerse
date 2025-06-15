@@ -227,6 +227,11 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> _loadModels() async {
     try {
+      // Wait for settings to be ready before loading models
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
       final ollamaService = _settingsProvider.getOllamaService();
       _availableModels = await ollamaService.getModels();
       AppLogger.info('Successfully loaded ${_availableModels.length} models');
@@ -945,6 +950,11 @@ class ChatProvider with ChangeNotifier {
   Future<String> _generateChatTitle(
       String userMessage, String aiResponse, String modelName) async {
     try {
+      // Wait for settings to be ready before generating title
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
       // Filter thinking content from AI response for better title generation
       String processedAiResponse = aiResponse;
 
@@ -965,7 +975,7 @@ class ChatProvider with ChangeNotifier {
 
 User: $userMessage
 
-Assistant: $processedAiResponse
+A: $processedAiResponse
 
 Model: $modelName
 ''';
@@ -1026,10 +1036,12 @@ Model: $modelName
     }
 
     try {
-      final ollamaService = OllamaService(
-        settings: _settingsProvider.settings,
-        authToken: _settingsProvider.authToken,
-      );
+      // Wait for settings to be ready before validation
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      final ollamaService = _settingsProvider.getOllamaService();
 
       final validation =
           await ollamaService.validateSystemPromptSupport(currentModel);
@@ -1055,10 +1067,14 @@ Model: $modelName
     if (currentModel.isEmpty) return 'native';
 
     try {
-      final ollamaService = OllamaService(
-        settings: _settingsProvider.settings,
-        authToken: _settingsProvider.authToken,
-      );
+      // Note: This is a synchronous method, but we should ideally make it async
+      // For now, we check if settings are still loading and return default
+      if (_settingsProvider.isLoading) {
+        AppLogger.warning('Settings still loading, using default strategy');
+        return 'native';
+      }
+
+      final ollamaService = _settingsProvider.getOllamaService();
 
       final strategy = ollamaService.getSystemPromptStrategy(currentModel);
       ollamaService.dispose();

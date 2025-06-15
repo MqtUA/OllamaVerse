@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../services/storage_service.dart';
 import '../services/ollama_service.dart';
+import '../utils/logger.dart';
 
 class SettingsProvider extends ChangeNotifier {
   AppSettings _settings = AppSettings();
@@ -36,6 +37,10 @@ class SettingsProvider extends ChangeNotifier {
 
     _settings = await _storageService.loadSettings();
     _authToken = await _storageService.getAuthToken();
+
+    // Log the loaded settings for debugging
+    AppLogger.info('Settings loaded - Ollama URL: ${_settings.ollamaUrl}');
+    AppLogger.debug('Auth token ${_authToken != null ? 'present' : 'not set'}');
 
     _isLoading = false;
     _safeNotifyListeners();
@@ -77,6 +82,10 @@ class SettingsProvider extends ChangeNotifier {
 
   // Get a configured OllamaService instance based on current settings
   OllamaService getOllamaService() {
+    // Log the current settings being used for debugging
+    final ollamaUrl = _settings.ollamaUrl;
+    AppLogger.debug('Creating OllamaService with URL: $ollamaUrl');
+
     return OllamaService(
       settings: _settings,
       authToken: _authToken,
