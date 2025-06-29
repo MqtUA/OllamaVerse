@@ -150,6 +150,7 @@ app.*.map.json
 # Cursor and Specstory files
 .specstory
 .cursor
+memory-bank/
 
 # Project-specific ignore files
 .cursorindexingignore

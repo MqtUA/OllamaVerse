@@ -308,7 +308,7 @@ class ChatProvider extends ChangeNotifier {
   bool get hasActiveThinkingBubble;
   bool get isInsideThinkingBlock;
   bool isThinkingBubbleExpanded(String bubbleId);
-  
+
   // Chat Management
   Future<void> createNewChat([String? modelName]);
   void setActiveChat(String chatId);
