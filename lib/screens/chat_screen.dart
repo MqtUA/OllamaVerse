@@ -693,96 +693,98 @@ class _ChatScreenState extends State<ChatScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            child: Consumer<ChatProvider>(
-              builder: (context, chatProvider, child) {
-                return Container(
-                  padding: const EdgeInsets.all(8.0),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(26),
-                        blurRadius: 4,
-                        offset: const Offset(0, -1),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.attach_file),
-                        onPressed: _pickFiles,
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          focusNode: _messageFocusNode,
-                          decoration: InputDecoration(
-                            hintText: 'Type a message...',
-                            border: const OutlineInputBorder(),
-                            suffixIcon: _isCtrlPressed
-                                ? const Icon(
-                                    Icons.keyboard_return,
-                                    color: Colors.green,
-                                  )
-                                : null,
-                          ),
-                          minLines: 1,
-                          maxLines: 5,
-                          textInputAction: TextInputAction.newline,
+            child: SafeArea(
+              child: Consumer<ChatProvider>(
+                builder: (context, chatProvider, child) {
+                  return Container(
+                    padding: const EdgeInsets.all(8.0),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(26),
+                          blurRadius: 4,
+                          offset: const Offset(0, -1),
                         ),
-                      ),
-                      const SizedBox(width: 8.0),
-                      IconButton(
-                        icon: chatProvider.isActiveChatGenerating
-                            ? Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.attach_file),
+                          onPressed: _pickFiles,
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _messageFocusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Type a message...',
+                              border: const OutlineInputBorder(),
+                              suffixIcon: _isCtrlPressed
+                                  ? const Icon(
+                                      Icons.keyboard_return,
+                                      color: Colors.green,
+                                    )
+                                  : null,
+                            ),
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.newline,
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        IconButton(
+                          icon: chatProvider.isActiveChatGenerating
+                              ? Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
-                                  ),
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: Colors.red,
-                                      borderRadius: BorderRadius.circular(2),
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              )
-                            : Icon(
-                                Icons.send,
-                                color: _isSendingMessage
-                                    ? Colors.grey
-                                    : Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.lightBlueAccent
-                                        : Theme.of(context).primaryColor,
-                              ),
-                        onPressed: _isSendingMessage
-                            ? null
-                            : () {
-                                if (chatProvider.isActiveChatGenerating) {
-                                  chatProvider.cancelGeneration();
-                                } else {
-                                  _sendMessage();
-                                }
-                              },
-                        tooltip: chatProvider.isActiveChatGenerating
-                            ? 'Stop generation'
-                            : _isSendingMessage
-                                ? 'Sending...'
-                                : 'Send message',
-                      ),
-                    ],
-                  ),
-                );
-              },
+                                  ],
+                                )
+                              : Icon(
+                                  Icons.send,
+                                  color: _isSendingMessage
+                                      ? Colors.grey
+                                      : Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.lightBlueAccent
+                                          : Theme.of(context).primaryColor,
+                                ),
+                          onPressed: _isSendingMessage
+                              ? null
+                              : () {
+                                  if (chatProvider.isActiveChatGenerating) {
+                                    chatProvider.cancelGeneration();
+                                  } else {
+                                    _sendMessage();
+                                  }
+                                },
+                          tooltip: chatProvider.isActiveChatGenerating
+                              ? 'Stop generation'
+                              : _isSendingMessage
+                                  ? 'Sending...'
+                                  : 'Send message',
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
