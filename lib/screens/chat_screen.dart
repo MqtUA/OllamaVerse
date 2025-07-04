@@ -332,6 +332,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final fontSize = settingsProvider.settings.fontSize;
 
+    // Get system UI padding for edge-to-edge compliance
+    final mediaQuery = MediaQuery.of(context);
+    final bottomPadding = mediaQuery.viewPadding.bottom;
+
+    // Calculate dynamic input area height including system UI
+    const inputAreaHeight = 72.0; // Base height for input area
+    final totalInputHeight = inputAreaHeight + bottomPadding;
+
     return Scaffold(
       appBar: AppBar(
         title: Consumer<ChatProvider>(
@@ -503,12 +511,14 @@ class _ChatScreenState extends State<ChatScreen> {
                     return RepaintBoundary(
                         child: ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.only(
+                      padding: EdgeInsets.only(
                         left: 16.0,
                         right: 16.0,
                         top: 16.0,
-                        bottom:
-                            80.0, // Add bottom padding to account for message input
+                        // Dynamic bottom padding that accounts for input area + system UI + attached files
+                        bottom: totalInputHeight +
+                            (_attachedFiles.isNotEmpty ? 80.0 : 0.0) +
+                            16.0,
                       ),
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: displayMessages.length +
@@ -614,10 +624,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
 
-          // Attached files display
+          // Attached files display - positioned with edge-to-edge compliance
           if (_attachedFiles.isNotEmpty)
             Positioned(
-              bottom: 80, // Position above the message input
+              bottom:
+                  totalInputHeight, // Position above the message input with system UI consideration
               left: 0,
               right: 0,
               child: Container(
@@ -688,12 +699,14 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
-          // Message input
+          // Message input - positioned at bottom with edge-to-edge compliance
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: SafeArea(
+            child: Container(
+              // Add padding for system UI (Android navigation bar)
+              padding: EdgeInsets.only(bottom: bottomPadding),
               child: Consumer<ChatProvider>(
                 builder: (context, chatProvider, child) {
                   return Container(

@@ -12,6 +12,10 @@ class ChatDrawer extends StatelessWidget {
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final fontSize = settingsProvider.settings.fontSize;
 
+    // Get system UI padding for edge-to-edge compliance
+    final mediaQuery = MediaQuery.of(context);
+    final bottomPadding = mediaQuery.viewPadding.bottom;
+
     return Drawer(
       child: Column(
         children: [
@@ -177,29 +181,39 @@ class ChatDrawer extends StatelessWidget {
               },
             ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.refresh),
-            title: const Text('Refresh Models'),
-            onTap: () {
-              final chatProvider = Provider.of<ChatProvider>(
-                context,
-                listen: false,
-              );
-              chatProvider.refreshModels();
-              Navigator.pop(context); // Close drawer
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Refreshing models...')),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text('Settings'),
-            onTap: () {
-              Navigator.pop(context); // Close drawer
-              Navigator.pushNamed(context, '/settings');
-            },
+          // Bottom action section with edge-to-edge compliance
+          Container(
+            // Add bottom padding to account for Android navigation bar
+            padding: EdgeInsets.only(bottom: bottomPadding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.refresh),
+                  title: const Text('Refresh Models'),
+                  onTap: () {
+                    final chatProvider = Provider.of<ChatProvider>(
+                      context,
+                      listen: false,
+                    );
+                    chatProvider.refreshModels();
+                    Navigator.pop(context); // Close drawer
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Refreshing models...')),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Settings'),
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    Navigator.pushNamed(context, '/settings');
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
