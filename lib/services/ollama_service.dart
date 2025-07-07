@@ -60,7 +60,7 @@ class OllamaService {
 
   Map<String, String> get _headers {
     final headers = <String, String>{
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
     };
 
     // Add auth token if provided
@@ -205,15 +205,13 @@ class OllamaService {
         // Use chat endpoint for vision models - build full conversation history
         final messages = <Map<String, dynamic>>[];
 
-        // Add conversation history including system messages
+        // Add conversation history including system messages and file contexts
         if (conversationHistory != null) {
-          int systemMessageCount = 0;
           for (final msg in conversationHistory) {
             String role;
             switch (msg.role) {
               case MessageRole.system:
                 role = 'system';
-                systemMessageCount++;
                 break;
               case MessageRole.user:
                 role = 'user';
@@ -223,9 +221,20 @@ class OllamaService {
                 break;
             }
 
+            // Append file content to the message content for context
+            String messageContentWithFiles = msg.content;
+            if (msg.hasTextContent) {
+              messageContentWithFiles += '\n\n--- Attached Files Context ---\n';
+              for (final file in msg.textFiles) {
+                messageContentWithFiles +=
+                    'File: ${file.fileName}\n${file.textContent}\n\n';
+              }
+              messageContentWithFiles += '--- End of Attached Files ---\n';
+            }
+
             final messageMap = <String, dynamic>{
               'role': role,
-              'content': msg.content,
+              'content': messageContentWithFiles,
             };
 
             // Add images if this was a user message with images
@@ -238,66 +247,12 @@ class OllamaService {
             }
             messages.add(messageMap);
           }
-
-          if (systemMessageCount > 0) {
-            AppLogger.info(
-                'Chat endpoint: Including $systemMessageCount system message(s) in conversation');
-          }
         }
 
-        // Handle system prompts based on model capabilities
-        String systemPromptContent = '';
-        if (conversationHistory != null) {
-          for (final msg in conversationHistory) {
-            if (msg.role == MessageRole.system) {
-              systemPromptContent = msg.content;
-              break;
-            }
-          }
-        }
-
-        // Build current message content with text files
-        String content = prompt;
-        if (textFiles.isNotEmpty) {
-          content += '\n\n';
-          for (final file in textFiles) {
-            if (file.hasTextContent) {
-              content += 'File: ${file.fileName}\n${file.textContent}\n\n';
-            }
-          }
-        }
-
-        // Add system prompt handling based on model capabilities
-        if (systemPromptContent.isNotEmpty) {
-          if (capabilities.supportsSystemPrompts) {
-            // Add system message at the beginning for models that support it
-            messages.insert(0, {
-              'role': 'system',
-              'content': systemPromptContent,
-            });
-            AppLogger.info(
-                'Chat endpoint (non-streaming): Including system message (${systemPromptContent.length} chars) - Model supports system prompts');
-          } else {
-            // For models with limited system prompt support, prepend to user message
-            content =
-                'Instructions: $systemPromptContent\n\nPlease follow the above instructions when responding.\n\n$content';
-            AppLogger.info(
-                'Chat endpoint (non-streaming): Converting system prompt to instruction (${systemPromptContent.length} chars) - Model has limited system prompt support');
-          }
-        }
-
-        final currentMessage = <String, dynamic>{
-          'role': 'user',
-          'content': content,
-        };
-
-        // Add images to the current message
-        if (imageFiles.isNotEmpty) {
-          final imageList = imageFiles.map((f) => f.base64Content!).toList();
-          currentMessage['images'] = imageList;
-        }
-
-        messages.add(currentMessage);
+        // The logic for adding the current message and its files is now handled
+        // by the loop above, which iterates through the entire conversationHistory.
+        // The `prompt` and `processedFiles` parameters are implicitly included
+        // in the last message of the `conversationHistory`.
         requestBody['messages'] = messages;
 
         final response = await _client.post(
@@ -332,39 +287,37 @@ class OllamaService {
         // Use generate endpoint for text-only models with context
         String finalPrompt = '';
 
-        // Add system prompt first if available and supported by the model
-        String systemPrompt = '';
-        if (conversationHistory != null) {
+        // If we have conversation history, build the prompt from it
+        if (conversationHistory != null && conversationHistory.isNotEmpty) {
           for (final msg in conversationHistory) {
             if (msg.role == MessageRole.system) {
-              systemPrompt = msg.content;
-
-              // Check if model supports system prompts
               if (capabilities.supportsSystemPrompts) {
                 finalPrompt += '${msg.content}\n\n';
-                AppLogger.info(
-                    'Generate endpoint (streaming): Including system prompt (${systemPrompt.length} chars) - Model supports system prompts');
               } else {
-                // For models that don't support system prompts, prepend as instruction
                 finalPrompt +=
                     'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
-                AppLogger.info(
-                    'Generate endpoint (streaming): Converting system prompt to instruction (${systemPrompt.length} chars) - Model has limited system prompt support');
               }
-              break; // Only use the first system message
+            } else {
+              finalPrompt += '${msg.role.name.toUpperCase()}: ${msg.content}\n';
+              if (msg.hasTextContent) {
+                for (final file in msg.textFiles) {
+                  finalPrompt +=
+                      '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
+                }
+              }
+              finalPrompt += '\n';
             }
           }
-        }
-
-        // Add the current user prompt
-        finalPrompt += prompt;
-
-        // Include text file content in the prompt
-        if (processedFiles != null && processedFiles.isNotEmpty) {
-          finalPrompt += '\n\n';
-          for (final file in processedFiles) {
-            if (file.hasTextContent) {
-              finalPrompt += 'File: ${file.fileName}\n${file.textContent}\n\n';
+        } else {
+          // Fallback for single prompts without history
+          finalPrompt += prompt;
+          if (processedFiles != null && processedFiles.isNotEmpty) {
+            finalPrompt += '\n\n';
+            for (final file in processedFiles) {
+              if (file.hasTextContent) {
+                finalPrompt +=
+                    '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
+              }
             }
           }
         }
@@ -455,91 +408,46 @@ class OllamaService {
         // Add conversation history (excluding system messages initially)
         if (conversationHistory != null) {
           for (final msg in conversationHistory) {
-            if (msg.role != MessageRole.system) {
-              String role;
-              switch (msg.role) {
-                case MessageRole.user:
-                  role = 'user';
-                  break;
-                case MessageRole.assistant:
-                  role = 'assistant';
-                  break;
-                case MessageRole.system:
-                  role =
-                      'system'; // This won't be reached due to the if condition
-                  break;
+            String role;
+            switch (msg.role) {
+              case MessageRole.system:
+                role = 'system';
+                break;
+              case MessageRole.user:
+                role = 'user';
+                break;
+              case MessageRole.assistant:
+                role = 'assistant';
+                break;
+            }
+
+            // Append file content to the message content for context
+            String messageContentWithFiles = msg.content;
+            if (msg.hasTextContent) {
+              messageContentWithFiles += '\n\n--- Attached Files Context ---\n';
+              for (final file in msg.textFiles) {
+                messageContentWithFiles +=
+                    'File: ${file.fileName}\n${file.textContent}\n\n';
               }
+              messageContentWithFiles += '--- End of Attached Files ---\n';
+            }
 
-              final messageMap = <String, dynamic>{
-                'role': role,
-                'content': msg.content,
-              };
+            final messageMap = <String, dynamic>{
+              'role': role,
+              'content': messageContentWithFiles,
+            };
 
-              // Add images if this was a user message with images
-              if (msg.hasImages && msg.role == MessageRole.user) {
-                final images =
-                    msg.imageFiles.map((f) => f.base64Content!).toList();
-                if (images.isNotEmpty) {
-                  messageMap['images'] = images;
-                }
+            // Add images if this was a user message with images
+            if (msg.hasImages && msg.role == MessageRole.user) {
+              final images =
+                  msg.imageFiles.map((f) => f.base64Content!).toList();
+              if (images.isNotEmpty) {
+                messageMap['images'] = images;
               }
-              messages.add(messageMap);
             }
+            messages.add(messageMap);
           }
         }
-
-        // Handle system prompts based on model capabilities
-        String systemPromptContent = '';
-        if (conversationHistory != null) {
-          for (final msg in conversationHistory) {
-            if (msg.role == MessageRole.system) {
-              systemPromptContent = msg.content;
-              break;
-            }
-          }
-        }
-
-        String content = prompt;
-        if (textFiles.isNotEmpty) {
-          content += '\n\n';
-          for (final file in textFiles) {
-            if (file.hasTextContent) {
-              content += 'File: ${file.fileName}\n${file.textContent}\n\n';
-            }
-          }
-        }
-
-        // Add system prompt handling based on model capabilities
-        if (systemPromptContent.isNotEmpty) {
-          if (capabilities.supportsSystemPrompts) {
-            // Add system message at the beginning for models that support it
-            messages.insert(0, {
-              'role': 'system',
-              'content': systemPromptContent,
-            });
-            AppLogger.info(
-                'Chat endpoint (streaming): Including system message (${systemPromptContent.length} chars) - Model supports system prompts');
-          } else {
-            // For models with limited system prompt support, prepend to user message
-            content =
-                'Instructions: $systemPromptContent\n\nPlease follow the above instructions when responding.\n\n$content';
-            AppLogger.info(
-                'Chat endpoint (streaming): Converting system prompt to instruction (${systemPromptContent.length} chars) - Model has limited system prompt support');
-          }
-        }
-
-        final currentMessage = <String, dynamic>{
-          'role': 'user',
-          'content': content,
-        };
-
-        // Add images to the current message
-        if (imageFiles.isNotEmpty) {
-          final imageList = imageFiles.map((f) => f.base64Content!).toList();
-          currentMessage['images'] = imageList;
-        }
-
-        messages.add(currentMessage);
 
         requestBody = {
           'model': modelName,
@@ -559,39 +467,37 @@ class OllamaService {
         // Use generate endpoint for text-only models with context
         String finalPrompt = '';
 
-        // Add system prompt first if available and supported by the model
-        String systemPrompt = '';
-        if (conversationHistory != null) {
+        // If we have conversation history, build the prompt from it
+        if (conversationHistory != null && conversationHistory.isNotEmpty) {
           for (final msg in conversationHistory) {
             if (msg.role == MessageRole.system) {
-              systemPrompt = msg.content;
-
-              // Check if model supports system prompts
               if (capabilities.supportsSystemPrompts) {
                 finalPrompt += '${msg.content}\n\n';
-                AppLogger.info(
-                    'Generate endpoint (streaming): Including system prompt (${systemPrompt.length} chars) - Model supports system prompts');
               } else {
-                // For models that don't support system prompts, prepend as instruction
                 finalPrompt +=
                     'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
-                AppLogger.info(
-                    'Generate endpoint (streaming): Converting system prompt to instruction (${systemPrompt.length} chars) - Model has limited system prompt support');
               }
-              break; // Only use the first system message
+            } else {
+              finalPrompt += '${msg.role.name.toUpperCase()}: ${msg.content}\n';
+              if (msg.hasTextContent) {
+                for (final file in msg.textFiles) {
+                  finalPrompt +=
+                      '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
+                }
+              }
+              finalPrompt += '\n';
             }
           }
-        }
-
-        // Add the current user prompt
-        finalPrompt += prompt;
-
-        // Include text file content in the prompt
-        if (processedFiles != null && processedFiles.isNotEmpty) {
-          finalPrompt += '\n\n';
-          for (final file in processedFiles) {
-            if (file.hasTextContent) {
-              finalPrompt += 'File: ${file.fileName}\n${file.textContent}\n\n';
+        } else {
+          // Fallback for single prompts without history
+          finalPrompt += prompt;
+          if (processedFiles != null && processedFiles.isNotEmpty) {
+            finalPrompt += '\n\n';
+            for (final file in processedFiles) {
+              if (file.hasTextContent) {
+                finalPrompt +=
+                    '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
+              }
             }
           }
         }

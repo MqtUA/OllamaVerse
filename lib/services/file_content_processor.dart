@@ -1,10 +1,27 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/processed_file.dart';
 import '../utils/file_utils.dart';
 import '../utils/logger.dart';
 import 'file_content_cache.dart';
+
+/// Data class for tracking file processing progress
+class FileProcessingProgress {
+  final String filePath;
+  final String fileName;
+  final double progress; // 0.0 to 1.0
+  final String status; // e.g., "processing", "completed", "error"
+
+  FileProcessingProgress({
+    required this.filePath,
+    required this.fileName,
+    required this.progress,
+    required this.status,
+  });
+}
 
 /// Service for processing different file types and extracting content for AI analysis
 class FileContentProcessor {
@@ -45,7 +62,10 @@ class FileContentProcessor {
   }
 
   /// Process a file and extract its content for AI analysis
-  static Future<ProcessedFile> processFile(String filePath) async {
+  static Future<ProcessedFile> processFile(
+    String filePath, {
+    void Function(FileProcessingProgress)? onProgress,
+  }) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
@@ -67,13 +87,21 @@ class FileContentProcessor {
       AppLogger.info(
           'Processing file: $fileName (${fileType.name}, ${FileUtils.formatFileSize(fileSize)})');
 
+      onProgress?.call(FileProcessingProgress(
+        filePath: filePath,
+        fileName: fileName,
+        progress: 0.1, // Started processing
+        status: 'Processing...',
+      ));
+
       ProcessedFile processedFile;
       switch (fileType) {
         case FileType.image:
           processedFile = await _processImageFile(filePath, fileName, fileSize);
           break;
         case FileType.pdf:
-          processedFile = await _processPdfFile(filePath, fileName, fileSize);
+          processedFile =
+              await _processPdfFile(filePath, fileName, fileSize, onProgress);
           break;
         case FileType.text:
         case FileType.sourceCode:
@@ -95,9 +123,11 @@ class FileContentProcessor {
     }
   }
 
-  /// Process multiple files in batch with caching support
+  /// Process multiple files in batch with caching and progress reporting
   static Future<List<ProcessedFile>> processFiles(
-      List<String> filePaths) async {
+    List<String> filePaths, {
+    void Function(FileProcessingProgress)? onProgress,
+  }) async {
     final List<ProcessedFile> processedFiles = [];
     final List<String> errors = [];
     int cacheHits = 0;
@@ -112,18 +142,37 @@ class FileContentProcessor {
         if (cachedFile != null) {
           processedFiles.add(cachedFile);
           cacheHits++;
+          onProgress?.call(FileProcessingProgress(
+            filePath: filePath,
+            fileName: fileName,
+            progress: 1.0,
+            status: 'Loaded from cache',
+          ));
           AppLogger.debug('Cache hit for: $fileName');
           continue;
         }
 
         // Process file if not cached
-        final processedFile = await processFile(filePath);
+        final processedFile = await processFile(filePath, onProgress: onProgress);
         processedFiles.add(processedFile);
+
+        onProgress?.call(FileProcessingProgress(
+          filePath: filePath,
+          fileName: fileName,
+          progress: 1.0,
+          status: 'Processing complete',
+        ));
         AppLogger.info('Successfully processed: ${processedFile.fileName}');
       } catch (e) {
         final fileName = FileUtils.getFileName(filePath);
         final error = 'Failed to process $fileName: $e';
         errors.add(error);
+        onProgress?.call(FileProcessingProgress(
+          filePath: filePath,
+          fileName: fileName,
+          progress: 1.0,
+          status: 'Error: $e',
+        ));
         AppLogger.error('File processing error', e);
       }
     }
@@ -181,9 +230,13 @@ class FileContentProcessor {
     }
   }
 
-  /// Process a PDF file by extracting text content
+  /// Process a PDF file by extracting text content with progress reporting
   static Future<ProcessedFile> _processPdfFile(
-      String filePath, String fileName, int fileSize) async {
+    String filePath,
+    String fileName,
+    int fileSize,
+    void Function(FileProcessingProgress)? onProgress,
+  ) async {
     if (fileSize > maxPdfSizeBytes) {
       throw FileSystemException(
         'PDF file too large (${FileUtils.formatFileSize(fileSize)}). Maximum size is ${FileUtils.formatFileSize(maxPdfSizeBytes)}',
@@ -193,19 +246,43 @@ class FileContentProcessor {
 
     try {
       AppLogger.info('Starting PDF text extraction for: $fileName');
+      onProgress?.call(FileProcessingProgress(
+        filePath: filePath,
+        fileName: fileName,
+        progress: 0.2,
+        status: 'Extracting text...',
+      ));
 
-      // Extract text from PDF using Syncfusion
-      final textContent = await _extractTextFromPdf(filePath, fileName);
+      // Extract text from PDF using Syncfusion with chunking
+      final textContent = await _extractTextFromPdfInChunks(
+        filePath,
+        fileName,
+        onProgress: (progress) {
+          onProgress?.call(FileProcessingProgress(
+            filePath: filePath,
+            fileName: fileName,
+            progress: 0.2 + (progress * 0.7), // Scale progress from 0.2 to 0.9
+            status: 'Page ${progress * 100}% processed',
+          ));
+        },
+      );
 
       final metadata = {
         'originalSize': fileSize,
         'textLength': textContent.length,
-        'extractionMethod': 'syncfusion_pdf',
+        'extractionMethod': 'syncfusion_pdf_chunked',
         'processingStatus':
             textContent.contains('Error extracting text from PDF')
                 ? 'failed'
                 : 'success',
       };
+
+      onProgress?.call(FileProcessingProgress(
+        filePath: filePath,
+        fileName: fileName,
+        progress: 0.95,
+        status: 'Finalizing...',
+      ));
 
       AppLogger.info(
           'PDF processed: $fileName, extracted ${textContent.length} characters');
@@ -237,7 +314,7 @@ class FileContentProcessor {
         metadata: {
           'originalSize': fileSize,
           'textLength': errorMessage.length,
-          'extractionMethod': 'syncfusion_pdf',
+          'extractionMethod': 'syncfusion_pdf_chunked',
           'processingStatus': 'error',
           'error': e.toString(),
         },
@@ -352,47 +429,55 @@ class FileContentProcessor {
     }
   }
 
-  /// Extract text from PDF using Syncfusion
-  static Future<String> _extractTextFromPdf(
-      String filePath, String fileName) async {
+  /// Extract text from PDF using Syncfusion with chunking and progress reporting
+  static Future<String> _extractTextFromPdfInChunks(
+    String filePath,
+    String fileName, {
+    void Function(double progress)? onProgress,
+  }) async {
+    PdfDocument? document;
     try {
       final file = File(filePath);
-
-      // Read PDF as binary data
       final bytes = await file.readAsBytes();
-
-      // Load the PDF document with binary data
-      final PdfDocument document = PdfDocument(inputBytes: bytes);
-
-      // Extract text from all pages
-      String extractedText = '';
-      final extractor = PdfTextExtractor(document);
+      document = PdfDocument(inputBytes: bytes);
       final pageCount = document.pages.count;
+      final buffer = StringBuffer();
+      const chunkSize = 10; // Process 10 pages at a time
 
-      AppLogger.info('PDF has $pageCount pages, extracting text...');
+      AppLogger.info(
+          'PDF has $pageCount pages, extracting text in chunks of $chunkSize...');
 
-      for (int i = 0; i < pageCount; i++) {
+      for (int i = 0; i < pageCount; i += chunkSize) {
+        final startPage = i;
+        final endPage = (i + chunkSize > pageCount) ? pageCount - 1 : i + chunkSize - 1;
+
         try {
-          final pageText = extractor.extractText(startPageIndex: i);
+          // Use compute to run this intensive operation in a separate isolate
+          final pageText = await compute(
+            _extractPageRange,
+            {
+              'bytes': bytes,
+              'startPageIndex': startPage,
+              'endPageIndex': endPage,
+            },
+          );
+
           if (pageText.trim().isNotEmpty) {
-            extractedText += 'Page ${i + 1}:\n$pageText\n\n';
+            buffer.write(pageText);
           }
 
-          // Force garbage collection after each page
-          if (i % 5 == 0) {
-            await Future.delayed(Duration.zero);
-          }
+          // Report progress
+          final progress = (endPage + 1) / pageCount;
+          onProgress?.call(progress);
+
+          // Yield to the event loop to prevent UI freezing
+          await Future.delayed(Duration.zero);
         } catch (e) {
-          AppLogger.warning('Error extracting text from page ${i + 1}: $e');
+          AppLogger.warning('Error extracting text from pages ${startPage + 1}-${endPage + 1}: $e');
         }
       }
 
-      // Close the document
-      document.dispose();
-
-      // Clean up extracted text
-      extractedText = extractedText.trim();
-
+      final extractedText = buffer.toString().trim();
       AppLogger.info(
           'PDF text extraction completed: ${extractedText.length} characters extracted');
 
@@ -404,7 +489,36 @@ class FileContentProcessor {
     } catch (e) {
       AppLogger.error('Error extracting text from PDF', e);
       return 'Error extracting text from PDF. The file may be corrupted or password-protected.';
+    } finally {
+      document?.dispose();
     }
+  }
+
+  /// Helper function to extract text from a range of pages in an isolate
+  static String _extractPageRange(Map<String, dynamic> params) {
+    final Uint8List bytes = params['bytes'];
+    final int startPageIndex = params['startPageIndex'];
+    final int endPageIndex = params['endPageIndex'];
+    final buffer = StringBuffer();
+
+    PdfDocument? document;
+    try {
+      document = PdfDocument(inputBytes: bytes);
+      final extractor = PdfTextExtractor(document);
+
+      for (int i = startPageIndex; i <= endPageIndex; i++) {
+        final pageText = extractor.extractText(startPageIndex: i);
+        if (pageText.trim().isNotEmpty) {
+          buffer.write('Page ${i + 1}:\n$pageText\n\n');
+        }
+      }
+    } catch (e) {
+      // Log or handle error if needed
+    } finally {
+      document?.dispose();
+    }
+
+    return buffer.toString();
   }
 
   /// Get supported file extensions as a formatted string

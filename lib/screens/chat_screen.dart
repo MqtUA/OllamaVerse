@@ -470,6 +470,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
 
+              // File processing indicator
+              _buildFileProcessingIndicator(),
+
               // Chat messages
               Expanded(
                 child: Consumer<ChatProvider>(
@@ -725,7 +728,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.attach_file),
-                          onPressed: _pickFiles,
+                          onPressed: chatProvider.isProcessingFiles
+                              ? null
+                              : _pickFiles,
                         ),
                         Expanded(
                           child: TextField(
@@ -748,7 +753,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         const SizedBox(width: 8.0),
                         IconButton(
-                          icon: chatProvider.isActiveChatGenerating
+                          icon: chatProvider.isGenerating
                               ? Stack(
                                   alignment: Alignment.center,
                                   children: [
@@ -771,27 +776,31 @@ class _ChatScreenState extends State<ChatScreen> {
                                 )
                               : Icon(
                                   Icons.send,
-                                  color: _isSendingMessage
+                                  color: _isSendingMessage ||
+                                          chatProvider.isProcessingFiles
                                       ? Colors.grey
                                       : Theme.of(context).brightness ==
                                               Brightness.dark
                                           ? Colors.lightBlueAccent
                                           : Theme.of(context).primaryColor,
                                 ),
-                          onPressed: _isSendingMessage
+                          onPressed: _isSendingMessage ||
+                                  chatProvider.isProcessingFiles
                               ? null
                               : () {
-                                  if (chatProvider.isActiveChatGenerating) {
+                                  if (chatProvider.isGenerating) {
                                     chatProvider.cancelGeneration();
                                   } else {
                                     _sendMessage();
                                   }
                                 },
-                          tooltip: chatProvider.isActiveChatGenerating
+                          tooltip: chatProvider.isGenerating
                               ? 'Stop generation'
                               : _isSendingMessage
                                   ? 'Sending...'
-                                  : 'Send message',
+                                  : chatProvider.isProcessingFiles
+                                      ? 'Processing files...'
+                                      : 'Send message',
                         ),
                       ],
                     ),
@@ -802,6 +811,86 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFileProcessingIndicator() {
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, child) {
+        if (!chatProvider.isProcessingFiles ||
+            chatProvider.fileProcessingProgress.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final progressList = chatProvider.fileProcessingProgress.values.toList();
+
+        return Container(
+          padding: const EdgeInsets.all(12.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(8.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(26),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Processing ${progressList.length} file(s)...',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8.0),
+              ...progressList.map((progress) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          value: progress.progress,
+                          strokeWidth: 3,
+                        ),
+                      ),
+                      const SizedBox(width: 12.0),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              progress.fileName,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              progress.status,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  fontStyle: FontStyle.italic),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '${(progress.progress * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 

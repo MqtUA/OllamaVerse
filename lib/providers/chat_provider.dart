@@ -20,6 +20,7 @@ class ChatProvider with ChangeNotifier {
   List<String> _availableModels = [];
   bool _isLoading = true;
   bool _isGenerating = false;
+  bool _isProcessingFiles = false;
   String? _error;
   String _lastSelectedModel = '';
   String _currentStreamingResponse = '';
@@ -42,13 +43,19 @@ class ChatProvider with ChangeNotifier {
   // Stream management - track which chat is currently generating
   String? _currentGeneratingChatId;
 
+  // File processing state
+  final Map<String, FileProcessingProgress> _fileProcessingProgress = {};
+
   // Getters
   List<Chat> get chats => _chats;
   Chat? get activeChat => _activeChat;
   List<String> get availableModels => _availableModels;
   bool get isLoading => _isLoading;
-  bool get isGenerating => _isGenerating;
+  bool get isGenerating => _isGenerating || _isProcessingFiles;
+  bool get isProcessingFiles => _isProcessingFiles;
   String? get error => _error;
+  Map<String, FileProcessingProgress> get fileProcessingProgress =>
+      _fileProcessingProgress;
   String get currentStreamingResponse => _currentStreamingResponse;
   String get currentDisplayResponse => _currentDisplayResponse;
   String get currentThinkingContent => _currentThinkingContent;
@@ -316,6 +323,8 @@ class ChatProvider with ChangeNotifier {
   void _cancelOngoingGeneration() {
     AppLogger.info('Cancelling ongoing generation');
     _isGenerating = false;
+    _isProcessingFiles = false;
+    _fileProcessingProgress.clear();
     _isThinkingPhase = false;
     _currentStreamingResponse = '';
     _currentDisplayResponse = '';
@@ -644,17 +653,31 @@ class ChatProvider with ChangeNotifier {
       // Process attached files if any
       List<ProcessedFile> processedFiles = [];
       if (attachedFiles != null && attachedFiles.isNotEmpty) {
+        _isProcessingFiles = true;
+        _fileProcessingProgress.clear();
+        _safeNotifyListeners();
+
         AppLogger.info('Processing ${attachedFiles.length} attached files');
         try {
-          processedFiles =
-              await FileContentProcessor.processFiles(attachedFiles);
+          processedFiles = await FileContentProcessor.processFiles(
+            attachedFiles,
+            onProgress: (progress) {
+              _fileProcessingProgress[progress.filePath] = progress;
+              _safeNotifyListeners();
+            },
+          );
           AppLogger.info(
               'Successfully processed ${processedFiles.length} files');
         } catch (e) {
           AppLogger.error('Error processing files', e);
           _error = 'Failed to process attached files: $e';
+          _isProcessingFiles = false;
           _safeNotifyListeners();
           return;
+        } finally {
+          _isProcessingFiles = false;
+          _fileProcessingProgress.clear();
+          _safeNotifyListeners();
         }
       }
 
@@ -845,6 +868,8 @@ class ChatProvider with ChangeNotifier {
     } finally {
       // Clear any remaining streaming state (in case of errors)
       _isGenerating = false;
+      _isProcessingFiles = false;
+      _fileProcessingProgress.clear();
       _isThinkingPhase = false;
       _currentStreamingResponse = '';
       _currentDisplayResponse = '';
