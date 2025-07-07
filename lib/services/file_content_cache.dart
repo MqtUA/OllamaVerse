@@ -200,7 +200,7 @@ class FileContentCache {
       final now = DateTime.now();
 
       for (final entry in _cacheIndex.entries) {
-        if (now.difference(entry.value.createdAt) > _maxCacheAge) {
+        if (now.difference(entry.value.lastAccessedAt) > _maxCacheAge) {
           expiredKeys.add(entry.key);
         }
       }

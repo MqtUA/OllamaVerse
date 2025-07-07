@@ -26,24 +26,28 @@ class FileProcessingProgress {
 /// Service for processing different file types and extracting content for AI analysis
 class FileContentProcessor {
   // File size limits (in bytes)
-  static const int maxImageSizeBytes = 10 * 1024 * 1024; // 10MB for images
-  static const int maxTextSizeBytes = 5 * 1024 * 1024; // 5MB for text files
-  static const int maxPdfSizeBytes = 20 * 1024 * 1024; // 20MB for PDFs
+  static const int maxImageSizeBytes = 100 * 1024 * 1024; // 100MB for images
+  static const int maxTextSizeBytes = 50 * 1024 * 1024; // 50MB for text files
+  static const int maxPdfSizeBytes = 100 * 1024 * 1024; // 100MB for PDFs
 
   // Use shared extension lists from FileUtils (avoiding duplication)
 
   /// Check if a file can be processed by this service
-  static bool canProcessFile(String filePath) {
+  static Future<bool> canProcessFile(String filePath) async {
     final extension = _getFileExtension(filePath);
-    return FileUtils.imageExtensions.contains(extension) ||
+    if (FileUtils.imageExtensions.contains(extension) ||
         FileUtils.textExtensions.contains(extension) ||
         FileUtils.sourceCodeExtensions.contains(extension) ||
         FileUtils.jsonExtensions.contains(extension) ||
-        extension == 'pdf';
+        extension == 'pdf') {
+      return true;
+    }
+    // Fallback: if extension is not recognized, try to determine if it's a text file heuristically
+    return await FileUtils.isLikelyTextFile(filePath);
   }
 
   /// Get the file type based on extension
-  static FileType getFileType(String filePath) {
+  static Future<FileType> getFileType(String filePath) async {
     final extension = _getFileExtension(filePath);
 
     if (FileUtils.imageExtensions.contains(extension)) {
@@ -56,6 +60,9 @@ class FileContentProcessor {
       return FileType.sourceCode;
     } else if (FileUtils.textExtensions.contains(extension)) {
       return FileType.text;
+    } else if (await FileUtils.isLikelyTextFile(filePath)) {
+      // If extension is unknown but it's likely a text file, treat as text
+      return FileType.text;
     } else {
       return FileType.unknown;
     }
@@ -65,8 +72,12 @@ class FileContentProcessor {
   static Future<ProcessedFile> processFile(
     String filePath, {
     void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     try {
+      if (isCancelled?.call() ?? false) {
+        return ProcessedFile.cancelled(filePath);
+      }
       final file = File(filePath);
       if (!await file.exists()) {
         throw FileSystemException('File does not exist', filePath);
@@ -74,7 +85,7 @@ class FileContentProcessor {
 
       final fileName = FileUtils.getFileName(filePath);
       final fileSize = await file.length();
-      final fileType = getFileType(filePath);
+      final fileType = await getFileType(filePath);
 
       // Check cache first
       final cache = FileContentCache.instance;
@@ -94,23 +105,29 @@ class FileContentProcessor {
         status: 'Processing...',
       ));
 
+      if (isCancelled?.call() ?? false) {
+        return ProcessedFile.cancelled(filePath);
+      }
+
       ProcessedFile processedFile;
-      switch (fileType) {
+      // Await the fileType here before the switch statement
+      final resolvedFileType = fileType;
+      switch (resolvedFileType) {
         case FileType.image:
           processedFile = await _processImageFile(filePath, fileName, fileSize);
           break;
         case FileType.pdf:
-          processedFile =
-              await _processPdfFile(filePath, fileName, fileSize, onProgress);
+          processedFile = await _processPdfFile(
+              filePath, fileName, fileSize, onProgress, isCancelled);
           break;
         case FileType.text:
         case FileType.sourceCode:
         case FileType.json:
           processedFile =
-              await _processTextFile(filePath, fileName, fileSize, fileType);
+              await _processTextFile(filePath, fileName, fileSize, resolvedFileType);
           break;
         default:
-          throw UnsupportedError('File type ${fileType.name} is not supported');
+          throw UnsupportedError('File type ${resolvedFileType.name} is not supported');
       }
 
       // Cache the processed file for future use
@@ -127,6 +144,7 @@ class FileContentProcessor {
   static Future<List<ProcessedFile>> processFiles(
     List<String> filePaths, {
     void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final List<ProcessedFile> processedFiles = [];
     final List<String> errors = [];
@@ -134,6 +152,10 @@ class FileContentProcessor {
 
     for (final filePath in filePaths) {
       try {
+        if (isCancelled?.call() ?? false) {
+          AppLogger.info('File processing cancelled by user.');
+          break;
+        }
         final fileName = FileUtils.getFileName(filePath);
 
         // Check cache first
@@ -153,7 +175,15 @@ class FileContentProcessor {
         }
 
         // Process file if not cached
-        final processedFile = await processFile(filePath, onProgress: onProgress);
+        final processedFile = await processFile(
+          filePath,
+          onProgress: onProgress,
+          isCancelled: isCancelled,
+        );
+        if (processedFile.isCancelled) {
+          AppLogger.info('Processing of $fileName was cancelled.');
+          break;
+        }
         processedFiles.add(processedFile);
 
         onProgress?.call(FileProcessingProgress(
@@ -236,6 +266,7 @@ class FileContentProcessor {
     String fileName,
     int fileSize,
     void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
   ) async {
     if (fileSize > maxPdfSizeBytes) {
       throw FileSystemException(
@@ -265,6 +296,7 @@ class FileContentProcessor {
             status: 'Page ${progress * 100}% processed',
           ));
         },
+        isCancelled: isCancelled,
       );
 
       final metadata = {
@@ -434,9 +466,11 @@ class FileContentProcessor {
     String filePath,
     String fileName, {
     void Function(double progress)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     PdfDocument? document;
     try {
+      if (isCancelled?.call() ?? false) return '';
       final file = File(filePath);
       final bytes = await file.readAsBytes();
       document = PdfDocument(inputBytes: bytes);
@@ -448,6 +482,10 @@ class FileContentProcessor {
           'PDF has $pageCount pages, extracting text in chunks of $chunkSize...');
 
       for (int i = 0; i < pageCount; i += chunkSize) {
+        if (isCancelled?.call() ?? false) {
+          AppLogger.info('PDF text extraction cancelled.');
+          return '';
+        }
         final startPage = i;
         final endPage = (i + chunkSize > pageCount) ? pageCount - 1 : i + chunkSize - 1;
 
@@ -507,7 +545,7 @@ class FileContentProcessor {
       final extractor = PdfTextExtractor(document);
 
       for (int i = startPageIndex; i <= endPageIndex; i++) {
-        final pageText = extractor.extractText(startPageIndex: i);
+        final pageText = extractor.extractText(startPageIndex: startPageIndex, endPageIndex: endPageIndex);
         if (pageText.trim().isNotEmpty) {
           buffer.write('Page ${i + 1}:\n$pageText\n\n');
         }
@@ -535,8 +573,8 @@ class FileContentProcessor {
   }
 
   /// Check if file size is within limits
-  static bool isFileSizeValid(String filePath, int fileSize) {
-    final fileType = getFileType(filePath);
+  static Future<bool> isFileSizeValid(String filePath, int fileSize) async {
+    final fileType = await getFileType(filePath);
     switch (fileType) {
       case FileType.image:
         return fileSize <= maxImageSizeBytes;

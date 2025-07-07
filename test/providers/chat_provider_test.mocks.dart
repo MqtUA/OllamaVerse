@@ -106,6 +106,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
     List<int>? context,
     List<_i7.Message>? conversationHistory,
     int? contextLength,
+    bool Function()? isCancelled,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -117,6 +118,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
             #context: context,
             #conversationHistory: conversationHistory,
             #contextLength: contextLength,
+            #isCancelled: isCancelled,
           },
         ),
         returnValue: _i5.Future<_i2.OllamaResponse>.value(_FakeOllamaResponse_0(
@@ -130,6 +132,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
               #context: context,
               #conversationHistory: conversationHistory,
               #contextLength: contextLength,
+              #isCancelled: isCancelled,
             },
           ),
         )),
@@ -174,6 +177,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
     List<int>? context,
     List<_i7.Message>? conversationHistory,
     int? contextLength,
+    bool Function()? isCancelled,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -185,6 +189,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
             #context: context,
             #conversationHistory: conversationHistory,
             #contextLength: contextLength,
+            #isCancelled: isCancelled,
           },
         ),
         returnValue: _i5.Stream<_i2.OllamaStreamResponse>.empty(),

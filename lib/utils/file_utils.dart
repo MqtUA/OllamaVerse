@@ -9,12 +9,11 @@ class FileUtils {
   // Constants for file handling
   static const int maxFileSizeMB = 10; // Maximum file size in MB
   static const List<String> allowedExtensions = [
-    'txt',
-    'pdf',
-    'jpg',
-    'jpeg',
-    'png',
-    'gif',
+    'txt', 'md', 'csv', 'log', 'readme', 'rtf', // Text files
+    'json', 'jsonl', 'geojson', // JSON files
+    'dart', 'py', 'js', 'ts', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'm', 'mm', 'sh', 'bat', 'ps1', 'sql', 'html', 'css', 'scss', 'sass', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', // Source code and config files
+    'pdf', // PDF files
+    'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'svg' // Image files
   ];
 
   // Pick files from device
@@ -262,6 +261,47 @@ class FileUtils {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+
+  /// Heuristically checks if a file is likely a text file by examining its initial bytes.
+  /// This is useful for files without a recognized text extension.
+  static Future<bool> isLikelyTextFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return false;
+
+      // Read the first 4KB (4096 bytes) of the file
+      final bytes = await file.readAsBytes().then((b) => b.sublist(0, b.length < 4096 ? b.length : 4096));
+
+      int nullByteCount = 0;
+      int printableAsciiCount = 0;
+
+      for (final byte in bytes) {
+        if (byte == 0) {
+          nullByteCount++;
+        }
+        // Check for printable ASCII characters (0x20 to 0x7E, plus common whitespace)
+        if ((byte >= 0x20 && byte <= 0x7E) || byte == 0x09 || byte == 0x0A || byte == 0x0D) {
+          printableAsciiCount++;
+        }
+      }
+
+      // If there are too many null bytes, it's likely a binary file
+      if (nullByteCount > (bytes.length * 0.05)) { // More than 5% null bytes
+        return false;
+      }
+
+      // If a high percentage of characters are printable ASCII, it's likely a text file
+      if (bytes.isNotEmpty && (printableAsciiCount / bytes.length) > 0.85) { // More than 85% printable
+        return true;
+      }
+
+      // Fallback for very small files or ambiguous cases
+      return false;
+    } catch (e) {
+      AppLogger.warning('Error checking if file is likely text: $e');
+      return false;
     }
   }
 }

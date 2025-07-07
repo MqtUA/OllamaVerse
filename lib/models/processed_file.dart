@@ -21,6 +21,7 @@ class ProcessedFile {
   final DateTime processedAt;
   final String? mimeType;
   final Map<String, dynamic>? metadata; // Additional file metadata
+  final bool isCancelled;
 
   const ProcessedFile({
     required this.originalPath,
@@ -32,6 +33,7 @@ class ProcessedFile {
     required this.processedAt,
     this.mimeType,
     this.metadata,
+    this.isCancelled = false,
   });
 
   /// Create a ProcessedFile for text content
@@ -77,8 +79,21 @@ class ProcessedFile {
     );
   }
 
+  /// Create a ProcessedFile for a cancelled operation
+  factory ProcessedFile.cancelled(String originalPath) {
+    return ProcessedFile(
+      originalPath: originalPath,
+      fileName: FileUtils.getFileName(originalPath),
+      type: FileType.unknown,
+      fileSizeBytes: 0,
+      processedAt: DateTime.now(),
+      isCancelled: true,
+    );
+  }
+
   /// Check if this file contains text content
-  bool get hasTextContent => textContent != null && textContent!.isNotEmpty;
+  bool get hasTextContent =>
+      !isCancelled && textContent != null && textContent!.isNotEmpty;
 
   /// Check if this file contains image content
   bool get hasImageContent =>
@@ -98,6 +113,7 @@ class ProcessedFile {
     DateTime? processedAt,
     String? mimeType,
     Map<String, dynamic>? metadata,
+    bool? isCancelled,
   }) {
     return ProcessedFile(
       originalPath: originalPath ?? this.originalPath,
@@ -109,6 +125,7 @@ class ProcessedFile {
       processedAt: processedAt ?? this.processedAt,
       mimeType: mimeType ?? this.mimeType,
       metadata: metadata ?? this.metadata,
+      isCancelled: isCancelled ?? this.isCancelled,
     );
   }
 
@@ -124,6 +141,7 @@ class ProcessedFile {
       'processedAt': processedAt.toIso8601String(),
       'mimeType': mimeType,
       'metadata': metadata,
+      'isCancelled': isCancelled,
     };
   }
 
@@ -142,6 +160,7 @@ class ProcessedFile {
       processedAt: DateTime.parse(json['processedAt'] as String),
       mimeType: json['mimeType'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
+      isCancelled: json['isCancelled'] as bool? ?? false,
     );
   }
 

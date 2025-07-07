@@ -41,7 +41,7 @@ class OllamaService {
   final http.Client _client;
   final AppSettings _settings;
   final String? _authToken;
-  StreamController<String>? _streamController;
+  
   bool _isDisposed = false;
 
   // Connection timeout for Android devices
@@ -168,9 +168,13 @@ class OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    bool Function()? isCancelled,
   }) async {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
+    }
+    if (isCancelled?.call() ?? false) {
+      throw OllamaApiException('Request cancelled by user');
     }
 
     return _makeRequest(() async {
@@ -194,10 +198,6 @@ class OllamaService {
       // Handle vision models with images
       final imageFiles = processedFiles
               ?.where((file) => file.type == FileType.image)
-              .toList() ??
-          [];
-      final textFiles = processedFiles
-              ?.where((file) => file.type != FileType.image)
               .toList() ??
           [];
 
@@ -378,6 +378,7 @@ class OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    bool Function()? isCancelled,
   }) async* {
     if (_isDisposed) {
       throw Exception('OllamaService has been disposed');
@@ -391,10 +392,6 @@ class OllamaService {
       // Handle vision models with images
       final imageFiles = processedFiles
               ?.where((file) => file.type == FileType.image)
-              .toList() ??
-          [];
-      final textFiles = processedFiles
-              ?.where((file) => file.type != FileType.image)
               .toList() ??
           [];
 
@@ -532,6 +529,10 @@ class OllamaService {
         await for (String line in streamedResponse.stream
             .transform(const Utf8Decoder())
             .transform(const LineSplitter())) {
+          if (isCancelled?.call() ?? false) {
+            AppLogger.info('Stream generation cancelled by user.');
+            break;
+          }
           line = line.trim();
           if (line.isNotEmpty) {
             try {
@@ -656,7 +657,7 @@ class OllamaService {
 
   void dispose() {
     _isDisposed = true;
-    _streamController?.close();
+    
     _client.close();
   }
 }

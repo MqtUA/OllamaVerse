@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/chat.dart';
+import '../utils/cancellation_token.dart';
 import '../models/message.dart';
 import '../models/processed_file.dart';
 import '../services/ollama_service.dart';
@@ -21,6 +22,7 @@ class ChatProvider with ChangeNotifier {
   bool _isLoading = true;
   bool _isGenerating = false;
   bool _isProcessingFiles = false;
+  bool _isSendingMessage = false; // New flag for overall sending state
   String? _error;
   String _lastSelectedModel = '';
   String _currentStreamingResponse = '';
@@ -32,6 +34,7 @@ class ChatProvider with ChangeNotifier {
       false; // Track if there's an active thinking bubble
   StreamSubscription? _chatStreamSubscription;
   bool _disposed = false;
+  CancellationToken _cancellationToken = CancellationToken();
 
   // Thinking-related state
   final Map<String, bool> _expandedThinkingBubbles = {};
@@ -51,7 +54,8 @@ class ChatProvider with ChangeNotifier {
   Chat? get activeChat => _activeChat;
   List<String> get availableModels => _availableModels;
   bool get isLoading => _isLoading;
-  bool get isGenerating => _isGenerating || _isProcessingFiles;
+  bool get isGenerating => _isGenerating;
+  bool get isSendingMessage => _isSendingMessage;
   bool get isProcessingFiles => _isProcessingFiles;
   String? get error => _error;
   Map<String, FileProcessingProgress> get fileProcessingProgress =>
@@ -316,6 +320,7 @@ class ChatProvider with ChangeNotifier {
   }
 
   void cancelGeneration() {
+    _cancellationToken.cancel();
     _cancelOngoingGeneration();
   }
 
@@ -332,6 +337,7 @@ class ChatProvider with ChangeNotifier {
     _hasActiveThinkingBubble = false;
     _isInsideThinkingBlock = false;
     _currentGeneratingChatId = null;
+    _cancellationToken = CancellationToken(); // Reset the token
     _safeNotifyListeners();
   }
 
@@ -354,6 +360,7 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> createNewChat([String? modelName]) async {
     try {
+      _cancelOngoingGeneration();
       final selectedModel = modelName ??
           (_lastSelectedModel.isNotEmpty
               ? _lastSelectedModel
@@ -616,21 +623,36 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> deleteChat(String chatId) async {
     try {
-      // First delete from the service - this will trigger the stream update
-      await _chatHistoryService.deleteChat(chatId);
+      // Find the index of the chat to be deleted
+      final int index = _chats.indexWhere((c) => c.id == chatId);
+      if (index == -1) return; // Chat not found
 
-      // Update active chat if the deleted chat was active
+      // Optimistically remove the chat from the local list
+      _chats.removeAt(index);
+
+      // If the deleted chat was active, set active chat to most recent or null
       if (_activeChat?.id == chatId) {
-        // Get the updated chats from the service
-        final updatedChats = _chatHistoryService.chats;
-        _activeChat = updatedChats.isNotEmpty ? updatedChats.first : null;
+        _cancelOngoingGeneration(); // Cancel generation if active chat is deleted
+        _activeChat = _chats.isNotEmpty ? _chats.first : null;
       }
 
-      _safeNotifyListeners();
+      _safeNotifyListeners(); // Notify listeners immediately to update UI
+
+      // Now, perform the asynchronous deletion from the history service
+      await _chatHistoryService.deleteChat(chatId);
+
+      // The _chatHistoryService.chatStream listener will eventually update _chats
+      // with the confirmed state. If the deletion fails, the stream should
+      // ideally re-emit the original list, which will then cause the UI to revert.
+      // For now, we'll rely on the stream for eventual consistency.
+
     } catch (e) {
       _error = 'Failed to delete chat: ${e.toString()}';
       AppLogger.error('Error deleting chat', e);
       _safeNotifyListeners();
+      // If deletion fails, the _chatHistoryService.chatStream should ideally
+      // re-emit the original list, which will then cause the UI to revert.
+      // If not, we might need to re-insert the chat here.
     }
   }
 
@@ -641,15 +663,15 @@ class ChatProvider with ChangeNotifier {
       _safeNotifyListeners();
       return;
     }
-    if (_isGenerating) {
-      _error = _currentGeneratingChatId == _activeChat?.id
-          ? 'Already generating a response for this chat'
-          : 'Already generating a response for another chat. Please wait.';
+    if (_isSendingMessage) {
+      _error = 'A message is already being sent or processed.';
       _safeNotifyListeners();
       return;
     }
 
     try {
+      _isSendingMessage = true; // Set sending flag at the start
+      _safeNotifyListeners();
       // Process attached files if any
       List<ProcessedFile> processedFiles = [];
       if (attachedFiles != null && attachedFiles.isNotEmpty) {
@@ -665,6 +687,7 @@ class ChatProvider with ChangeNotifier {
               _fileProcessingProgress[progress.filePath] = progress;
               _safeNotifyListeners();
             },
+            isCancelled: () => _cancellationToken.isCancelled,
           );
           AppLogger.info(
               'Successfully processed ${processedFiles.length} files');
@@ -729,9 +752,10 @@ class ChatProvider with ChangeNotifier {
               context: _activeChat!.context,
               conversationHistory: _activeChat!.messages,
               contextLength: _settingsProvider.settings.contextLength,
+              isCancelled: () => _cancellationToken.isCancelled,
             )) {
           // CRITICAL: Check if generation was explicitly cancelled (but allow chat switching)
-          if (!_isGenerating) {
+          if (_cancellationToken.isCancelled) {
             AppLogger.warning('Stream cancelled: generation was stopped');
             break; // Exit the stream loop only if generation was explicitly cancelled
           }
@@ -771,6 +795,7 @@ class ChatProvider with ChangeNotifier {
               context: _activeChat!.context,
               conversationHistory: _activeChat!.messages,
               contextLength: _settingsProvider.settings.contextLength,
+              isCancelled: () => _cancellationToken.isCancelled,
             );
         finalResponse = ollamaResponse.response;
         newContext = ollamaResponse.context;
@@ -877,6 +902,7 @@ class ChatProvider with ChangeNotifier {
       _hasActiveThinkingBubble = false;
       _isInsideThinkingBlock = false;
       _currentGeneratingChatId = null; // Clear tracking
+      _isSendingMessage = false; // Reset overall sending flag
       _safeNotifyListeners();
     }
   }
@@ -1070,7 +1096,6 @@ Model: $modelName
 
       final validation =
           await ollamaService.validateSystemPromptSupport(currentModel);
-      ollamaService.dispose();
 
       return validation;
     } catch (e) {
@@ -1102,7 +1127,6 @@ Model: $modelName
       final ollamaService = _settingsProvider.getOllamaService();
 
       final strategy = ollamaService.getSystemPromptStrategy(currentModel);
-      ollamaService.dispose();
 
       return strategy;
     } catch (e) {

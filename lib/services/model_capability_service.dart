@@ -158,7 +158,7 @@ class ModelCapabilityService {
 
     // Assume all models support vision by default
     // If the model doesn't actually support vision, Ollama will return an error
-    bool isVisionModel = true;
+    bool isVisionModel = false;
     bool isCodeModel = false;
     bool supportsSystemPrompts =
         true; // Default to true, but check for exceptions
@@ -186,6 +186,7 @@ class ModelCapabilityService {
     // Check for known vision models to provide better descriptions
     for (final pattern in _visionModelPatterns) {
       if (lowerName.contains(pattern.toLowerCase())) {
+        isVisionModel = true;
         description = _getVisionModelDescription(lowerName);
         break;
       }

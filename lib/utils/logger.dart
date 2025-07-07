@@ -42,8 +42,7 @@ class AppLogger {
       _logFile = File('${logsDir.path}/app.log');
       await _rotateLogsIfNeeded();
     } catch (e) {
-      // ignore: avoid_print
-      print('Error setting up log file: $e');
+      AppLogger.error('Error setting up log file', e);
     }
   }
 
@@ -58,27 +57,27 @@ class AppLogger {
           final appDir = await getApplicationDocumentsDirectory();
           final logsDir = Directory('${appDir.path}/logs');
 
-          // Rotate existing logs
-          for (var i = _maxLogFiles - 1; i > 0; i--) {
+          // Rename current log file to app.1.log
+          await _logFile!.rename('${logsDir.path}/app.1.log');
+
+          // Shift existing numbered logs
+          for (var i = _maxLogFiles - 1; i >= 1; i--) {
             final oldFile = File('${logsDir.path}/app.$i.log');
             final newFile = File('${logsDir.path}/app.${i + 1}.log');
             if (await oldFile.exists()) {
-              if (i == _maxLogFiles - 1) {
-                await oldFile.delete();
+              if (i + 1 > _maxLogFiles) {
+                await oldFile.delete(); // Delete if it exceeds max files
               } else {
                 await oldFile.rename(newFile.path);
               }
             }
           }
 
-          // Rename current log file
-          await _logFile!.rename('${logsDir.path}/app.1.log');
           _logFile = File('${logsDir.path}/app.log');
         }
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error rotating logs: $e');
+      AppLogger.error('Error rotating logs', e);
     }
   }
 
@@ -90,8 +89,7 @@ class AppLogger {
       await _rotateLogsIfNeeded();
       await _logFile!.writeAsString('$message\n', mode: FileMode.append);
     } catch (e) {
-      // ignore: avoid_print
-      print('Error writing to log file: $e');
+      AppLogger.error('Error writing to log file', e);
     }
   }
 
@@ -134,8 +132,7 @@ class AppLogger {
 
       return totalSize;
     } catch (e) {
-      // ignore: avoid_print
-      print('Error getting logs size: $e');
+      AppLogger.error('Error getting logs size', e);
       return 0;
     }
   }
@@ -152,8 +149,7 @@ class AppLogger {
         _logFile = File('${logsDir.path}/app.log');
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('Error clearing logs: $e');
+      AppLogger.error('Error clearing logs', e);
     }
   }
 }

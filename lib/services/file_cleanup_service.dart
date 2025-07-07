@@ -6,6 +6,15 @@ import '../utils/logger.dart';
 import '../utils/file_utils.dart';
 import 'file_content_cache.dart';
 
+/// Helper class to store file information for sorting
+class _FileInfo {
+  final File file;
+  final DateTime modified;
+  final int size;
+
+  _FileInfo(this.file, this.modified, this.size);
+}
+
 /// A service for managing temporary file cleanup with advanced scheduling and error handling
 class FileCleanupService {
   static FileCleanupService? _instance;
@@ -265,7 +274,7 @@ class FileCleanupService {
 
     await Isolate.spawn(
       _cleanupIsolateEntryPoint,
-      [receivePort.sendPort, _config],
+      [receivePort.sendPort, _config, FileContentCache.instance.cacheDirectoryPath],
     );
 
     final result = await receivePort.first as CleanupResult;
@@ -276,9 +285,10 @@ class FileCleanupService {
   static void _cleanupIsolateEntryPoint(List<dynamic> args) async {
     final sendPort = args[0] as SendPort;
     final config = args[1] as FileCleanupConfig;
+    final fileCachePath = args[2] as String;
 
     try {
-      final result = await _performActualCleanup(config);
+      final result = await _performActualCleanup(config, fileCachePath);
       sendPort.send(result);
     } catch (e) {
       sendPort.send(CleanupResult(
@@ -293,7 +303,7 @@ class FileCleanupService {
 
   /// Perform the actual cleanup logic
   static Future<CleanupResult> _performActualCleanup(
-      FileCleanupConfig config) async {
+      FileCleanupConfig config, String fileCachePath) async {
     final appDir = await getApplicationDocumentsDirectory();
     int totalFiles = 0;
     int deletedFiles = 0;
@@ -344,7 +354,7 @@ class FileCleanupService {
 
     // Clean file content cache directory
     // Note: We can't directly access the cache instance in isolate, so use hardcoded path
-    final fileCacheDir = Directory('${appDir.path}/file_cache');
+    final fileCacheDir = Directory(fileCachePath);
     if (await fileCacheDir.exists()) {
       final fileCacheResult = await _cleanDirectory(
         fileCacheDir,
@@ -365,6 +375,10 @@ class FileCleanupService {
     );
   }
 
+  
+
+  
+
   /// Clean a specific directory based on age and size constraints
   static Future<CleanupResult> _cleanDirectory(
     Directory directory,
@@ -377,49 +391,52 @@ class FileCleanupService {
     int freedSize = 0;
 
     final now = DateTime.now();
-    final List<FileSystemEntity> files = [];
+    final List<_FileInfo> filesInfo = [];
 
-    // Collect all files with their info
     await for (final entity in directory.list(recursive: true)) {
       if (entity is File) {
-        totalFiles++;
-        final stat = await entity.stat();
-        totalSize += stat.size;
-        files.add(entity);
+        try {
+          final stat = await entity.stat();
+          filesInfo.add(_FileInfo(entity, stat.modified, stat.size));
+          totalFiles++;
+          totalSize += stat.size;
+        } catch (e) {
+          // Skip files that can't be accessed
+          continue;
+        }
       }
     }
 
     // Sort files by modification date (oldest first) for size-based cleanup
-    files.sort((a, b) {
-      return a.statSync().modified.compareTo(b.statSync().modified);
-    });
+    filesInfo.sort((a, b) => a.modified.compareTo(b.modified));
 
     int currentSize = totalSize;
 
-    for (final entity in files) {
-      if (entity is File) {
-        bool shouldDelete = false;
-        final stat = await entity.stat();
-        final age = now.difference(stat.modified);
+    for (final fileInfo in filesInfo) {
+      final entity = fileInfo.file;
+      final statModified = fileInfo.modified;
+      final statSize = fileInfo.size;
 
-        // Delete if too old
-        if (age > maxAge) {
-          shouldDelete = true;
-        }
-        // Delete if directory is too large (oldest files first)
-        else if (currentSize > maxSize) {
-          shouldDelete = true;
-        }
+      bool shouldDelete = false;
+      final age = now.difference(statModified);
 
-        if (shouldDelete) {
-          try {
-            await entity.delete();
-            deletedFiles++;
-            freedSize += stat.size;
-            currentSize -= stat.size;
-          } catch (e) {
-            // Continue with other files if one fails
-          }
+      // Delete if too old
+      if (age > maxAge) {
+        shouldDelete = true;
+      }
+      // Delete if directory is too large (oldest files first)
+      else if (currentSize > maxSize) {
+        shouldDelete = true;
+      }
+
+      if (shouldDelete) {
+        try {
+          await entity.delete();
+          deletedFiles++;
+          freedSize += statSize;
+          currentSize -= statSize;
+        } catch (e) {
+          // Continue with other files if one fails
         }
       }
     }

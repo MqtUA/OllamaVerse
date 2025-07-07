@@ -23,14 +23,16 @@ class ThinkingModelDetectionService {
     'To solve this:',
   ];
 
-  // Closing thinking markers
-  static const List<String> _thinkingEndMarkers = [
-    '</thinking>',
-    '</think>',
-    '</reasoning>',
-    '</analysis>',
-    '</reflection>',
-  ];
+  
+
+  // Paired thinking markers for explicit extraction
+  static const Map<String, String> _pairedThinkingMarkers = {
+    '<thinking>': '</thinking>',
+    '<think>': '</think>',
+    '<reasoning>': '</reasoning>',
+    '<analysis>': '</analysis>',
+    '<reflection>': '</reflection>',
+  };
 
   /// Detect if a model is thinking-capable based on its response content
   /// This approach works with any model that produces thinking content
@@ -125,72 +127,43 @@ class ThinkingModelDetectionService {
   /// Extract thinking content from explicit markers like `<thinking>...</thinking>`
   static ThinkingContent? _extractExplicitThinking(String response) {
     // Look for various thinking markers
-    for (int i = 0; i < _thinkingMarkers.length; i++) {
-      final startMarker = _thinkingMarkers[i];
+    for (final entry in _pairedThinkingMarkers.entries) {
+      final startMarker = entry.key;
+      final endMarker = entry.value;
+
       final startIndex =
           response.toLowerCase().indexOf(startMarker.toLowerCase());
 
       if (startIndex == -1) continue;
 
-      // Find corresponding end marker
-      String? endMarker;
-      int endIndex = -1;
+      final endIndex = response
+          .toLowerCase()
+          .indexOf(endMarker.toLowerCase(), startIndex + startMarker.length);
 
-      // First try to find explicit end markers
-      for (final marker in _thinkingEndMarkers) {
-        final index = response
-            .toLowerCase()
-            .indexOf(marker.toLowerCase(), startIndex + startMarker.length);
-        if (index != -1) {
-          endMarker = marker;
-          endIndex = index;
-          break;
-        }
-      }
-
-      // If no explicit end marker, look for natural breaks
       if (endIndex == -1) {
-        // Look for double newlines or clear section breaks
-        final searchStart = startIndex + startMarker.length;
-        final patterns = ['\n\n', '\n---', '\n**Final'];
-
-        for (final pattern in patterns) {
-          final index = response.indexOf(pattern, searchStart);
-          if (index != -1) {
-            endIndex = index;
-            break;
-          }
-        }
-
-        // If still not found, take rest of response
-        if (endIndex == -1) {
-          endIndex = response.length;
-        }
+        // Opening marker found but no closing marker yet
+        // This case is handled by the live streaming logic in ChatProvider
+        continue;
       }
 
-      if (endIndex > startIndex) {
-        final thinkingStart = startIndex + startMarker.length;
-        final thinkingEnd = endMarker != null ? endIndex : endIndex;
+      final thinkingStart = startIndex + startMarker.length;
+      final thinkingText =
+          response.substring(thinkingStart, endIndex).trim();
 
-        final thinkingText =
-            response.substring(thinkingStart, thinkingEnd).trim();
+      // Extract final answer (everything after thinking section)
+      final finalAnswerStart = endIndex + endMarker.length;
+      final finalAnswer = finalAnswerStart < response.length
+          ? response.substring(finalAnswerStart).trim()
+          : '';
 
-        // Extract final answer (everything after thinking section)
-        final finalAnswerStart =
-            endMarker != null ? endIndex + endMarker.length : endIndex;
-        final finalAnswer = finalAnswerStart < response.length
-            ? response.substring(finalAnswerStart).trim()
-            : '';
-
-        return ThinkingContent(
-          originalResponse: response,
-          thinkingText: thinkingText,
-          finalAnswer: finalAnswer.isEmpty ? '' : finalAnswer,
-          hasThinking: true,
-          thinkingStartIndex: startIndex,
-          thinkingEndIndex: endIndex,
-        );
-      }
+      return ThinkingContent(
+        originalResponse: response,
+        thinkingText: thinkingText,
+        finalAnswer: finalAnswer.isEmpty ? '' : finalAnswer,
+        hasThinking: true,
+        thinkingStartIndex: startIndex,
+        thinkingEndIndex: endIndex + endMarker.length,
+      );
     }
 
     return null;

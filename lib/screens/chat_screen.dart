@@ -32,7 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _attachedFiles = [];
   bool _isCtrlPressed = false;
   bool _userHasScrolled = false;
-  bool _isSendingMessage = false; // Prevent duplicate sends
+  
 
   // Cache provider reference to avoid unsafe lookups during dispose
   ChatProvider? _chatProvider;
@@ -200,12 +200,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() {
     final message = _messageController.text.trim();
-    if (message.isEmpty || _isSendingMessage) return;
+    if (message.isEmpty) return;
 
-    // Prevent duplicate sends
-    setState(() {
-      _isSendingMessage = true;
-    });
+    
 
     // Use cached provider reference or get fresh one if needed
     final chatProvider =
@@ -218,24 +215,13 @@ class _ChatScreenState extends State<ChatScreen> {
       attachedFiles: _attachedFiles,
     )
         .then((_) {
-      // Success case - reset sending flag
-      if (mounted) {
-        setState(() {
-          _isSendingMessage = false;
-        });
-      }
+      // Success case - no need to reset _isSendingMessage here, it's handled by ChatProvider
     }).catchError((error) {
-      // Reset sending flag on error
-      if (mounted) {
-        setState(() {
-          _isSendingMessage = false;
-        });
-
-        // Show error message
+      // Show error message
+      if (!mounted) return; // Check if the widget is still mounted
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $error')));
-      }
     });
 
     // Clear the input field and attachments
@@ -776,7 +762,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 )
                               : Icon(
                                   Icons.send,
-                                  color: _isSendingMessage ||
+                                  color: chatProvider.isSendingMessage ||
                                           chatProvider.isProcessingFiles
                                       ? Colors.grey
                                       : Theme.of(context).brightness ==
@@ -784,22 +770,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                           ? Colors.lightBlueAccent
                                           : Theme.of(context).primaryColor,
                                 ),
-                          onPressed: _isSendingMessage ||
-                                  chatProvider.isProcessingFiles
-                              ? null
-                              : () {
-                                  if (chatProvider.isGenerating) {
-                                    chatProvider.cancelGeneration();
-                                  } else {
-                                    _sendMessage();
-                                  }
-                                },
+                          onPressed: chatProvider.isGenerating
+                              ? () {
+                                  chatProvider.cancelGeneration();
+                                }
+                              : (chatProvider.isSendingMessage
+                                  ? null
+                                  : () {
+                                      _sendMessage();
+                                    }),
                           tooltip: chatProvider.isGenerating
                               ? 'Stop generation'
-                              : _isSendingMessage
-                                  ? 'Sending...'
-                                  : chatProvider.isProcessingFiles
-                                      ? 'Processing files...'
+                              : chatProvider.isProcessingFiles
+                                  ? 'Processing files...'
+                                  : chatProvider.isSendingMessage
+                                      ? 'Sending...'
                                       : 'Send message',
                         ),
                       ],
