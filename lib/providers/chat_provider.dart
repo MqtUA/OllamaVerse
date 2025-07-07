@@ -971,7 +971,7 @@ class ChatProvider with ChangeNotifier {
 
       // Improved prompt for better title generation (2-5 words as requested)
       final prompt =
-          '''Based on this conversation, create a concise 2-5 word title without quotes or explanation:
+          '''Based on this conversation, create a concise 2-5 word title without quotes or explanation. Reply only with the title, no other text:
 
 User: $userMessage
 
