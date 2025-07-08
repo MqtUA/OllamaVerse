@@ -41,7 +41,7 @@ class OllamaService {
   final http.Client _client;
   final AppSettings _settings;
   final String? _authToken;
-  
+
   bool _isDisposed = false;
 
   // Connection timeout for Android devices
@@ -308,6 +308,17 @@ class OllamaService {
               finalPrompt += '\n';
             }
           }
+
+          // For the last user message (current), emphasize it to ensure it doesn't get lost
+          if (conversationHistory.isNotEmpty) {
+            final lastMessage = conversationHistory.last;
+            if (lastMessage.role == MessageRole.user) {
+              finalPrompt += '\n=== CURRENT USER REQUEST ===\n';
+              finalPrompt += 'Please focus on this specific request:\n';
+              finalPrompt += '${lastMessage.content}\n';
+              finalPrompt += '=== END CURRENT REQUEST ===\n\n';
+            }
+          }
         } else {
           // Fallback for single prompts without history
           finalPrompt += prompt;
@@ -319,6 +330,13 @@ class OllamaService {
                     '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
               }
             }
+
+            // Emphasize the user request
+            finalPrompt += '\n=== USER REQUEST ===\n';
+            finalPrompt +=
+                'Please analyze the above file(s) and respond to this request:\n';
+            finalPrompt += '$prompt\n';
+            finalPrompt += '=== END REQUEST ===\n';
           }
         }
 
@@ -657,7 +675,7 @@ class OllamaService {
 
   void dispose() {
     _isDisposed = true;
-    
+
     _client.close();
   }
 }

@@ -370,8 +370,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         trailing: DropdownButton<int>(
                           value: settingsProvider.settings.contextLength,
-                          items:
-                              [2048, 4096, 8192, 16384, 32768].map((int value) {
+                          items: [2048, 4096, 8192, 16384, 32768, 65536, 131072]
+                              .map((int value) {
                             return DropdownMenuItem<int>(
                               value: value,
                               child: Text(value.toString()),

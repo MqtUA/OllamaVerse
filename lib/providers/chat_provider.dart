@@ -645,7 +645,6 @@ class ChatProvider with ChangeNotifier {
       // with the confirmed state. If the deletion fails, the stream should
       // ideally re-emit the original list, which will then cause the UI to revert.
       // For now, we'll rely on the stream for eventual consistency.
-
     } catch (e) {
       _error = 'Failed to delete chat: ${e.toString()}';
       AppLogger.error('Error deleting chat', e);
@@ -1020,16 +1019,45 @@ class ChatProvider with ChangeNotifier {
             'Filtered thinking content for title generation. Original length: ${aiResponse.length}, Filtered length: ${processedAiResponse.length}');
       }
 
-      // Improved prompt for better title generation (2-5 words as requested)
-      final prompt =
-          '''Based on this conversation, create a concise 2-5 word title without quotes or explanation. Reply only with the title, no other text:
+      // Check if AI response is too short or uninformative
+      final isAiResponseUseful = processedAiResponse.trim().length > 20 &&
+          !processedAiResponse
+              .toLowerCase()
+              .contains(RegExp(r'^(here|this|that|it|what)\s+(is|are|we|got)'));
 
-User: $userMessage
+      // Truncate user message if it's very long (from large files)
+      String truncatedUserMessage = userMessage;
+      if (userMessage.length > 200) {
+        // Take first meaningful sentence or first 200 chars
+        final sentences = userMessage.split(RegExp(r'[.!?]+'));
+        if (sentences.isNotEmpty && sentences.first.length <= 200) {
+          truncatedUserMessage = sentences.first.trim();
+        } else {
+          truncatedUserMessage = '${userMessage.substring(0, 200)}...';
+        }
+      }
 
-A: $processedAiResponse
+      // Improved prompt that focuses more on user intent when AI response is poor
+      String prompt;
+      if (isAiResponseUseful) {
+        // Use both user and AI content for title
+        prompt =
+            '''Based on this conversation, create a concise 2-5 word title without quotes or explanation. Reply only with the title:
 
-Model: $modelName
-''';
+User asked: $truncatedUserMessage
+
+AI responded: ${processedAiResponse.length > 300 ? '${processedAiResponse.substring(0, 300)}...' : processedAiResponse}
+
+Title:''';
+      } else {
+        // Focus primarily on user message when AI response is unhelpful
+        prompt =
+            '''Based on the user's request, create a concise 2-5 word title without quotes or explanation. Reply only with the title:
+
+User asked: $truncatedUserMessage
+
+Title:''';
+      }
 
       final ollamaService = _settingsProvider.getOllamaService();
       final titleResponse = await ollamaService
@@ -1055,21 +1083,51 @@ Model: $modelName
           .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
           .trim();
 
+      // Remove common prefixes that might appear
+      cleanTitle = cleanTitle.replaceAll(
+          RegExp(r'^(title:|the title is:?|title should be:?)\s*',
+              caseSensitive: false),
+          '');
+
       // Limit to 5 words as requested (2-5 word range)
-      final words = cleanTitle.split(' ');
+      final words = cleanTitle.split(' ').where((w) => w.isNotEmpty).toList();
       if (words.length > 5) {
         cleanTitle = words.take(5).join(' ');
       }
 
-      // Fallback if title is empty or too short
-      if (cleanTitle.isEmpty || cleanTitle.length < 3) {
-        return 'Chat about ${userMessage.split(' ').take(3).join(' ')}';
+      // Enhanced fallback logic
+      if (cleanTitle.isEmpty || cleanTitle.length < 3 || words.length < 2) {
+        // Extract key words from user message for fallback
+        final userWords = truncatedUserMessage
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^\w\s]'), ' ')
+            .split(RegExp(r'\s+'))
+            .where((w) =>
+                w.length > 3 &&
+                ![
+                  'what',
+                  'this',
+                  'that',
+                  'about',
+                  'please',
+                  'could',
+                  'would',
+                  'should'
+                ].contains(w))
+            .take(3)
+            .join(' ');
+
+        if (userWords.isNotEmpty) {
+          return 'Chat about $userWords';
+        } else {
+          return 'Document Analysis Chat';
+        }
       }
 
       return cleanTitle;
     } catch (e) {
       AppLogger.error('Error generating chat title', e);
-      return '';
+      return 'Document Analysis Chat'; // Better fallback than empty string
     }
   }
 

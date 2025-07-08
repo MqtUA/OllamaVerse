@@ -123,11 +123,12 @@ class FileContentProcessor {
         case FileType.text:
         case FileType.sourceCode:
         case FileType.json:
-          processedFile =
-              await _processTextFile(filePath, fileName, fileSize, resolvedFileType);
+          processedFile = await _processTextFile(
+              filePath, fileName, fileSize, resolvedFileType);
           break;
         default:
-          throw UnsupportedError('File type ${resolvedFileType.name} is not supported');
+          throw UnsupportedError(
+              'File type ${resolvedFileType.name} is not supported');
       }
 
       // Cache the processed file for future use
@@ -232,20 +233,33 @@ class FileContentProcessor {
     try {
       final file = File(filePath);
       final bytes = await file.readAsBytes();
+
+      // Basic image validation by checking file headers/magic bytes
+      final extension = _getFileExtension(filePath);
+      final isValidImage = _validateImageContent(bytes, extension);
+
+      if (!isValidImage) {
+        throw FileSystemException(
+          'File appears to be corrupted or not a valid $extension image',
+          filePath,
+        );
+      }
+
       final base64Content = base64Encode(bytes);
 
       // Get image metadata
-      final extension = _getFileExtension(filePath);
       final mimeType = _getMimeType(extension);
 
       final metadata = {
         'originalSize': fileSize,
         'base64Size': base64Content.length,
         'compression': 'none',
+        'validated': true,
+        'imageFormat': extension,
       };
 
       AppLogger.info(
-          'Image processed: $fileName, base64 size: ${base64Content.length} chars');
+          'Image processed: $fileName, base64 size: $base64Content.length chars');
 
       return ProcessedFile.image(
         originalPath: filePath,
@@ -257,6 +271,76 @@ class FileContentProcessor {
       );
     } catch (e) {
       throw FileSystemException('Failed to process image file: $e', filePath);
+    }
+  }
+
+  /// Validate image content by checking file headers/magic bytes
+  static bool _validateImageContent(List<int> bytes, String extension) {
+    if (bytes.isEmpty) return false;
+
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        // JPEG files start with FF D8 and end with FF D9
+        return bytes.length >= 4 &&
+            bytes[0] == 0xFF &&
+            bytes[1] == 0xD8 &&
+            bytes[bytes.length - 2] == 0xFF &&
+            bytes[bytes.length - 1] == 0xD9;
+
+      case 'png':
+        // PNG files start with 89 50 4E 47 0D 0A 1A 0A
+        return bytes.length >= 8 &&
+            bytes[0] == 0x89 &&
+            bytes[1] == 0x50 &&
+            bytes[2] == 0x4E &&
+            bytes[3] == 0x47 &&
+            bytes[4] == 0x0D &&
+            bytes[5] == 0x0A &&
+            bytes[6] == 0x1A &&
+            bytes[7] == 0x0A;
+
+      case 'gif':
+        // GIF files start with "GIF87a" or "GIF89a"
+        return bytes.length >= 6 &&
+            bytes[0] == 0x47 &&
+            bytes[1] == 0x49 &&
+            bytes[2] == 0x46 &&
+            bytes[3] == 0x38 &&
+            (bytes[4] == 0x37 || bytes[4] == 0x39) &&
+            bytes[5] == 0x61;
+
+      case 'bmp':
+        // BMP files start with "BM"
+        return bytes.length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D;
+
+      case 'webp':
+        // WebP files start with "RIFF" and contain "WEBP"
+        return bytes.length >= 12 &&
+            bytes[0] == 0x52 &&
+            bytes[1] == 0x49 &&
+            bytes[2] == 0x46 &&
+            bytes[3] == 0x46 &&
+            bytes[8] == 0x57 &&
+            bytes[9] == 0x45 &&
+            bytes[10] == 0x42 &&
+            bytes[11] == 0x50;
+
+      case 'tiff':
+        // TIFF files start with "II*" (little endian) or "MM*" (big endian)
+        return bytes.length >= 4 &&
+            ((bytes[0] == 0x49 &&
+                    bytes[1] == 0x49 &&
+                    bytes[2] == 0x2A &&
+                    bytes[3] == 0x00) ||
+                (bytes[0] == 0x4D &&
+                    bytes[1] == 0x4D &&
+                    bytes[2] == 0x00 &&
+                    bytes[3] == 0x2A));
+
+      default:
+        // For unknown formats, just check if file is not empty
+        return bytes.isNotEmpty;
     }
   }
 
@@ -371,13 +455,95 @@ class FileContentProcessor {
     try {
       final file = File(filePath);
       String textContent;
+      String actualEncoding = 'unknown';
 
-      // Try to read as UTF-8 first, fall back to latin1 if needed
-      try {
-        textContent = await file.readAsString(encoding: utf8);
-      } catch (e) {
-        AppLogger.warning('UTF-8 decoding failed for $fileName, trying latin1');
-        textContent = await file.readAsString(encoding: latin1);
+      // Enhanced encoding detection with BOM support
+      final bytes = await file.readAsBytes();
+
+      // Check for UTF-16 BOM
+      if (bytes.length >= 2) {
+        if ((bytes[0] == 0xFF && bytes[1] == 0xFE) ||
+            (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
+          try {
+            // Handle UTF-16 with BOM
+            final bomLength = 2;
+            final contentBytes = bytes.sublist(bomLength);
+            if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
+              // UTF-16 LE
+              textContent = String.fromCharCodes(contentBytes);
+              actualEncoding = 'utf-16le';
+            } else {
+              // UTF-16 BE - convert byte order
+              final utf16Chars = <int>[];
+              for (int i = 0; i < contentBytes.length; i += 2) {
+                if (i + 1 < contentBytes.length) {
+                  utf16Chars.add((contentBytes[i] << 8) | contentBytes[i + 1]);
+                }
+              }
+              textContent = String.fromCharCodes(utf16Chars);
+              actualEncoding = 'utf-16be';
+            }
+          } catch (e) {
+            AppLogger.warning(
+                'UTF-16 decoding failed for $fileName, trying UTF-8');
+            textContent = await file.readAsString(encoding: utf8);
+            actualEncoding = 'utf-8';
+          }
+        } else if (bytes.length >= 3 &&
+            bytes[0] == 0xEF &&
+            bytes[1] == 0xBB &&
+            bytes[2] == 0xBF) {
+          // UTF-8 with BOM
+          try {
+            textContent = await file.readAsString(encoding: utf8);
+            actualEncoding = 'utf-8-bom';
+          } catch (e) {
+            AppLogger.warning(
+                'UTF-8 BOM decoding failed for $fileName, trying latin1');
+            textContent = await file.readAsString(encoding: latin1);
+            actualEncoding = 'latin1';
+          }
+        } else {
+          // No BOM detected, try UTF-8 first, fall back to latin1
+          try {
+            textContent = await file.readAsString(encoding: utf8);
+            actualEncoding = 'utf-8';
+          } catch (e) {
+            AppLogger.warning(
+                'UTF-8 decoding failed for $fileName, trying latin1');
+            try {
+              textContent = await file.readAsString(encoding: latin1);
+              actualEncoding = 'latin1';
+            } catch (e2) {
+              AppLogger.error('All encoding attempts failed for $fileName');
+              throw FileSystemException(
+                  'Failed to decode text file with any supported encoding: $e2',
+                  filePath);
+            }
+          }
+        }
+      } else {
+        // File too small to have BOM, try UTF-8 then latin1
+        try {
+          textContent = await file.readAsString(encoding: utf8);
+          actualEncoding = 'utf-8';
+        } catch (e) {
+          AppLogger.warning(
+              'UTF-8 decoding failed for $fileName, trying latin1');
+          textContent = await file.readAsString(encoding: latin1);
+          actualEncoding = 'latin1';
+        }
+      }
+
+      // Validate content for specific file types
+      if (fileType == FileType.json) {
+        try {
+          // Validate JSON content
+          jsonDecode(textContent);
+        } catch (e) {
+          AppLogger.warning('Invalid JSON content in $fileName: $e');
+          // Don't throw error, just log warning - let AI handle invalid JSON
+        }
       }
 
       final extension = _getFileExtension(filePath);
@@ -386,12 +552,15 @@ class FileContentProcessor {
       final metadata = {
         'originalSize': fileSize,
         'textLength': textContent.length,
-        'encoding': 'utf8',
+        'encoding': actualEncoding, // Fix: Now shows actual encoding used
         'extension': extension,
+        'hasValidContent': textContent.isNotEmpty,
+        'contentValidation':
+            fileType == FileType.json ? 'json-validated' : 'text-content',
       };
 
       AppLogger.info(
-          'Text file processed: $fileName, ${textContent.length} characters');
+          'Text file processed: $fileName, $textContent.length characters, encoding: $actualEncoding');
 
       return ProcessedFile.text(
         originalPath: filePath,
@@ -456,6 +625,8 @@ class FileContentProcessor {
       case 'yaml':
       case 'yml':
         return 'application/yaml';
+      case 'svg':
+        return 'text/svg+xml';
       default:
         return 'application/octet-stream';
     }
@@ -487,7 +658,8 @@ class FileContentProcessor {
           return '';
         }
         final startPage = i;
-        final endPage = (i + chunkSize > pageCount) ? pageCount - 1 : i + chunkSize - 1;
+        final endPage =
+            (i + chunkSize > pageCount) ? pageCount - 1 : i + chunkSize - 1;
 
         try {
           // Use compute to run this intensive operation in a separate isolate
@@ -500,8 +672,13 @@ class FileContentProcessor {
             },
           );
 
-          if (pageText.trim().isNotEmpty) {
+          // Validate extracted text before adding to buffer
+          if (pageText.trim().isNotEmpty &&
+              !pageText.contains('Error extracting text from pages')) {
             buffer.write(pageText);
+          } else if (pageText.contains('Error extracting text from pages')) {
+            AppLogger.warning(
+                'Extraction error in chunk ${startPage + 1}-${endPage + 1}: $pageText');
           }
 
           // Report progress
@@ -511,22 +688,38 @@ class FileContentProcessor {
           // Yield to the event loop to prevent UI freezing
           await Future.delayed(Duration.zero);
         } catch (e) {
-          AppLogger.warning('Error extracting text from pages ${startPage + 1}-${endPage + 1}: $e');
+          AppLogger.warning(
+              'Error extracting text from pages ${startPage + 1}-${endPage + 1}: $e');
+          // Continue processing other chunks even if one fails
         }
       }
 
       final extractedText = buffer.toString().trim();
-      AppLogger.info(
-          'PDF text extraction completed: ${extractedText.length} characters extracted');
 
+      // Better validation of extracted content
       if (extractedText.isEmpty) {
+        AppLogger.warning('No text extracted from PDF: $fileName');
         return 'This appears to be a scanned or image-based PDF. Text extraction is limited.';
       }
+
+      // Check for suspicious patterns that might indicate extraction issues
+      final lines = extractedText.split('\n');
+      final nonEmptyLines =
+          lines.where((line) => line.trim().isNotEmpty).toList();
+
+      if (nonEmptyLines.length < 3) {
+        AppLogger.warning(
+            'Very little text extracted from PDF: $fileName ($nonEmptyLines.length lines)');
+        return 'This PDF appears to contain minimal text content. Text extraction may be incomplete.';
+      }
+
+      AppLogger.info(
+          'PDF text extraction completed: $extractedText.length characters extracted from $pageCount pages');
 
       return extractedText;
     } catch (e) {
       AppLogger.error('Error extracting text from PDF', e);
-      return 'Error extracting text from PDF. The file may be corrupted or password-protected.';
+      return 'Error extracting text from PDF. The file may be corrupted, password-protected, or contain non-standard formatting.';
     } finally {
       document?.dispose();
     }
@@ -545,13 +738,17 @@ class FileContentProcessor {
       final extractor = PdfTextExtractor(document);
 
       for (int i = startPageIndex; i <= endPageIndex; i++) {
-        final pageText = extractor.extractText(startPageIndex: startPageIndex, endPageIndex: endPageIndex);
+        // Fix: Extract text from individual page, not the entire range
+        final pageText =
+            extractor.extractText(startPageIndex: i, endPageIndex: i);
         if (pageText.trim().isNotEmpty) {
           buffer.write('Page ${i + 1}:\n$pageText\n\n');
         }
       }
     } catch (e) {
-      // Log or handle error if needed
+      // Log or handle error if needed - add error info to buffer for debugging
+      buffer.write(
+          'Error extracting text from pages ${startPageIndex + 1}-${endPageIndex + 1}: $e\n');
     } finally {
       document?.dispose();
     }

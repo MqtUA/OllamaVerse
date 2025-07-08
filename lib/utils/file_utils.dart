@@ -11,7 +11,39 @@ class FileUtils {
   static const List<String> allowedExtensions = [
     'txt', 'md', 'csv', 'log', 'readme', 'rtf', // Text files
     'json', 'jsonl', 'geojson', // JSON files
-    'dart', 'py', 'js', 'ts', 'java', 'cpp', 'c', 'h', 'hpp', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'm', 'mm', 'sh', 'bat', 'ps1', 'sql', 'html', 'css', 'scss', 'sass', 'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', // Source code and config files
+    'dart',
+    'py',
+    'js',
+    'ts',
+    'java',
+    'cpp',
+    'c',
+    'h',
+    'hpp',
+    'cs',
+    'php',
+    'rb',
+    'go',
+    'rs',
+    'swift',
+    'kt',
+    'm',
+    'mm',
+    'sh',
+    'bat',
+    'ps1',
+    'sql',
+    'html',
+    'css',
+    'scss',
+    'sass',
+    'xml',
+    'yaml',
+    'yml',
+    'toml',
+    'ini',
+    'conf',
+    'cfg', // Source code and config files
     'pdf', // PDF files
     'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'svg' // Image files
   ];
@@ -169,7 +201,7 @@ class FileUtils {
     'bmp',
     'webp',
     'tiff',
-    'svg'
+    // SVG moved to text extensions since it's XML-based text
   ];
 
   static const List<String> textExtensions = [
@@ -178,7 +210,8 @@ class FileUtils {
     'csv',
     'log',
     'readme',
-    'rtf'
+    'rtf',
+    'svg', // SVG is XML-based text content, not binary image
   ];
 
   static const List<String> sourceCodeExtensions = [
@@ -272,7 +305,9 @@ class FileUtils {
       if (!await file.exists()) return false;
 
       // Read the first 4KB (4096 bytes) of the file
-      final bytes = await file.readAsBytes().then((b) => b.sublist(0, b.length < 4096 ? b.length : 4096));
+      final bytes = await file
+          .readAsBytes()
+          .then((b) => b.sublist(0, b.length < 4096 ? b.length : 4096));
 
       int nullByteCount = 0;
       int printableAsciiCount = 0;
@@ -282,18 +317,23 @@ class FileUtils {
           nullByteCount++;
         }
         // Check for printable ASCII characters (0x20 to 0x7E, plus common whitespace)
-        if ((byte >= 0x20 && byte <= 0x7E) || byte == 0x09 || byte == 0x0A || byte == 0x0D) {
+        if ((byte >= 0x20 && byte <= 0x7E) ||
+            byte == 0x09 ||
+            byte == 0x0A ||
+            byte == 0x0D) {
           printableAsciiCount++;
         }
       }
 
       // If there are too many null bytes, it's likely a binary file
-      if (nullByteCount > (bytes.length * 0.05)) { // More than 5% null bytes
+      if (nullByteCount > (bytes.length * 0.05)) {
+        // More than 5% null bytes
         return false;
       }
 
       // If a high percentage of characters are printable ASCII, it's likely a text file
-      if (bytes.isNotEmpty && (printableAsciiCount / bytes.length) > 0.85) { // More than 85% printable
+      if (bytes.isNotEmpty && (printableAsciiCount / bytes.length) > 0.85) {
+        // More than 85% printable
         return true;
       }
 

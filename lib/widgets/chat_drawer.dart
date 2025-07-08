@@ -116,7 +116,7 @@ class ChatDrawer extends StatelessWidget {
                       ),
                       direction: DismissDirection.endToStart,
                       confirmDismiss: (direction) async {
-                        return await showDialog(
+                        final bool? shouldDelete = await showDialog<bool>(
                           context: context,
                           builder: (BuildContext context) {
                             return AlertDialog(
@@ -139,9 +139,18 @@ class ChatDrawer extends StatelessWidget {
                             );
                           },
                         );
+
+                        // If user confirmed deletion, delete the chat immediately
+                        if (shouldDelete == true) {
+                          chatProvider.deleteChat(chat.id);
+                        }
+
+                        // Return true to allow dismissal animation, false to cancel
+                        return shouldDelete == true;
                       },
                       onDismissed: (direction) {
-                        chatProvider.deleteChat(chat.id);
+                        // Chat is already deleted in confirmDismiss
+                        // This callback is just for cleanup if needed
                       },
                       child: ListTile(
                         title: MarkdownTitle(
