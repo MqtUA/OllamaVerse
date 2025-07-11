@@ -40,6 +40,10 @@ class ChatProvider with ChangeNotifier {
   final Map<String, bool> _expandedThinkingBubbles = {};
   bool _isThinkingPhase = false;
 
+  // Title generation state
+  bool _isGeneratingTitle = false;
+  final Set<String> _chatsGeneratingTitle = {};
+
   // Chat switching state
   bool _shouldScrollToBottomOnChatSwitch = false;
 
@@ -83,6 +87,11 @@ class ChatProvider with ChangeNotifier {
   bool get shouldScrollToBottomOnChatSwitch =>
       _shouldScrollToBottomOnChatSwitch;
   SettingsProvider get settingsProvider => _settingsProvider;
+
+  // Title generation getters
+  bool get isGeneratingTitle => _isGeneratingTitle;
+  bool isChatGeneratingTitle(String chatId) =>
+      _chatsGeneratingTitle.contains(chatId);
 
   /// Check if a thinking bubble is expanded
   bool isThinkingBubbleExpanded(String messageId) {
@@ -360,6 +369,11 @@ class ChatProvider with ChangeNotifier {
     _hasActiveThinkingBubble = false;
     _isInsideThinkingBlock = false;
     _currentGeneratingChatId = null;
+
+    // Clear title generation state
+    _chatsGeneratingTitle.clear();
+    _isGeneratingTitle = false;
+
     _cancellationToken = CancellationToken(); // Reset the token
     _safeNotifyListeners();
   }
@@ -655,8 +669,16 @@ class ChatProvider with ChangeNotifier {
 
       // If the deleted chat was active, set active chat to most recent or null
       if (_activeChat?.id == chatId) {
-        _cancelOngoingGeneration(); // Cancel generation if active chat is deleted
+        // Cancel any ongoing generation for the deleted chat
+        if (_isGenerating || _isSendingMessage) {
+          AppLogger.info('Cancelling operations for deleted chat: $chatId');
+          _cancelOngoingGeneration();
+        }
         _activeChat = _chats.isNotEmpty ? _chats.first : null;
+
+        // Clear title generation state for deleted chat
+        _chatsGeneratingTitle.remove(chatId);
+        _isGeneratingTitle = _chatsGeneratingTitle.isNotEmpty;
       }
 
       _safeNotifyListeners(); // Notify listeners immediately to update UI
@@ -1022,6 +1044,11 @@ class ChatProvider with ChangeNotifier {
     try {
       // Only auto-name if the chat has a default title
       if (chat.title == 'New Chat' || chat.title.startsWith('New chat with')) {
+        // Set title generation state
+        _chatsGeneratingTitle.add(chat.id);
+        _isGeneratingTitle = true;
+        _safeNotifyListeners();
+
         AppLogger.info('Auto-generating title for chat: ${chat.id}');
 
         // Add timeout protection for title generation (30 seconds max)
@@ -1057,6 +1084,11 @@ class ChatProvider with ChangeNotifier {
       } catch (fallbackError) {
         AppLogger.error('Error applying fallback title', fallbackError);
       }
+    } finally {
+      // Always clear title generation state
+      _chatsGeneratingTitle.remove(chat.id);
+      _isGeneratingTitle = _chatsGeneratingTitle.isNotEmpty;
+      _safeNotifyListeners();
     }
   }
 

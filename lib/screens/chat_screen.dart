@@ -328,9 +328,6 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Consumer<ChatProvider>(
           builder: (context, chatProvider, child) {
             final activeChat = chatProvider.activeChat;
-            final isDefaultTitle = activeChat != null &&
-                (activeChat.title == 'New Chat' ||
-                    activeChat.title.startsWith('New chat with'));
             return Row(
               children: [
                 Expanded(
@@ -340,8 +337,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-                if (isDefaultTitle &&
-                    chatProvider.isActiveChatGenerating == false)
+                if (activeChat != null &&
+                    chatProvider.isChatGeneratingTitle(activeChat.id))
                   Padding(
                     padding: const EdgeInsets.only(left: 8.0),
                     child: Row(
