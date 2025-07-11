@@ -15,7 +15,7 @@ import 'services/chat_history_service.dart';
 import 'services/storage_service.dart';
 import 'services/file_cleanup_service.dart';
 import 'services/performance_monitor.dart';
-import 'widgets/animated_theme_switcher.dart';
+import 'widgets/theme_wrapper.dart';
 import 'theme/material_light_theme.dart';
 import 'theme/dracula_theme.dart';
 
@@ -89,81 +89,89 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Create the SettingsProvider first
-        ChangeNotifierProvider(create: (_) => SettingsProvider()),
-
-        // Create the ThemeNotifier and sync it with SettingsProvider
-        ChangeNotifierProxyProvider<SettingsProvider, ThemeNotifier>(
-          create: (context) => ThemeNotifier(),
-          update: (context, settingsProvider, themeNotifier) {
-            if (themeNotifier != null && !settingsProvider.isLoading) {
-              // Sync theme notifier with settings provider dark mode
-              final shouldBeDark = settingsProvider.settings.darkMode;
-              if (themeNotifier.isDarkMode != shouldBeDark) {
-                // Use Future.microtask to avoid calling setState during build
-                Future.microtask(() => themeNotifier.setDarkMode(shouldBeDark));
-              }
-            }
-            return themeNotifier ?? ThemeNotifier();
-          },
+        // Create independent providers first
+        ChangeNotifierProvider(
+          create: (_) => SettingsProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ThemeNotifier(),
         ),
 
-        // Create the ChatProvider with the required parameters
-        ChangeNotifierProxyProvider<SettingsProvider, ChatProvider>(
-          // Create a new ChatProvider with the required parameters
-          create: (context) {
-            final settingsProvider =
-                Provider.of<SettingsProvider>(context, listen: false);
-            final chatHistoryService = ChatHistoryService();
-            return ChatProvider(
-              chatHistoryService: chatHistoryService,
-              settingsProvider: settingsProvider,
-            );
-          },
-          // Update the ChatProvider when SettingsProvider changes
-          update: (context, settingsProvider, previous) {
-            if (previous == null) {
-              final chatHistoryService = ChatHistoryService();
-              return ChatProvider(
-                chatHistoryService: chatHistoryService,
-                settingsProvider: settingsProvider,
-              );
-            }
-            // Return the previous instance as it already has listeners set up
-            return previous;
-          },
+        // Create ChatProvider independently - it will access SettingsProvider via Provider.of when needed
+        ChangeNotifierProvider(
+          create: (context) => ChatProvider(
+            chatHistoryService: ChatHistoryService(),
+            settingsProvider:
+                Provider.of<SettingsProvider>(context, listen: false),
+          ),
         ),
       ],
-      child: Consumer<ThemeNotifier>(
-        builder: (context, themeNotifier, child) {
-          return MaterialApp(
-            title: 'OllamaVerse',
-            theme: materialLightTheme(),
-            darkTheme: draculaDarkTheme(),
-            themeMode:
-                themeNotifier.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-            initialRoute: '/',
-            routes: {
-              '/': (context) => AnimatedThemeSwitcher(
-                    themeMode: themeNotifier.isDarkMode
-                        ? ThemeMode.dark
-                        : ThemeMode.light,
-                    duration: const Duration(milliseconds: 30), // Ultra-fast
-                    curve: Curves.linear,
-                    child: const ChatScreen(),
-                  ),
-              '/settings': (context) => AnimatedThemeSwitcher(
-                    themeMode: themeNotifier.isDarkMode
-                        ? ThemeMode.dark
-                        : ThemeMode.light,
-                    duration: const Duration(milliseconds: 30), // Ultra-fast
-                    curve: Curves.linear,
-                    child: const SettingsScreen(),
-                  ),
-            },
-          );
-        },
-      ),
+      // Use a custom widget to handle theme synchronization
+      child: const _AppContent(),
+    );
+  }
+}
+
+/// Handles theme synchronization and app routing
+class _AppContent extends StatefulWidget {
+  const _AppContent();
+
+  @override
+  State<_AppContent> createState() => _AppContentState();
+}
+
+class _AppContentState extends State<_AppContent> {
+  @override
+  void initState() {
+    super.initState();
+    // Set up theme synchronization after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _synchronizeTheme();
+    });
+  }
+
+  void _synchronizeTheme() {
+    final settingsProvider = context.read<SettingsProvider>();
+    final themeNotifier = context.read<ThemeNotifier>();
+
+    // Listen to settings changes and update theme accordingly
+    settingsProvider.addListener(() {
+      final shouldBeDark = settingsProvider.settings.darkMode;
+      if (themeNotifier.isDarkMode != shouldBeDark) {
+        themeNotifier.setDarkMode(shouldBeDark);
+      }
+    });
+
+    // Initial sync
+    if (!settingsProvider.isLoading) {
+      final shouldBeDark = settingsProvider.settings.darkMode;
+      if (themeNotifier.isDarkMode != shouldBeDark) {
+        themeNotifier.setDarkMode(shouldBeDark);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ThemeNotifier>(
+      builder: (context, themeNotifier, child) {
+        return MaterialApp(
+          title: 'OllamaVerse',
+          theme: materialLightTheme(),
+          darkTheme: draculaDarkTheme(),
+          themeMode:
+              themeNotifier.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const ThemeWrapper(
+                  child: ChatScreen(),
+                ),
+            '/settings': (context) => const ThemeWrapper(
+                  child: SettingsScreen(),
+                ),
+          },
+        );
+      },
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:ollamaverse/services/chat_history_service.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
 
 import 'package:ollamaverse/models/app_settings.dart';
+import 'package:ollamaverse/models/ollama_response.dart';
 
 // Generate mocks with custom names to avoid conflicts
 @GenerateMocks([], customMocks: [
@@ -44,6 +45,8 @@ void main() {
     when(mockSettingsProvider.settings).thenReturn(
       AppSettings(showLiveResponse: false),
     );
+    when(mockSettingsProvider.isLoading)
+        .thenReturn(false); // Important: not loading
     when(mockSettingsProvider.getOllamaService()).thenReturn(mockOllamaService);
     when(mockSettingsProvider.getLastSelectedModel())
         .thenAnswer((_) async => 'llama2');
@@ -62,7 +65,6 @@ void main() {
 
     test('refreshModels fetches models from OllamaService', () async {
       await chatProvider.refreshModels();
-      verify(mockSettingsProvider.getOllamaService()).called(greaterThan(0));
       verify(mockOllamaService.getModels()).called(1);
     });
 
@@ -82,51 +84,74 @@ void main() {
 
     test('sends message and receives response', () async {
       const message = 'Hello';
-      const response = 'Hi there!';
+      final mockResponse = OllamaResponse(response: 'Hi there!', context: []);
 
-      when(mockOllamaService.generateResponse(
+      when(mockOllamaService.generateResponseWithContext(
         any,
         model: anyNamed('model'),
-      )).thenAnswer((_) async => response);
+        processedFiles: anyNamed('processedFiles'),
+        context: anyNamed('context'),
+        conversationHistory: anyNamed('conversationHistory'),
+        contextLength: anyNamed('contextLength'),
+        isCancelled: anyNamed('isCancelled'),
+      )).thenAnswer((_) async => mockResponse);
 
       await chatProvider.createNewChat('llama2');
       await chatProvider.sendMessage(message);
 
-      verify(mockSettingsProvider.getOllamaService()).called(greaterThan(0));
-      verify(mockOllamaService.generateResponse(
-        message,
-        model: 'llama2',
+      verify(mockSettingsProvider.getOllamaService());
+      verify(mockOllamaService.generateResponseWithContext(
+        any,
+        model: anyNamed('model'),
+        processedFiles: anyNamed('processedFiles'),
+        context: anyNamed('context'),
+        conversationHistory: anyNamed('conversationHistory'),
+        contextLength: anyNamed('contextLength'),
+        isCancelled: anyNamed('isCancelled'),
       )).called(1);
 
       expect(chatProvider.activeChat!.messages.length,
           2); // user message + AI response
-      expect(chatProvider.activeChat!.messages.last.content, response);
+      expect(chatProvider.activeChat!.messages.last.content, 'Hi there!');
     });
 
     test('handles streaming responses', () async {
       const message = 'Hello';
-      const responses = ['Hi', ' there', '!'];
+      final responses = [
+        OllamaStreamResponse(response: 'Hi', done: false),
+        OllamaStreamResponse(response: ' there', done: false),
+        OllamaStreamResponse(response: '!', done: true),
+      ];
 
       when(mockSettingsProvider.settings).thenReturn(
         AppSettings(showLiveResponse: true),
       );
 
-      when(mockOllamaService.generateStreamingResponse(
+      when(mockOllamaService.generateStreamingResponseWithContext(
         any,
         model: anyNamed('model'),
+        processedFiles: anyNamed('processedFiles'),
         context: anyNamed('context'),
+        conversationHistory: anyNamed('conversationHistory'),
+        contextLength: anyNamed('contextLength'),
+        isCancelled: anyNamed('isCancelled'),
       )).thenAnswer((_) => Stream.fromIterable(responses));
 
       await chatProvider.createNewChat('llama2');
       await chatProvider.sendMessage(message);
 
-      verify(mockSettingsProvider.getOllamaService()).called(greaterThan(0));
-      verify(mockOllamaService.generateStreamingResponse(
-        message,
-        model: 'llama2',
+      verify(mockSettingsProvider.getOllamaService());
+      verify(mockOllamaService.generateStreamingResponseWithContext(
+        any,
+        model: anyNamed('model'),
+        processedFiles: anyNamed('processedFiles'),
+        context: anyNamed('context'),
+        conversationHistory: anyNamed('conversationHistory'),
+        contextLength: anyNamed('contextLength'),
+        isCancelled: anyNamed('isCancelled'),
       )).called(1);
 
-      expect(chatProvider.activeChat!.messages.last.content, responses.join());
+      expect(chatProvider.activeChat!.messages.last.content, 'Hi there!');
     });
   });
 

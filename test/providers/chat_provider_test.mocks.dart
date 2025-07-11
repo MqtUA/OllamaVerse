@@ -216,50 +216,31 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
       ) as _i5.Stream<String>);
 
   @override
-  _i5.Future<String> generateResponse(
-    String? prompt, {
-    String? model,
-    List<int>? context,
-  }) =>
+  _i5.Future<Map<String, dynamic>> validateSystemPromptSupport(
+          String? modelName) =>
       (super.noSuchMethod(
         Invocation.method(
-          #generateResponse,
-          [prompt],
-          {
-            #model: model,
-            #context: context,
-          },
+          #validateSystemPromptSupport,
+          [modelName],
         ),
-        returnValue: _i5.Future<String>.value(_i8.dummyValue<String>(
-          this,
-          Invocation.method(
-            #generateResponse,
-            [prompt],
-            {
-              #model: model,
-              #context: context,
-            },
-          ),
-        )),
-      ) as _i5.Future<String>);
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
 
   @override
-  _i5.Stream<String> generateStreamingResponse(
-    String? prompt, {
-    String? model,
-    List<int>? context,
-  }) =>
-      (super.noSuchMethod(
+  String getSystemPromptStrategy(String? modelName) => (super.noSuchMethod(
         Invocation.method(
-          #generateStreamingResponse,
-          [prompt],
-          {
-            #model: model,
-            #context: context,
-          },
+          #getSystemPromptStrategy,
+          [modelName],
         ),
-        returnValue: _i5.Stream<String>.empty(),
-      ) as _i5.Stream<String>);
+        returnValue: _i8.dummyValue<String>(
+          this,
+          Invocation.method(
+            #getSystemPromptStrategy,
+            [modelName],
+          ),
+        ),
+      ) as String);
 
   @override
   void dispose() => super.noSuchMethod(

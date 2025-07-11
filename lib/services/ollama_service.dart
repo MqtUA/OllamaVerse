@@ -596,37 +596,6 @@ class OllamaService {
     }
   }
 
-  /// Legacy method for backward compatibility - delegates to the file-enabled version
-  @Deprecated('Use generateResponseWithFiles instead for better functionality')
-  Future<String> generateResponse(
-    String prompt, {
-    String? model,
-    List<int>? context,
-  }) async {
-    return generateResponseWithFiles(
-      prompt,
-      model: model,
-      context: context,
-      processedFiles: null,
-    );
-  }
-
-  /// Legacy method for backward compatibility - delegates to the file-enabled version
-  @Deprecated(
-      'Use generateStreamingResponseWithFiles instead for better functionality')
-  Stream<String> generateStreamingResponse(
-    String prompt, {
-    String? model,
-    List<int>? context,
-  }) async* {
-    yield* generateStreamingResponseWithFiles(
-      prompt,
-      model: model,
-      context: context,
-      processedFiles: null,
-    );
-  }
-
   /// Check if a model supports system prompts and provide feedback
   Future<Map<String, dynamic>> validateSystemPromptSupport(
       String modelName) async {

@@ -211,6 +211,7 @@ ${_getPerformanceRecommendations(stats)}
     // Use developer.log for production-safe logging
     if (kDebugMode) {
       // Use print only in debug mode for immediate console visibility
+      // ignore: avoid_print
       print(summary);
       developer.log(summary, name: 'PerformanceMonitor');
     } else {

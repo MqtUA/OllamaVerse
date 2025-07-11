@@ -249,9 +249,20 @@ class ChatProvider with ChangeNotifier {
 
   Future<void> _loadModels() async {
     try {
-      // Wait for settings to be ready before loading models
-      while (_settingsProvider.isLoading) {
+      // Wait for settings to be ready before loading models (max 10 seconds)
+      int attempts = 0;
+      const maxAttempts = 100; // 10 seconds max
+      while (_settingsProvider.isLoading && attempts < maxAttempts) {
         await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+
+      // If settings still loading after timeout, log warning but continue
+      if (_settingsProvider.isLoading) {
+        AppLogger.warning(
+            'Settings still loading after 10s timeout for model loading');
+        _availableModels = [];
+        return;
       }
 
       final ollamaService = _settingsProvider.getOllamaService();
@@ -1053,9 +1064,19 @@ class ChatProvider with ChangeNotifier {
   Future<String> _generateChatTitle(
       String userMessage, String aiResponse, String modelName) async {
     try {
-      // Wait for settings to be ready before generating title
-      while (_settingsProvider.isLoading) {
+      // Wait for settings to be ready before generating title (max 10 seconds)
+      int attempts = 0;
+      const maxAttempts = 100; // 10 seconds max
+      while (_settingsProvider.isLoading && attempts < maxAttempts) {
         await Future.delayed(const Duration(milliseconds: 100));
+        attempts++;
+      }
+
+      // If settings still loading after timeout, proceed anyway with fallback
+      if (_settingsProvider.isLoading) {
+        AppLogger.warning(
+            'Settings still loading after 10s timeout, using fallback title');
+        return 'New Chat';
       }
 
       // Filter thinking content from AI response for better title generation
