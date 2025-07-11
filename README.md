@@ -73,6 +73,14 @@ This caching system is particularly beneficial for Ollama workflows involving:
 - **Image Processing**: Immediate access to previously uploaded images for vision models
 - **Multi-session Workflows**: Same files available instantly across different conversations
 
+### Stop Button Functionality
+- **Unified Operation Tracking**: New `isAnyOperationInProgress` getter tracks all types of operations (generation, file processing, sending)
+- **Comprehensive Cancellation**: Stop button now properly cancels all operations including file processing
+- **Proper State Reset**: Cancellation correctly resets all operation flags and clears any ongoing streams
+- **Persistent State Fix**: Prevents stop button state from persisting when switching/deleting chats during operations
+- **Smart Button Logic**: Button dynamically switches between send and stop modes based on any ongoing operation
+- **Immediate Response**: Stop button provides immediate feedback and cancellation without delays
+
 ### Storage & Security
 - **Secure Authentication Storage**: Bearer auth tokens stored using encrypted secure storage
 - **Dual Storage System**: Sensitive data in secure storage, regular settings in standard storage

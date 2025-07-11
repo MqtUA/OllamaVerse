@@ -32,7 +32,6 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _attachedFiles = [];
   bool _isCtrlPressed = false;
   bool _userHasScrolled = false;
-  
 
   // Cache provider reference to avoid unsafe lookups during dispose
   ChatProvider? _chatProvider;
@@ -202,8 +201,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
 
-    
-
     // Use cached provider reference or get fresh one if needed
     final chatProvider =
         _chatProvider ?? Provider.of<ChatProvider>(context, listen: false);
@@ -219,9 +216,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }).catchError((error) {
       // Show error message
       if (!mounted) return; // Check if the widget is still mounted
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $error')));
     });
 
     // Clear the input field and attachments
@@ -331,12 +328,36 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Consumer<ChatProvider>(
           builder: (context, chatProvider, child) {
             final activeChat = chatProvider.activeChat;
-            return MarkdownTitle(
-              data: activeChat?.title ?? 'New Chat',
-              style: Theme.of(context).appBarTheme.titleTextStyle ??
-                  Theme.of(context).textTheme.titleLarge,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            final isDefaultTitle = activeChat != null &&
+                (activeChat.title == 'New Chat' ||
+                    activeChat.title.startsWith('New chat with'));
+            return Row(
+              children: [
+                Expanded(
+                  child: MarkdownTitle(
+                    data: activeChat?.title ?? 'New Chat',
+                    style: Theme.of(context).appBarTheme.titleTextStyle ??
+                        Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                if (isDefaultTitle &&
+                    chatProvider.isActiveChatGenerating == false)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 4),
+                        Text('Generating title...',
+                            style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+              ],
             );
           },
         ),
@@ -739,7 +760,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         const SizedBox(width: 8.0),
                         IconButton(
-                          icon: chatProvider.isGenerating
+                          icon: chatProvider.isAnyOperationInProgress
                               ? Stack(
                                   alignment: Alignment.center,
                                   children: [
@@ -762,30 +783,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                 )
                               : Icon(
                                   Icons.send,
-                                  color: chatProvider.isSendingMessage ||
-                                          chatProvider.isProcessingFiles
-                                      ? Colors.grey
-                                      : Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.lightBlueAccent
-                                          : Theme.of(context).primaryColor,
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.lightBlueAccent
+                                      : Theme.of(context).primaryColor,
                                 ),
-                          onPressed: chatProvider.isGenerating
+                          onPressed: chatProvider.isAnyOperationInProgress
                               ? () {
                                   chatProvider.cancelGeneration();
                                 }
-                              : (chatProvider.isSendingMessage
-                                  ? null
-                                  : () {
-                                      _sendMessage();
-                                    }),
-                          tooltip: chatProvider.isGenerating
-                              ? 'Stop generation'
-                              : chatProvider.isProcessingFiles
-                                  ? 'Processing files...'
-                                  : chatProvider.isSendingMessage
-                                      ? 'Sending...'
-                                      : 'Send message',
+                              : () {
+                                  _sendMessage();
+                                },
+                          tooltip: chatProvider.isAnyOperationInProgress
+                              ? 'Stop ${chatProvider.isProcessingFiles ? "file processing" : chatProvider.isSendingMessage ? "sending" : "generation"}'
+                              : 'Send message',
                         ),
                       ],
                     ),
@@ -807,7 +819,8 @@ class _ChatScreenState extends State<ChatScreen> {
           return const SizedBox.shrink();
         }
 
-        final progressList = chatProvider.fileProcessingProgress.values.toList();
+        final progressList =
+            chatProvider.fileProcessingProgress.values.toList();
 
         return Container(
           padding: const EdgeInsets.all(12.0),

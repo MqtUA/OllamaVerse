@@ -129,4 +129,27 @@ void main() {
       expect(chatProvider.activeChat!.messages.last.content, responses.join());
     });
   });
+
+  group('Stop Button Functionality', () {
+    testWidgets('isAnyOperationInProgress getter exists and works',
+        (tester) async {
+      // Verify the new getter exists
+      expect(chatProvider.isAnyOperationInProgress, isA<bool>());
+
+      // Initially should be false
+      expect(chatProvider.isAnyOperationInProgress, false);
+    });
+
+    testWidgets('cancelGeneration method completes without errors',
+        (tester) async {
+      // Just verify the method can be called without throwing
+      expect(() => chatProvider.cancelGeneration(), returnsNormally);
+
+      // Verify operation states are false after cancellation
+      expect(chatProvider.isGenerating, false);
+      expect(chatProvider.isSendingMessage, false);
+      expect(chatProvider.isProcessingFiles, false);
+      expect(chatProvider.isAnyOperationInProgress, false);
+    });
+  });
 }

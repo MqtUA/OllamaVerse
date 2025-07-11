@@ -53,8 +53,8 @@ class FileUtils {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
-        type: FileType.custom,
-        allowedExtensions: allowedExtensions,
+        type: FileType.any, // Changed from FileType.custom to allow all files
+        // allowedExtensions: allowedExtensions, // Removed extension restriction
       );
 
       if (result != null) {
@@ -74,11 +74,11 @@ class FileUtils {
               continue;
             }
 
-            // Check file extension
-            final ext = getFileExtension(file.path!);
-            if (!allowedExtensions.contains(ext)) {
+            // Enhanced file compatibility check
+            final isCompatible = await _isFileCompatible(file.path!, file.name);
+            if (!isCompatible) {
               AppLogger.warning(
-                'File ${file.name} has unsupported extension: $ext',
+                'File ${file.name} is not compatible (appears to be binary and too large)',
               );
               continue;
             }
@@ -100,6 +100,45 @@ class FileUtils {
     } catch (e) {
       AppLogger.error('Error picking files', e);
       return [];
+    }
+  }
+
+  /// Enhanced compatibility check for any file type
+  static Future<bool> _isFileCompatible(
+      String filePath, String fileName) async {
+    try {
+      final extension = getFileExtension(filePath);
+
+      // Known compatible extensions are always allowed
+      if (allowedExtensions.contains(extension)) {
+        return true;
+      }
+
+      // For unknown extensions or no extension, check if it's likely a text file
+      final isLikelyText = await isLikelyTextFile(filePath);
+      if (isLikelyText) {
+        AppLogger.info(
+            'Detected text content in file with unknown/no extension: $fileName');
+        return true;
+      }
+
+      // Check if it's a small binary file that might be worth trying
+      final file = File(filePath);
+      final fileSize = await file.length();
+
+      // Allow small files under 1MB regardless of type for user convenience
+      if (fileSize < 1024 * 1024) {
+        AppLogger.info(
+            'Allowing small file regardless of type: $fileName (${formatFileSize(fileSize)})');
+        return true;
+      }
+
+      AppLogger.info(
+          'File $fileName rejected: appears to be large binary file');
+      return false;
+    } catch (e) {
+      AppLogger.error('Error checking file compatibility for $fileName', e);
+      return false; // Err on the side of caution
     }
   }
 
@@ -304,44 +343,208 @@ class FileUtils {
       final file = File(filePath);
       if (!await file.exists()) return false;
 
-      // Read the first 4KB (4096 bytes) of the file
-      final bytes = await file
-          .readAsBytes()
-          .then((b) => b.sublist(0, b.length < 4096 ? b.length : 4096));
+      // Read the first 8KB (8192 bytes) of the file for better detection
+      final fileSize = await file.length();
+      final sampleSize = fileSize < 8192 ? fileSize : 8192;
+      final bytes =
+          await file.readAsBytes().then((b) => b.sublist(0, sampleSize));
 
-      int nullByteCount = 0;
-      int printableAsciiCount = 0;
+      if (bytes.isEmpty) return false;
 
-      for (final byte in bytes) {
-        if (byte == 0) {
-          nullByteCount++;
-        }
-        // Check for printable ASCII characters (0x20 to 0x7E, plus common whitespace)
-        if ((byte >= 0x20 && byte <= 0x7E) ||
-            byte == 0x09 ||
-            byte == 0x0A ||
-            byte == 0x0D) {
-          printableAsciiCount++;
-        }
-      }
-
-      // If there are too many null bytes, it's likely a binary file
-      if (nullByteCount > (bytes.length * 0.05)) {
-        // More than 5% null bytes
-        return false;
-      }
-
-      // If a high percentage of characters are printable ASCII, it's likely a text file
-      if (bytes.isNotEmpty && (printableAsciiCount / bytes.length) > 0.85) {
-        // More than 85% printable
+      // Check for common text file signatures/BOMs
+      if (_hasTextFileSignature(bytes)) {
         return true;
       }
 
-      // Fallback for very small files or ambiguous cases
-      return false;
+      // Enhanced character analysis
+      return _analyzeFileContent(bytes);
     } catch (e) {
       AppLogger.warning('Error checking if file is likely text: $e');
       return false;
     }
+  }
+
+  /// Check for text file signatures and BOMs
+  static bool _hasTextFileSignature(List<int> bytes) {
+    if (bytes.length < 3) return false;
+
+    // UTF-8 BOM
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return true;
+    }
+
+    // UTF-16 BOMs
+    if (bytes.length >= 2) {
+      if ((bytes[0] == 0xFF && bytes[1] == 0xFE) ||
+          (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
+        return true;
+      }
+    }
+
+    // UTF-32 BOMs
+    if (bytes.length >= 4) {
+      if ((bytes[0] == 0xFF &&
+              bytes[1] == 0xFE &&
+              bytes[2] == 0x00 &&
+              bytes[3] == 0x00) ||
+          (bytes[0] == 0x00 &&
+              bytes[1] == 0x00 &&
+              bytes[2] == 0xFE &&
+              bytes[3] == 0xFF)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// Enhanced content analysis for text detection
+  static bool _analyzeFileContent(List<int> bytes) {
+    if (bytes.isEmpty) return false;
+
+    int nullByteCount = 0;
+    int printableAsciiCount = 0;
+    int unicodeCount = 0;
+    int controlCharCount = 0;
+    int lineBreakCount = 0;
+
+    for (int i = 0; i < bytes.length; i++) {
+      final byte = bytes[i];
+
+      if (byte == 0) {
+        nullByteCount++;
+      } else if (byte == 0x0A || byte == 0x0D) {
+        // Line breaks
+        lineBreakCount++;
+        printableAsciiCount++;
+      } else if (byte == 0x09) {
+        // Tabs
+        printableAsciiCount++;
+      } else if (byte >= 0x20 && byte <= 0x7E) {
+        // Printable ASCII
+        printableAsciiCount++;
+      } else if (byte >= 0x80) {
+        // Potential Unicode (UTF-8 continuation bytes)
+        unicodeCount++;
+      } else if (byte < 0x20) {
+        // Control characters (excluding already handled ones)
+        controlCharCount++;
+      }
+    }
+
+    final totalBytes = bytes.length;
+
+    // Binary file indicators
+    if (nullByteCount > (totalBytes * 0.01)) {
+      // More than 1% null bytes - likely binary
+      return false;
+    }
+
+    if (controlCharCount > (totalBytes * 0.05)) {
+      // More than 5% control characters - likely binary
+      return false;
+    }
+
+    // Text file indicators
+    final textCharacters = printableAsciiCount + unicodeCount;
+    final textPercentage = textCharacters / totalBytes;
+
+    // If more than 80% of characters are text-like, consider it text
+    if (textPercentage > 0.80) {
+      return true;
+    }
+
+    // Additional heuristics for specific file types
+    if (_hasTextFilePatterns(bytes)) {
+      return true;
+    }
+
+    // If we have line breaks and reasonable text content, it's likely text
+    if (lineBreakCount > 0 && textPercentage > 0.60) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Check for common text file patterns
+  static bool _hasTextFilePatterns(List<int> bytes) {
+    final content = String.fromCharCodes(bytes.where((b) => b != 0));
+    final lowerContent = content.toLowerCase();
+
+    // Common text file patterns
+    final textPatterns = [
+      // Programming language indicators
+      RegExp(
+          r'\b(function|class|import|export|var|let|const|def|if|else|for|while)\b'),
+      // Markup language indicators
+      RegExp(r'<[a-zA-Z][^>]*>|&[a-zA-Z]+;'),
+      // Configuration file indicators
+      RegExp(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*[=:]\s*', multiLine: true),
+      // Documentation indicators
+      RegExp(r'^\s*#+\s+|^\s*\*\s+|^\s*-\s+', multiLine: true),
+      // JSON-like patterns
+      RegExp(r'[{}\[\]":]'),
+      // Log file patterns
+      RegExp(r'\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2}'),
+      // Common file extensions in content
+      RegExp(r'\.[a-zA-Z]{2,4}\b'),
+    ];
+
+    for (final pattern in textPatterns) {
+      if (pattern.hasMatch(lowerContent)) {
+        return true;
+      }
+    }
+
+    // Check for common programming language keywords
+    final keywords = [
+      'function',
+      'class',
+      'import',
+      'export',
+      'var',
+      'let',
+      'const',
+      'def',
+      'if',
+      'else',
+      'for',
+      'while',
+      'return',
+      'public',
+      'private',
+      'static',
+      'void',
+      'string',
+      'int',
+      'bool',
+      'true',
+      'false',
+      'null',
+      'undefined',
+      'console',
+      'print',
+      'echo',
+      'include',
+      'require'
+    ];
+
+    int keywordCount = 0;
+    for (final keyword in keywords) {
+      if (lowerContent.contains(keyword)) {
+        keywordCount++;
+      }
+    }
+
+    // If we find multiple programming keywords, it's likely source code
+    if (keywordCount >= 2) {
+      return true;
+    }
+
+    return false;
   }
 }

@@ -35,6 +35,8 @@ class FileContentProcessor {
   /// Check if a file can be processed by this service
   static Future<bool> canProcessFile(String filePath) async {
     final extension = _getFileExtension(filePath);
+
+    // Check known extensions first
     if (FileUtils.imageExtensions.contains(extension) ||
         FileUtils.textExtensions.contains(extension) ||
         FileUtils.sourceCodeExtensions.contains(extension) ||
@@ -42,11 +44,30 @@ class FileContentProcessor {
         extension == 'pdf') {
       return true;
     }
-    // Fallback: if extension is not recognized, try to determine if it's a text file heuristically
-    return await FileUtils.isLikelyTextFile(filePath);
+
+    // For unknown extensions or files without extensions, check if it's text
+    if (extension.isEmpty || !_isKnownExtension(extension)) {
+      final isLikelyText = await FileUtils.isLikelyTextFile(filePath);
+      if (isLikelyText) {
+        AppLogger.info(
+            'File with unknown/no extension detected as text: ${FileUtils.getFileName(filePath)}');
+        return true;
+      }
+    }
+
+    return false;
   }
 
-  /// Get the file type based on extension
+  /// Check if an extension is in our known lists
+  static bool _isKnownExtension(String extension) {
+    return FileUtils.imageExtensions.contains(extension) ||
+        FileUtils.textExtensions.contains(extension) ||
+        FileUtils.sourceCodeExtensions.contains(extension) ||
+        FileUtils.jsonExtensions.contains(extension) ||
+        extension == 'pdf';
+  }
+
+  /// Get the file type based on extension and content analysis
   static Future<FileType> getFileType(String filePath) async {
     final extension = _getFileExtension(filePath);
 
@@ -60,11 +81,115 @@ class FileContentProcessor {
       return FileType.sourceCode;
     } else if (FileUtils.textExtensions.contains(extension)) {
       return FileType.text;
-    } else if (await FileUtils.isLikelyTextFile(filePath)) {
-      // If extension is unknown but it's likely a text file, treat as text
-      return FileType.text;
     } else {
-      return FileType.unknown;
+      // For unknown extensions or no extension, analyze content
+      final isLikelyText = await FileUtils.isLikelyTextFile(filePath);
+      if (isLikelyText) {
+        // Try to determine if it's source code vs plain text
+        final fileName = FileUtils.getFileName(filePath);
+        if (await _isLikelySourceCode(filePath, fileName)) {
+          AppLogger.info(
+              'Unknown extension file detected as source code: $fileName');
+          return FileType.sourceCode;
+        } else if (await _isLikelyJson(filePath)) {
+          AppLogger.info('Unknown extension file detected as JSON: $fileName');
+          return FileType.json;
+        } else {
+          AppLogger.info('Unknown extension file detected as text: $fileName');
+          return FileType.text;
+        }
+      } else {
+        return FileType.unknown;
+      }
+    }
+  }
+
+  /// Analyze if a file without extension is likely source code
+  static Future<bool> _isLikelySourceCode(
+      String filePath, String fileName) async {
+    try {
+      final file = File(filePath);
+      final fileSize = await file.length();
+
+      // Don't analyze very large files for performance
+      if (fileSize > 1024 * 1024) return false; // 1MB limit
+
+      final content = await file.readAsString();
+
+      // Check for common source code patterns
+      final codePatterns = [
+        RegExp(r'\b(function|class|import|export|module|package)\s*[({]'),
+        RegExp(r'\b(if|else|for|while|switch|case)\s*[({]'),
+        RegExp(
+            r'\b(var|let|const|def|int|string|bool|void|public|private|static)\s+'),
+        RegExp(r'[;{}]\s*$',
+            multiLine: true), // Statements ending with semicolons/braces
+        RegExp(r'^\s*//|^\s*/\*|^\s*#', multiLine: true), // Code comments
+        RegExp(r'=>|->|::|\.\.\.'), // Modern language operators
+      ];
+
+      int patternMatches = 0;
+      for (final pattern in codePatterns) {
+        if (pattern.hasMatch(content)) {
+          patternMatches++;
+        }
+      }
+
+      // Also check filename patterns that suggest source code
+      final fileName = FileUtils.getFileName(filePath).toLowerCase();
+      final codeFilePatterns = [
+        'makefile',
+        'dockerfile',
+        'rakefile',
+        'gemfile',
+        'podfile',
+        'cmakelists',
+        '.gitignore',
+        '.editorconfig',
+        '.prettierrc',
+      ];
+
+      for (final pattern in codeFilePatterns) {
+        if (fileName.contains(pattern)) {
+          patternMatches += 2; // Higher weight for filename patterns
+        }
+      }
+
+      return patternMatches >= 2;
+    } catch (e) {
+      AppLogger.warning('Error analyzing if file is source code: $e');
+      return false;
+    }
+  }
+
+  /// Analyze if a file without extension is likely JSON
+  static Future<bool> _isLikelyJson(String filePath) async {
+    try {
+      final file = File(filePath);
+      final fileSize = await file.length();
+
+      // Don't analyze very large files for performance
+      if (fileSize > 1024 * 1024) return false; // 1MB limit
+
+      final content = await file.readAsString();
+      final trimmedContent = content.trim();
+
+      // Basic JSON structure check
+      if ((trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) ||
+          (trimmedContent.startsWith('[') && trimmedContent.endsWith(']'))) {
+        try {
+          jsonDecode(content);
+          return true;
+        } catch (e) {
+          // Not valid JSON
+          return false;
+        }
+      }
+
+      return false;
+    } catch (e) {
+      AppLogger.warning('Error analyzing if file is JSON: $e');
+      return false;
     }
   }
 
@@ -438,7 +563,7 @@ class FileContentProcessor {
     }
   }
 
-  /// Process a text file by reading its content
+  /// Process a text file by reading its content with comprehensive encoding support
   static Future<ProcessedFile> _processTextFile(
     String filePath,
     String fileName,
@@ -457,23 +582,29 @@ class FileContentProcessor {
       String textContent;
       String actualEncoding = 'unknown';
 
-      // Enhanced encoding detection with BOM support
+      // Enhanced encoding detection with comprehensive support
       final bytes = await file.readAsBytes();
 
-      // Check for UTF-16 BOM
-      if (bytes.length >= 2) {
-        if ((bytes[0] == 0xFF && bytes[1] == 0xFE) ||
-            (bytes[0] == 0xFE && bytes[1] == 0xFF)) {
-          try {
-            // Handle UTF-16 with BOM
-            final bomLength = 2;
-            final contentBytes = bytes.sublist(bomLength);
-            if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
-              // UTF-16 LE
+      // Step 1: Check for Byte Order Marks (BOMs)
+      final encoding = await _detectEncodingFromBOM(bytes);
+      if (encoding != null) {
+        try {
+          switch (encoding['name']) {
+            case 'utf-8-bom':
+              // Remove UTF-8 BOM (EF BB BF) and decode
+              final contentBytes = bytes.sublist(3);
+              textContent = utf8.decode(contentBytes);
+              actualEncoding = 'utf-8-bom';
+              break;
+            case 'utf-16le':
+              // Remove UTF-16 LE BOM (FF FE) and decode
+              final contentBytes = bytes.sublist(2);
               textContent = String.fromCharCodes(contentBytes);
               actualEncoding = 'utf-16le';
-            } else {
-              // UTF-16 BE - convert byte order
+              break;
+            case 'utf-16be':
+              // Remove UTF-16 BE BOM (FE FF) and convert byte order
+              final contentBytes = bytes.sublist(2);
               final utf16Chars = <int>[];
               for (int i = 0; i < contentBytes.length; i += 2) {
                 if (i + 1 < contentBytes.length) {
@@ -482,57 +613,33 @@ class FileContentProcessor {
               }
               textContent = String.fromCharCodes(utf16Chars);
               actualEncoding = 'utf-16be';
-            }
-          } catch (e) {
-            AppLogger.warning(
-                'UTF-16 decoding failed for $fileName, trying UTF-8');
-            textContent = await file.readAsString(encoding: utf8);
-            actualEncoding = 'utf-8';
+              break;
+            case 'utf-32le':
+              // UTF-32 LE
+              final contentBytes = bytes.sublist(4);
+              textContent = _decodeUtf32LE(contentBytes);
+              actualEncoding = 'utf-32le';
+              break;
+            case 'utf-32be':
+              // UTF-32 BE
+              final contentBytes = bytes.sublist(4);
+              textContent = _decodeUtf32BE(contentBytes);
+              actualEncoding = 'utf-32be';
+              break;
+            default:
+              throw Exception('Unknown BOM encoding: ${encoding['name']}');
           }
-        } else if (bytes.length >= 3 &&
-            bytes[0] == 0xEF &&
-            bytes[1] == 0xBB &&
-            bytes[2] == 0xBF) {
-          // UTF-8 with BOM
-          try {
-            textContent = await file.readAsString(encoding: utf8);
-            actualEncoding = 'utf-8-bom';
-          } catch (e) {
-            AppLogger.warning(
-                'UTF-8 BOM decoding failed for $fileName, trying latin1');
-            textContent = await file.readAsString(encoding: latin1);
-            actualEncoding = 'latin1';
-          }
-        } else {
-          // No BOM detected, try UTF-8 first, fall back to latin1
-          try {
-            textContent = await file.readAsString(encoding: utf8);
-            actualEncoding = 'utf-8';
-          } catch (e) {
-            AppLogger.warning(
-                'UTF-8 decoding failed for $fileName, trying latin1');
-            try {
-              textContent = await file.readAsString(encoding: latin1);
-              actualEncoding = 'latin1';
-            } catch (e2) {
-              AppLogger.error('All encoding attempts failed for $fileName');
-              throw FileSystemException(
-                  'Failed to decode text file with any supported encoding: $e2',
-                  filePath);
-            }
-          }
-        }
-      } else {
-        // File too small to have BOM, try UTF-8 then latin1
-        try {
-          textContent = await file.readAsString(encoding: utf8);
-          actualEncoding = 'utf-8';
         } catch (e) {
           AppLogger.warning(
-              'UTF-8 decoding failed for $fileName, trying latin1');
-          textContent = await file.readAsString(encoding: latin1);
-          actualEncoding = 'latin1';
+              'BOM-based decoding failed for $fileName: $e, trying heuristic detection');
+          // Fall through to heuristic detection
+          textContent = await _detectAndDecodeWithHeuristics(file, bytes);
+          actualEncoding = 'heuristic-fallback';
         }
+      } else {
+        // Step 2: No BOM detected, use heuristic encoding detection
+        textContent = await _detectAndDecodeWithHeuristics(file, bytes);
+        actualEncoding = await _determineActualEncoding(file, bytes);
       }
 
       // Validate content for specific file types
@@ -547,16 +654,23 @@ class FileContentProcessor {
       }
 
       final extension = _getFileExtension(filePath);
-      final mimeType = _getMimeType(extension);
+      // Use FileType-based MIME type for files without extension or unknown extensions
+      final mimeType = extension.isEmpty || !_isKnownExtension(extension)
+          ? _getMimeTypeFromFileType(fileType)
+          : _getMimeType(extension);
 
       final metadata = {
         'originalSize': fileSize,
         'textLength': textContent.length,
-        'encoding': actualEncoding, // Fix: Now shows actual encoding used
+        'encoding': actualEncoding,
         'extension': extension,
         'hasValidContent': textContent.isNotEmpty,
         'contentValidation':
             fileType == FileType.json ? 'json-validated' : 'text-content',
+        'detectionMethod': extension.isEmpty || !_isKnownExtension(extension)
+            ? 'content-analysis'
+            : 'extension-based',
+        'encodingMethod': encoding != null ? 'bom-detected' : 'heuristic',
       };
 
       AppLogger.info(
@@ -574,6 +688,257 @@ class FileContentProcessor {
     } catch (e) {
       throw FileSystemException('Failed to process text file: $e', filePath);
     }
+  }
+
+  /// Detect encoding from Byte Order Mark (BOM)
+  static Future<Map<String, String>?> _detectEncodingFromBOM(
+      List<int> bytes) async {
+    if (bytes.length < 2) return null;
+
+    // Check for UTF-32 BOMs (must check before UTF-16)
+    if (bytes.length >= 4) {
+      if (bytes[0] == 0x00 &&
+          bytes[1] == 0x00 &&
+          bytes[2] == 0xFE &&
+          bytes[3] == 0xFF) {
+        return {'name': 'utf-32be', 'bomLength': '4'};
+      }
+      if (bytes[0] == 0xFF &&
+          bytes[1] == 0xFE &&
+          bytes[2] == 0x00 &&
+          bytes[3] == 0x00) {
+        return {'name': 'utf-32le', 'bomLength': '4'};
+      }
+    }
+
+    // Check for UTF-16 BOMs
+    if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      return {'name': 'utf-16le', 'bomLength': '2'};
+    }
+    if (bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      return {'name': 'utf-16be', 'bomLength': '2'};
+    }
+
+    // Check for UTF-8 BOM
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return {'name': 'utf-8-bom', 'bomLength': '3'};
+    }
+
+    return null;
+  }
+
+  /// Heuristic encoding detection and decoding
+  static Future<String> _detectAndDecodeWithHeuristics(
+      File file, List<int> bytes) async {
+    // Try encodings in order of preference/likelihood
+    final encodingsToTry = [
+      () async => await file.readAsString(encoding: utf8),
+      () async => await file.readAsString(encoding: latin1),
+      () async => _decodeWindows1252(bytes),
+      () async => _decodeAscii(bytes),
+      () async => _decodeIso88591(bytes),
+    ];
+
+    for (int i = 0; i < encodingsToTry.length; i++) {
+      try {
+        final content = await encodingsToTry[i]();
+
+        // Validate the decoded content
+        if (_isValidTextContent(content)) {
+          return content;
+        }
+      } catch (e) {
+        // Continue to next encoding
+        AppLogger.debug('Encoding attempt ${i + 1} failed, trying next...');
+      }
+    }
+
+    // Final fallback: force latin1 (should always work)
+    try {
+      return await file.readAsString(encoding: latin1);
+    } catch (e) {
+      throw Exception('All encoding attempts failed: $e');
+    }
+  }
+
+  /// Determine the actual encoding used for successful decoding
+  static Future<String> _determineActualEncoding(
+      File file, List<int> bytes) async {
+    try {
+      // Test UTF-8 validity
+      await file.readAsString(encoding: utf8);
+      return 'utf-8';
+    } catch (e) {
+      // Not valid UTF-8, check for Windows-1252 patterns
+      if (_hasWindows1252Patterns(bytes)) {
+        return 'windows-1252';
+      }
+
+      // Check for pure ASCII
+      if (_isPureAscii(bytes)) {
+        return 'ascii';
+      }
+
+      // Default to latin1
+      return 'latin1';
+    }
+  }
+
+  /// Decode UTF-32 Little Endian
+  static String _decodeUtf32LE(List<int> bytes) {
+    final codePoints = <int>[];
+    for (int i = 0; i < bytes.length; i += 4) {
+      if (i + 3 < bytes.length) {
+        final codePoint = bytes[i] |
+            (bytes[i + 1] << 8) |
+            (bytes[i + 2] << 16) |
+            (bytes[i + 3] << 24);
+        codePoints.add(codePoint);
+      }
+    }
+    return String.fromCharCodes(codePoints);
+  }
+
+  /// Decode UTF-32 Big Endian
+  static String _decodeUtf32BE(List<int> bytes) {
+    final codePoints = <int>[];
+    for (int i = 0; i < bytes.length; i += 4) {
+      if (i + 3 < bytes.length) {
+        final codePoint = (bytes[i] << 24) |
+            (bytes[i + 1] << 16) |
+            (bytes[i + 2] << 8) |
+            bytes[i + 3];
+        codePoints.add(codePoint);
+      }
+    }
+    return String.fromCharCodes(codePoints);
+  }
+
+  /// Decode Windows-1252 (CP1252)
+  static String _decodeWindows1252(List<int> bytes) {
+    // Windows-1252 character map for 0x80-0x9F range
+    const windows1252Map = {
+      0x80: 0x20AC, // €
+      0x82: 0x201A, // ‚
+      0x83: 0x0192, // ƒ
+      0x84: 0x201E, // „
+      0x85: 0x2026, // …
+      0x86: 0x2020, // †
+      0x87: 0x2021, // ‡
+      0x88: 0x02C6, // ˆ
+      0x89: 0x2030, // ‰
+      0x8A: 0x0160, // Š
+      0x8B: 0x2039, // ‹
+      0x8C: 0x0152, // Œ
+      0x8E: 0x017D, // Ž
+      0x91: 0x2018, // '
+      0x92: 0x2019, // '
+      0x93: 0x201C, // "
+      0x94: 0x201D, // "
+      0x95: 0x2022, // •
+      0x96: 0x2013, // –
+      0x97: 0x2014, // —
+      0x98: 0x02DC, // ˜
+      0x99: 0x2122, // ™
+      0x9A: 0x0161, // š
+      0x9B: 0x203A, // ›
+      0x9C: 0x0153, // œ
+      0x9E: 0x017E, // ž
+      0x9F: 0x0178, // Ÿ
+    };
+
+    final codePoints = <int>[];
+    for (final byte in bytes) {
+      if (byte >= 0x80 && byte <= 0x9F && windows1252Map.containsKey(byte)) {
+        codePoints.add(windows1252Map[byte]!);
+      } else {
+        codePoints.add(byte);
+      }
+    }
+    return String.fromCharCodes(codePoints);
+  }
+
+  /// Decode ASCII
+  static String _decodeAscii(List<int> bytes) {
+    // Validate all bytes are valid ASCII (0-127)
+    for (final byte in bytes) {
+      if (byte > 127) {
+        throw Exception('Non-ASCII byte found: $byte');
+      }
+    }
+    return String.fromCharCodes(bytes);
+  }
+
+  /// Decode ISO-8859-1 (identical to Latin-1 for single-byte)
+  static String _decodeIso88591(List<int> bytes) {
+    return String.fromCharCodes(bytes); // ISO-8859-1 is 1:1 with Unicode
+  }
+
+  /// Check if content is valid text (no excessive control characters or garbage)
+  static bool _isValidTextContent(String content) {
+    if (content.isEmpty) return false;
+
+    // Count printable vs non-printable characters
+    int printableCount = 0;
+    int totalCount = 0;
+
+    for (final char in content.runes) {
+      totalCount++;
+      if ((char >= 32 && char <= 126) || // ASCII printable
+          char == 9 ||
+          char == 10 ||
+          char == 13 || // Tab, LF, CR
+          char >= 160) {
+        // Extended Unicode printable
+        printableCount++;
+      }
+    }
+
+    // Content should be at least 80% printable for text files
+    return totalCount > 0 && (printableCount / totalCount) >= 0.8;
+  }
+
+  /// Check for Windows-1252 specific byte patterns
+  static bool _hasWindows1252Patterns(List<int> bytes) {
+    final windows1252Bytes = [
+      0x80,
+      0x82,
+      0x83,
+      0x84,
+      0x85,
+      0x86,
+      0x87,
+      0x88,
+      0x89,
+      0x8A,
+      0x8B,
+      0x8C,
+      0x8E,
+      0x91,
+      0x92,
+      0x93,
+      0x94,
+      0x95,
+      0x96,
+      0x97,
+      0x98,
+      0x99,
+      0x9A,
+      0x9B,
+      0x9C,
+      0x9E,
+      0x9F
+    ];
+
+    return bytes.any((byte) => windows1252Bytes.contains(byte));
+  }
+
+  /// Check if content is pure ASCII
+  static bool _isPureAscii(List<int> bytes) {
+    return bytes.every((byte) => byte >= 0 && byte <= 127);
   }
 
   /// Get file extension in lowercase (delegates to FileUtils)
@@ -595,15 +960,22 @@ class FileContentProcessor {
         return 'image/bmp';
       case 'webp':
         return 'image/webp';
+      case 'tiff':
+        return 'image/tiff';
       case 'pdf':
         return 'application/pdf';
       case 'json':
+      case 'jsonl':
+      case 'geojson':
         return 'application/json';
       case 'txt':
+      case 'log':
+      case 'readme':
         return 'text/plain';
       case 'md':
         return 'text/markdown';
       case 'html':
+      case 'htm':
         return 'text/html';
       case 'css':
         return 'text/css';
@@ -618,16 +990,79 @@ class FileContentProcessor {
       case 'java':
         return 'text/x-java';
       case 'cpp':
-      case 'c':
+      case 'cc':
+      case 'cxx':
         return 'text/x-c++src';
+      case 'c':
+        return 'text/x-csrc';
+      case 'h':
+      case 'hpp':
+        return 'text/x-chdr';
+      case 'cs':
+        return 'text/x-csharp';
+      case 'php':
+        return 'text/x-php';
+      case 'rb':
+        return 'text/x-ruby';
+      case 'go':
+        return 'text/x-go';
+      case 'rs':
+        return 'text/x-rust';
+      case 'swift':
+        return 'text/x-swift';
+      case 'kt':
+        return 'text/x-kotlin';
       case 'xml':
+      case 'svg':
         return 'application/xml';
       case 'yaml':
       case 'yml':
         return 'application/yaml';
-      case 'svg':
-        return 'text/svg+xml';
+      case 'toml':
+        return 'application/toml';
+      case 'ini':
+      case 'conf':
+      case 'cfg':
+        return 'text/plain';
+      case 'sh':
+      case 'bash':
+        return 'application/x-sh';
+      case 'bat':
+        return 'application/x-bat';
+      case 'ps1':
+        return 'application/x-powershell';
+      case 'sql':
+        return 'application/sql';
+      case 'csv':
+        return 'text/csv';
+      case 'rtf':
+        return 'application/rtf';
+      case 'scss':
+      case 'sass':
+        return 'text/x-scss';
+      case '':
+        // For files without extensions, return generic text type
+        return 'text/plain';
       default:
+        // For unknown extensions, return generic binary type
+        return 'application/octet-stream';
+    }
+  }
+
+  /// Get MIME type based on file type (for files without recognized extensions)
+  static String _getMimeTypeFromFileType(FileType fileType) {
+    switch (fileType) {
+      case FileType.text:
+        return 'text/plain';
+      case FileType.sourceCode:
+        return 'text/x-source';
+      case FileType.json:
+        return 'application/json';
+      case FileType.pdf:
+        return 'application/pdf';
+      case FileType.image:
+        return 'image/jpeg'; // Default image type
+      case FileType.unknown:
         return 'application/octet-stream';
     }
   }

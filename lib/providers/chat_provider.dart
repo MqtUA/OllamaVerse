@@ -57,6 +57,20 @@ class ChatProvider with ChangeNotifier {
   bool get isGenerating => _isGenerating;
   bool get isSendingMessage => _isSendingMessage;
   bool get isProcessingFiles => _isProcessingFiles;
+
+  // Add unified getter for any operation in progress
+  bool get isAnyOperationInProgress =>
+      _isGenerating || _isSendingMessage || _isProcessingFiles;
+
+  /// Check if the currently active chat is the one that's generating
+  bool get isActiveChatGenerating =>
+      _isGenerating && _currentGeneratingChatId == _activeChat?.id;
+
+  /// Check if the active chat has any operation in progress
+  bool get isActiveChatBusy =>
+      isAnyOperationInProgress && _currentGeneratingChatId == _activeChat?.id;
+
+  // Add back the missing getters
   String? get error => _error;
   Map<String, FileProcessingProgress> get fileProcessingProgress =>
       _fileProcessingProgress;
@@ -69,10 +83,6 @@ class ChatProvider with ChangeNotifier {
   bool get shouldScrollToBottomOnChatSwitch =>
       _shouldScrollToBottomOnChatSwitch;
   SettingsProvider get settingsProvider => _settingsProvider;
-
-  /// Check if the currently active chat is the one that's generating
-  bool get isActiveChatGenerating =>
-      _isGenerating && _currentGeneratingChatId == _activeChat?.id;
 
   /// Check if a thinking bubble is expanded
   bool isThinkingBubbleExpanded(String messageId) {
@@ -191,7 +201,8 @@ class ChatProvider with ChangeNotifier {
       // Listen to chat updates
       _chatStreamSubscription = _chatHistoryService.chatStream.listen(
         (chats) {
-          _chats = chats;
+          // Always create a mutable copy, since _chatHistoryService.chats is unmodifiable
+          _chats = _chatHistoryService.chats.toList();
           // Set active chat to most recent if no active chat is set
           _setActiveToMostRecentIfNeeded();
           _safeNotifyListeners();
@@ -296,7 +307,7 @@ class ChatProvider with ChangeNotifier {
       }
 
       // Force an initial update with current chats
-      _chats = _chatHistoryService.chats;
+      _chats = _chatHistoryService.chats.toList();
       _setActiveToMostRecentIfNeeded();
 
       AppLogger.info('Successfully loaded ${_chats.length} existing chats');
@@ -326,8 +337,9 @@ class ChatProvider with ChangeNotifier {
 
   /// Internal method to cancel ongoing generation and reset streaming state
   void _cancelOngoingGeneration() {
-    AppLogger.info('Cancelling ongoing generation');
+    AppLogger.info('Cancelling all ongoing operations');
     _isGenerating = false;
+    _isSendingMessage = false; // Also reset sending state
     _isProcessingFiles = false;
     _fileProcessingProgress.clear();
     _isThinkingPhase = false;
@@ -701,6 +713,12 @@ class ChatProvider with ChangeNotifier {
           _fileProcessingProgress.clear();
           _safeNotifyListeners();
         }
+
+        // Check if operation was cancelled during file processing
+        if (_cancellationToken.isCancelled) {
+          AppLogger.info('Operation cancelled during file processing');
+          return;
+        }
       }
 
       final userMessage = Message(
@@ -857,6 +875,7 @@ class ChatProvider with ChangeNotifier {
       );
 
       // Clear streaming state immediately to prevent duplicate message bubbles
+      AppLogger.info('Clearing _isGenerating (success path)');
       _isGenerating = false;
       _currentStreamingResponse = '';
       _currentDisplayResponse = '';
@@ -864,21 +883,27 @@ class ChatProvider with ChangeNotifier {
       _hasActiveThinkingBubble = false;
       _isInsideThinkingBlock = false;
       _isThinkingPhase = false;
+      _currentGeneratingChatId =
+          null; // Clear immediately after response is complete
+      _isSendingMessage = false; // Clear sending state
+      AppLogger.info(
+          'Calling _safeNotifyListeners() after clearing _isGenerating (success path)');
+      _safeNotifyListeners();
 
       // Update the generating chat, not necessarily the active chat
       await _updateChatInList(updatedWithAiChat);
 
       // If the generating chat is currently active, update the active chat reference
-      if (_activeChat?.id == _currentGeneratingChatId) {
+      if (_activeChat?.id == updatedWithAiChat.id) {
         _activeChat = updatedWithAiChat;
       }
 
       // Notify UI that streaming is complete and message is final
       _safeNotifyListeners();
 
-      // Auto-generate chat title if this is the first AI response and chat has default title
-      // Keep the generating chat ID until title generation is complete
-      await _autoGenerateChatTitleIfNeeded(
+      // Auto-generate chat title in background without blocking UI
+      // This runs independently and won't affect the generating state
+      _autoGenerateChatTitleIfNeeded(
           updatedWithAiChat, userMessage.content, finalResponse);
     } on OllamaConnectionException catch (e) {
       _error = 'Cannot connect to Ollama server. Please check your connection.';
@@ -887,10 +912,13 @@ class ChatProvider with ChangeNotifier {
       _error = 'Error from Ollama: ${e.message}';
       AppLogger.error('API error sending message', e);
     } catch (e) {
-      _error = 'Failed to generate response: ${e.toString()}';
+      _error = 'Failed to generate response:  [31m${e.toString()} [0m';
       AppLogger.error('Error sending message', e);
+      AppLogger.info('Clearing _isGenerating (error path)');
+      _isGenerating = false;
+      _safeNotifyListeners();
     } finally {
-      // Clear any remaining streaming state (in case of errors)
+      AppLogger.info('Clearing _isGenerating (finally block)');
       _isGenerating = false;
       _isProcessingFiles = false;
       _fileProcessingProgress.clear();
@@ -900,8 +928,10 @@ class ChatProvider with ChangeNotifier {
       _currentThinkingContent = '';
       _hasActiveThinkingBubble = false;
       _isInsideThinkingBlock = false;
-      _currentGeneratingChatId = null; // Clear tracking
-      _isSendingMessage = false; // Reset overall sending flag
+      _currentGeneratingChatId = null;
+      _isSendingMessage = false;
+      AppLogger.info(
+          'Calling _safeNotifyListeners() after clearing _isGenerating (finally block)');
       _safeNotifyListeners();
     }
   }
@@ -983,16 +1013,39 @@ class ChatProvider with ChangeNotifier {
       if (chat.title == 'New Chat' || chat.title.startsWith('New chat with')) {
         AppLogger.info('Auto-generating title for chat: ${chat.id}');
 
+        // Add timeout protection for title generation (30 seconds max)
         final newTitle = await _generateChatTitle(
-            userMessageContent, aiResponseContent, chat.modelName);
+                userMessageContent, aiResponseContent, chat.modelName)
+            .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            AppLogger.warning('Title generation timed out, using fallback');
+            return 'PDF Document Chat'; // Fallback for large documents
+          },
+        );
+
         if (newTitle.isNotEmpty && newTitle != chat.title) {
           await updateChatTitle(chat.id, newTitle);
           AppLogger.info('Auto-generated title: $newTitle');
+        } else {
+          AppLogger.warning(
+              'Generated title was empty or same as current title');
         }
+      } else {
+        AppLogger.info('Chat already has custom title: ${chat.title}');
       }
     } catch (e) {
       AppLogger.error('Error auto-generating chat title', e);
-      // Don't throw - auto-naming is not critical functionality
+      // Use fallback title for large document chats
+      try {
+        if (chat.title == 'New Chat' ||
+            chat.title.startsWith('New chat with')) {
+          await updateChatTitle(chat.id, 'Document Analysis Chat');
+          AppLogger.info('Applied fallback title after error');
+        }
+      } catch (fallbackError) {
+        AppLogger.error('Error applying fallback title', fallbackError);
+      }
     }
   }
 
@@ -1025,36 +1078,58 @@ class ChatProvider with ChangeNotifier {
               .toLowerCase()
               .contains(RegExp(r'^(here|this|that|it|what)\s+(is|are|we|got)'));
 
-      // Truncate user message if it's very long (from large files)
+      // Truncate user message more aggressively for large files (e.g., PDFs)
       String truncatedUserMessage = userMessage;
-      if (userMessage.length > 200) {
-        // Take first meaningful sentence or first 200 chars
-        final sentences = userMessage.split(RegExp(r'[.!?]+'));
-        if (sentences.isNotEmpty && sentences.first.length <= 200) {
-          truncatedUserMessage = sentences.first.trim();
+      if (userMessage.length > 150) {
+        // For large documents, extract just the key request part
+        // Look for common request patterns at the end of long messages
+        final requestPatterns = [
+          RegExp(
+              r'(please|can you|could you|summarize|summary|analyze|analysis|explain|tell me)[^.!?]*[.!?]?$',
+              caseSensitive: false),
+          RegExp(r'(what is|what are|how does|how do)[^.!?]*[.!?]?$',
+              caseSensitive: false),
+        ];
+
+        String? extractedRequest;
+        for (final pattern in requestPatterns) {
+          final match = pattern.firstMatch(userMessage);
+          if (match != null && match.group(0)!.length <= 150) {
+            extractedRequest = match.group(0)!.trim();
+            break;
+          }
+        }
+
+        if (extractedRequest != null) {
+          truncatedUserMessage = extractedRequest;
         } else {
-          truncatedUserMessage = '${userMessage.substring(0, 200)}...';
+          // Fall back to simple truncation
+          final sentences = userMessage.split(RegExp(r'[.!?]+'));
+          if (sentences.isNotEmpty && sentences.last.trim().length <= 150) {
+            truncatedUserMessage = sentences.last.trim();
+          } else {
+            truncatedUserMessage =
+                '${userMessage.substring(userMessage.length - 150)}...';
+          }
         }
       }
 
-      // Improved prompt that focuses more on user intent when AI response is poor
+      // Simplified prompt for faster processing, especially with large documents
       String prompt;
-      if (isAiResponseUseful) {
-        // Use both user and AI content for title
+      if (isAiResponseUseful && processedAiResponse.length < 200) {
+        // Use both user and AI content for title (only for short responses)
         prompt =
-            '''Based on this conversation, create a concise 2-5 word title without quotes or explanation. Reply only with the title:
+            '''Create a 3-5 word title for this conversation, reply only with the title:
 
-User asked: $truncatedUserMessage
-
-AI responded: ${processedAiResponse.length > 300 ? '${processedAiResponse.substring(0, 300)}...' : processedAiResponse}
+User: $truncatedUserMessage
+AI: ${processedAiResponse.substring(0, 200.clamp(0, processedAiResponse.length))}
 
 Title:''';
       } else {
-        // Focus primarily on user message when AI response is unhelpful
-        prompt =
-            '''Based on the user's request, create a concise 2-5 word title without quotes or explanation. Reply only with the title:
+        // Focus on user request for large documents or poor responses
+        prompt = '''Create a 3-5 word title for this request:
 
-User asked: $truncatedUserMessage
+"$truncatedUserMessage"
 
 Title:''';
       }
