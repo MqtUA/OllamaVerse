@@ -1172,7 +1172,7 @@ class ChatProvider with ChangeNotifier {
       if (isAiResponseUseful && processedAiResponse.length < 200) {
         // Use both user and AI content for title (only for short responses)
         prompt =
-            '''Create a 3-5 word title for this conversation, reply only with the title:
+            '''Create a 3-5 word title for this conversation, reply only with a single title, no other text:
 
 User: $truncatedUserMessage
 AI: ${processedAiResponse.substring(0, 200.clamp(0, processedAiResponse.length))}
@@ -1180,7 +1180,8 @@ AI: ${processedAiResponse.substring(0, 200.clamp(0, processedAiResponse.length))
 Title:''';
       } else {
         // Focus on user request for large documents or poor responses
-        prompt = '''Create a 3-5 word title for this request:
+        prompt =
+            '''Create a 3-5 word title for this request, reply only with a single title, no other text:
 
 "$truncatedUserMessage"
 
