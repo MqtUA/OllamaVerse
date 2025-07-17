@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../lib/services/chat_title_generator.dart';
-import '../../lib/services/ollama_service.dart';
+import 'package:ollamaverse/services/chat_title_generator.dart';
+import 'package:ollamaverse/services/ollama_service.dart';
 
 // Simple mock implementation without mockito
 class MockOllamaService implements OllamaService {

@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../providers/settings_provider.dart';
 import '../services/ollama_service.dart';
 import '../utils/logger.dart';
 

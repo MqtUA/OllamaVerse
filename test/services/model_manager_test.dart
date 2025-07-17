@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'dart:async';
 
 import 'package:ollamaverse/services/model_manager.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
