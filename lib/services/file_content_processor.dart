@@ -21,6 +21,46 @@ class FileProcessingProgress {
     required this.progress,
     required this.status,
   });
+
+  /// Convert to JSON for serialization
+  Map<String, dynamic> toJson() {
+    return {
+      'filePath': filePath,
+      'fileName': fileName,
+      'progress': progress,
+      'status': status,
+    };
+  }
+
+  /// Create from JSON
+  factory FileProcessingProgress.fromJson(Map<String, dynamic> json) {
+    return FileProcessingProgress(
+      filePath: json['filePath'] as String,
+      fileName: json['fileName'] as String,
+      progress: (json['progress'] as num).toDouble(),
+      status: json['status'] as String,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'FileProcessingProgress(fileName: $fileName, progress: ${(progress * 100).toStringAsFixed(1)}%, status: $status)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is FileProcessingProgress &&
+        other.filePath == filePath &&
+        other.fileName == fileName &&
+        other.progress == progress &&
+        other.status == status;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(filePath, fileName, progress, status);
+  }
 }
 
 /// Service for processing different file types and extracting content for AI analysis
