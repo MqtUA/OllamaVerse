@@ -2,12 +2,15 @@ import 'dart:async';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/chat_history_service.dart';
+import '../services/error_recovery_service.dart';
+import '../utils/error_handler.dart';
 import '../utils/logger.dart';
 
 /// Manages chat list and active chat state
 /// Handles chat CRUD operations and state synchronization
 class ChatStateManager {
   final ChatHistoryService _chatHistoryService;
+  final ErrorRecoveryService? _errorRecoveryService;
   
   List<Chat> _chats = [];
   Chat? _activeChat;
@@ -18,6 +21,9 @@ class ChatStateManager {
   
   // Stream controller for state changes
   final _stateController = StreamController<ChatStateManagerState>.broadcast();
+  
+  // Error handling
+  static const String _serviceName = 'ChatStateManager';
   
   /// Stream of state changes
   Stream<ChatStateManagerState> get stateStream => _stateController.stream;
@@ -40,12 +46,27 @@ class ChatStateManager {
 
   ChatStateManager({
     required ChatHistoryService chatHistoryService,
-  }) : _chatHistoryService = chatHistoryService {
+    ErrorRecoveryService? errorRecoveryService,
+  }) : _chatHistoryService = chatHistoryService,
+       _errorRecoveryService = errorRecoveryService {
     _initialize();
   }
 
   /// Initialize the chat state manager
   Future<void> _initialize() async {
+    if (_errorRecoveryService != null) {
+      await _errorRecoveryService!.executeServiceOperation(
+        _serviceName,
+        () => _performInitialization(),
+        operationName: 'initialize',
+      );
+    } else {
+      await _performInitialization();
+    }
+  }
+
+  /// Perform the actual initialization
+  Future<void> _performInitialization() async {
     try {
       AppLogger.info('Initializing ChatStateManager');
       
@@ -57,8 +78,7 @@ class ChatStateManager {
           _notifyStateChange();
         },
         onError: (error) {
-          AppLogger.error('Error in chat stream', error);
-          _notifyStateChange();
+          _handleStreamError(error);
         },
       );
 
@@ -74,6 +94,20 @@ class ChatStateManager {
 
   /// Load existing chats on startup
   Future<void> _loadExistingChats() async {
+    if (_errorRecoveryService != null) {
+      await _errorRecoveryService!.executeServiceOperation(
+        _serviceName,
+        () => _performLoadExistingChats(),
+        operationName: 'loadExistingChats',
+        timeout: const Duration(seconds: 10),
+      );
+    } else {
+      await _performLoadExistingChats();
+    }
+  }
+
+  /// Perform the actual loading of existing chats
+  Future<void> _performLoadExistingChats() async {
     try {
       AppLogger.info('Loading existing chats in ChatStateManager');
 
@@ -87,8 +121,10 @@ class ChatStateManager {
       }
 
       if (!_chatHistoryService.isInitialized) {
-        AppLogger.warning(
-            'ChatHistoryService initialization timed out after 5 seconds');
+        throw TimeoutException(
+          'ChatHistoryService initialization timed out after 5 seconds',
+          const Duration(seconds: 5),
+        );
       }
 
       // Force an initial update with current chats
@@ -119,6 +155,22 @@ class ChatStateManager {
 
   /// Create a new chat
   Future<Chat> createNewChat({
+    required String modelName,
+    String? title,
+    String? systemPrompt,
+  }) async {
+    return await _executeWithErrorHandling(
+      () => _performCreateNewChat(
+        modelName: modelName,
+        title: title,
+        systemPrompt: systemPrompt,
+      ),
+      'createNewChat',
+    );
+  }
+
+  /// Perform the actual chat creation
+  Future<Chat> _performCreateNewChat({
     required String modelName,
     String? title,
     String? systemPrompt,
@@ -190,8 +242,9 @@ class ChatStateManager {
       _notifyStateChange();
       AppLogger.info('Set active chat to: ${chat.title}');
     } catch (e) {
+      // Handle error but don't rethrow for UI operations
+      _handleOperationError(e, 'setActiveChat');
       AppLogger.error('Error setting active chat', e);
-      rethrow;
     }
   }
 
@@ -368,6 +421,95 @@ class ChatStateManager {
   void _notifyStateChange() {
     if (!_disposed) {
       _stateController.add(currentState);
+    }
+  }
+
+  /// Handle stream errors with recovery
+  void _handleStreamError(Object error) {
+    if (_errorRecoveryService != null) {
+      _errorRecoveryService!.handleServiceError(
+        _serviceName,
+        error,
+        operation: 'chatStream',
+      );
+    } else {
+      AppLogger.error('Error in chat stream', error);
+    }
+    _notifyStateChange();
+  }
+
+  /// Execute operation with error handling
+  Future<T> _executeWithErrorHandling<T>(
+    Future<T> Function() operation,
+    String operationName,
+  ) async {
+    if (_errorRecoveryService != null) {
+      return await _errorRecoveryService!.executeServiceOperation(
+        _serviceName,
+        operation,
+        operationName: operationName,
+      );
+    } else {
+      return await operation();
+    }
+  }
+
+  /// Handle operation error
+  Future<T?> _handleOperationError<T>(
+    Object error,
+    String operationName,
+  ) async {
+    if (_errorRecoveryService != null) {
+      return await _errorRecoveryService!.handleServiceError<T>(
+        _serviceName,
+        error,
+        operation: operationName,
+      );
+    } else {
+      AppLogger.error('Error in $operationName', error);
+      return null;
+    }
+  }
+
+  /// Validate state consistency
+  bool validateState() {
+    try {
+      // Check basic state consistency
+      if (_chats.isEmpty && _activeChat != null) {
+        AppLogger.warning('Invalid state: active chat exists but no chats available');
+        return false;
+      }
+
+      if (_activeChat != null && !_chats.any((chat) => chat.id == _activeChat!.id)) {
+        AppLogger.warning('Invalid state: active chat not found in chats list');
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      AppLogger.error('Error validating state', e);
+      return false;
+    }
+  }
+
+  /// Reset state to a consistent state
+  void resetState() {
+    try {
+      AppLogger.info('Resetting ChatStateManager state');
+      
+      // Clear active chat if it's not in the chats list
+      if (_activeChat != null && !_chats.any((chat) => chat.id == _activeChat!.id)) {
+        _activeChat = null;
+      }
+      
+      // Set active chat to most recent if none is set
+      _setActiveToMostRecentIfNeeded();
+      
+      _notifyStateChange();
+      
+      AppLogger.info('ChatStateManager state reset completed');
+    } catch (e) {
+      AppLogger.error('Error resetting state', e);
     }
   }
 

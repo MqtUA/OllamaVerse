@@ -5,13 +5,16 @@ import '../models/streaming_state.dart';
 import '../models/thinking_state.dart';
 import '../services/ollama_service.dart';
 import '../services/thinking_content_processor.dart';
+import '../services/error_recovery_service.dart';
 import '../utils/cancellation_token.dart';
+import '../utils/error_handler.dart';
 import '../utils/logger.dart';
 
 /// Service responsible for message generation coordination and streaming response handling
 /// Manages streaming operations, cancellation, and response processing coordination
 class MessageStreamingService {
   final OllamaService _ollamaService;
+  final ErrorRecoveryService? _errorRecoveryService;
   
   // Current streaming state
   StreamingState _streamingState = StreamingState.initial();
@@ -28,11 +31,16 @@ class MessageStreamingService {
   // ThinkingContentProcessor instance for processing thinking content
   final ThinkingContentProcessor _thinkingContentProcessor;
   
+  // Error handling
+  static const String _serviceName = 'MessageStreamingService';
+  
   MessageStreamingService({
     required OllamaService ollamaService,
     required ThinkingContentProcessor thinkingContentProcessor,
+    ErrorRecoveryService? errorRecoveryService,
   }) : _ollamaService = ollamaService,
-       _thinkingContentProcessor = thinkingContentProcessor;
+       _thinkingContentProcessor = thinkingContentProcessor,
+       _errorRecoveryService = errorRecoveryService;
 
   // Getters
   StreamingState get streamingState => _streamingState;
@@ -93,7 +101,8 @@ class MessageStreamingService {
         );
       }
     } catch (e) {
-      AppLogger.error('Error in streaming message generation', e);
+      // Handle error with recovery service
+      await _handleStreamingError(e, 'generateStreamingMessage');
       
       // Reset states on error
       _resetStreamingStates();
@@ -331,6 +340,79 @@ class MessageStreamingService {
   /// Validate current state consistency
   bool validateState() {
     return _streamingState.isValid && _thinkingState.isValid;
+  }
+
+  /// Handle streaming errors with recovery
+  Future<void> _handleStreamingError(Object error, String operation) async {
+    if (_errorRecoveryService != null) {
+      await _errorRecoveryService!.handleServiceError(
+        _serviceName,
+        error,
+        operation: operation,
+        context: {
+          'isStreaming': isStreaming,
+          'isCancelled': isCancelled,
+          'hasActiveSubscription': _streamSubscription != null,
+        },
+      );
+    } else {
+      AppLogger.error('Error in $operation', error);
+    }
+  }
+
+  /// Execute streaming operation with error handling
+  Future<T> _executeStreamingOperation<T>(
+    Future<T> Function() operation,
+    String operationName,
+  ) async {
+    if (_errorRecoveryService != null) {
+      return await _errorRecoveryService!.executeServiceOperation(
+        _serviceName,
+        operation,
+        operationName: operationName,
+        timeout: const Duration(minutes: 5), // Longer timeout for streaming
+      );
+    } else {
+      return await operation();
+    }
+  }
+
+  /// Validate streaming state consistency
+  bool validateStreamingState() {
+    try {
+      // Check state consistency
+      if (_streamingState.isStreaming && _streamSubscription == null) {
+        AppLogger.warning('Invalid streaming state: marked as streaming but no active subscription');
+        return false;
+      }
+
+      if (_cancellationToken.isCancelled && _streamingState.isStreaming) {
+        AppLogger.warning('Invalid streaming state: cancelled but still marked as streaming');
+        return false;
+      }
+
+      return _streamingState.isValid && _thinkingState.isValid;
+    } catch (e) {
+      AppLogger.error('Error validating streaming state', e);
+      return false;
+    }
+  }
+
+  /// Reset streaming state to a consistent state
+  void resetStreamingState() {
+    try {
+      AppLogger.info('Resetting MessageStreamingService state');
+      
+      // Cancel any active operations
+      cancelStreaming();
+      
+      // Reset states
+      _resetStreamingStates();
+      
+      AppLogger.info('MessageStreamingService state reset completed');
+    } catch (e) {
+      AppLogger.error('Error resetting streaming state', e);
+    }
   }
 
   /// Dispose resources

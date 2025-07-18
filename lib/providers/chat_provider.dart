@@ -11,7 +11,10 @@ import '../services/chat_title_generator.dart';
 import '../services/file_processing_manager.dart';
 import '../services/file_content_processor.dart';
 import '../services/thinking_content_processor.dart';
+import '../services/error_recovery_service.dart';
+import '../services/recovery_strategies.dart';
 import '../providers/settings_provider.dart';
+import '../utils/error_handler.dart';
 import '../utils/logger.dart';
 
 /// Refactored ChatProvider that orchestrates services and maintains UI state
@@ -24,6 +27,7 @@ class ChatProvider with ChangeNotifier {
   final MessageStreamingService _messageStreamingService;
   final ChatTitleGenerator _chatTitleGenerator;
   final FileProcessingManager _fileProcessingManager;
+  final ErrorRecoveryService _errorRecoveryService;
 
   // UI state only - business logic delegated to services
   bool _isLoading = true;
@@ -31,6 +35,7 @@ class ChatProvider with ChangeNotifier {
   
   // Stream subscriptions for service coordination
   StreamSubscription? _chatStateSubscription;
+  StreamSubscription? _errorStateSubscription;
   bool _disposed = false;
 
   ChatProvider({
@@ -42,13 +47,16 @@ class ChatProvider with ChangeNotifier {
     required ChatTitleGenerator chatTitleGenerator,
     required FileProcessingManager fileProcessingManager,
     required ThinkingContentProcessor thinkingContentProcessor,
+    required ErrorRecoveryService errorRecoveryService,
   })  : _chatHistoryService = chatHistoryService,
         _settingsProvider = settingsProvider,
         _modelManager = modelManager,
         _chatStateManager = chatStateManager,
         _messageStreamingService = messageStreamingService,
         _chatTitleGenerator = chatTitleGenerator,
-        _fileProcessingManager = fileProcessingManager {
+        _fileProcessingManager = fileProcessingManager,
+        _errorRecoveryService = errorRecoveryService {
+    _setupErrorRecoveryStrategies();
     _initialize();
   }
 
@@ -89,8 +97,10 @@ class ChatProvider with ChangeNotifier {
   void dispose() {
     _disposed = true;
     _chatStateSubscription?.cancel();
+    _errorStateSubscription?.cancel();
     _messageStreamingService.dispose();
     _chatStateManager.dispose();
+    _errorRecoveryService.dispose();
     super.dispose();
   }
 
@@ -98,10 +108,65 @@ class ChatProvider with ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Setup error recovery strategies for all services
+  void _setupErrorRecoveryStrategies() {
+    try {
+      // Register recovery strategies for each service
+      _errorRecoveryService.registerRecoveryStrategy(
+        'ModelManager',
+        RecoveryStrategyFactory.createForService(
+          'model',
+          ollamaService: _settingsProvider.getOllamaService(),
+          modelManager: _modelManager,
+        ),
+      );
+
+      _errorRecoveryService.registerRecoveryStrategy(
+        'MessageStreamingService',
+        RecoveryStrategyFactory.createForService(
+          'streaming',
+          ollamaService: _settingsProvider.getOllamaService(),
+        ),
+      );
+
+      _errorRecoveryService.registerRecoveryStrategy(
+        'ChatStateManager',
+        RecoveryStrategyFactory.createForService(
+          'state',
+          resetStateCallback: () => _chatStateManager.resetState(),
+        ),
+      );
+
+      _errorRecoveryService.registerRecoveryStrategy(
+        'FileProcessingManager',
+        RecoveryStrategyFactory.createForService('fileprocessing'),
+      );
+
+      _errorRecoveryService.registerRecoveryStrategy(
+        'ChatTitleGenerator',
+        RecoveryStrategyFactory.createForService('titlegeneration'),
+      );
+
+      AppLogger.info('Error recovery strategies registered successfully');
+    } catch (e) {
+      AppLogger.error('Error setting up recovery strategies', e);
+    }
+  }
+
   /// Helper method to handle errors consistently
   void _handleError(String message, dynamic error, [String? logContext]) {
-    _error = '$message: ${error.toString()}';
-    AppLogger.error(logContext ?? message, error);
+    final errorState = ErrorHandler.createErrorState(
+      error,
+      operation: logContext ?? message,
+      context: {
+        'isLoading': _isLoading,
+        'hasActiveChat': activeChat != null,
+        'isGenerating': isGenerating,
+      },
+    );
+    
+    _error = errorState.message;
+    ErrorHandler.logError(logContext ?? message, error);
     _safeNotifyListeners();
   }
 
@@ -140,13 +205,49 @@ class ChatProvider with ChangeNotifier {
     _chatStateSubscription = _chatStateManager.stateStream.listen(
       (state) => _safeNotifyListeners(),
       onError: (error) {
-        _error = 'Chat state error: $error';
+        _handleError('Chat state error', error, 'ChatStateManager.stateStream');
+      },
+    );
+
+    _errorStateSubscription = _errorRecoveryService.errorStateStream.listen(
+      (errorStates) {
+        // Update UI error state based on service errors
+        _updateErrorFromServiceStates(errorStates);
         _safeNotifyListeners();
+      },
+      onError: (error) {
+        AppLogger.error('Error in error state stream', error);
       },
     );
 
     _messageStreamingService.setStreamingStateCallback((_) => _safeNotifyListeners());
     _messageStreamingService.setThinkingStateCallback((_) => _safeNotifyListeners());
+  }
+
+  /// Update error state based on service error states
+  void _updateErrorFromServiceStates(Map<String, ErrorState> errorStates) {
+    if (errorStates.isEmpty) {
+      // Clear error if no service errors
+      if (_error != null) {
+        _error = null;
+      }
+      return;
+    }
+
+    // Find the most critical error to display
+    ErrorState? mostCriticalError;
+    ErrorSeverity highestSeverity = ErrorSeverity.info;
+
+    for (final errorState in errorStates.values) {
+      if (errorState.severity.index > highestSeverity.index) {
+        highestSeverity = errorState.severity;
+        mostCriticalError = errorState;
+      }
+    }
+
+    if (mostCriticalError != null) {
+      _error = mostCriticalError.message;
+    }
   }
 
   void cancelGeneration() {
@@ -517,6 +618,125 @@ class ChatProvider with ChangeNotifier {
     } catch (e) {
       AppLogger.error('Error getting system prompt strategy', e);
       return 'native'; // Default fallback
+    }
+  }
+
+  /// Get current error recovery status
+  Map<String, dynamic> getErrorRecoveryStatus() {
+    final serviceErrors = _errorRecoveryService.currentErrorStates;
+    final systemHealth = _errorRecoveryService.getSystemHealth();
+    
+    return {
+      'systemHealth': systemHealth.name,
+      'serviceErrors': serviceErrors.map((key, value) => MapEntry(key, {
+        'errorType': value.errorType.name,
+        'message': value.message,
+        'canRetry': value.canRetry,
+        'severity': value.severity.name,
+        'isRecent': value.isRecent,
+        'operation': value.operation,
+      })),
+      'hasActiveErrors': serviceErrors.isNotEmpty,
+      'errorCount': serviceErrors.length,
+    };
+  }
+
+  /// Manually trigger error recovery for a specific service
+  Future<bool> recoverService(String serviceName) async {
+    try {
+      final errorState = _errorRecoveryService.getServiceError(serviceName);
+      if (errorState == null) {
+        AppLogger.info('No error state found for service: $serviceName');
+        return true;
+      }
+
+      final result = await _errorRecoveryService.handleServiceError(
+        serviceName,
+        errorState.error,
+        operation: 'manualRecovery',
+      );
+
+      _safeNotifyListeners();
+      return result != null;
+    } catch (e) {
+      AppLogger.error('Error during manual service recovery', e);
+      return false;
+    }
+  }
+
+  /// Clear all service errors
+  void clearAllServiceErrors() {
+    _errorRecoveryService.clearAllErrors();
+    _error = null;
+    _safeNotifyListeners();
+  }
+
+  /// Get service health status
+  Map<String, String> getServiceHealthStatus() {
+    final services = [
+      'ModelManager',
+      'MessageStreamingService', 
+      'ChatStateManager',
+      'FileProcessingManager',
+      'ChatTitleGenerator',
+    ];
+
+    return Map.fromEntries(
+      services.map((service) => MapEntry(
+        service,
+        _errorRecoveryService.getServiceHealth(service).name,
+      )),
+    );
+  }
+
+  /// Validate all service states
+  bool validateAllServiceStates() {
+    try {
+      final modelManagerValid = _modelManager.validateState();
+      final chatStateValid = _chatStateManager.validateState();
+      final streamingValid = _messageStreamingService.validateStreamingState();
+      
+      final allValid = modelManagerValid && chatStateValid && streamingValid;
+      
+      if (!allValid) {
+        AppLogger.warning('Service state validation failed: '
+          'ModelManager=$modelManagerValid, '
+          'ChatState=$chatStateValid, '
+          'Streaming=$streamingValid');
+      }
+      
+      return allValid;
+    } catch (e) {
+      AppLogger.error('Error validating service states', e);
+      return false;
+    }
+  }
+
+  /// Reset all service states to consistent state
+  Future<void> resetAllServiceStates() async {
+    try {
+      AppLogger.info('Resetting all service states');
+      
+      // Cancel any ongoing operations
+      cancelGeneration();
+      
+      // Reset individual service states
+      _modelManager.resetState();
+      _chatStateManager.resetState();
+      _messageStreamingService.resetStreamingState();
+      
+      // Clear error recovery state
+      _errorRecoveryService.clearAllErrors();
+      
+      // Reset provider state
+      _error = null;
+      
+      _safeNotifyListeners();
+      
+      AppLogger.info('All service states reset completed');
+    } catch (e) {
+      AppLogger.error('Error resetting service states', e);
+      _handleError('Failed to reset service states', e);
     }
   }
 }

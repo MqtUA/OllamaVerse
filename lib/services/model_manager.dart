@@ -1,5 +1,7 @@
 import 'dart:async';
 import '../services/ollama_service.dart';
+import '../services/error_recovery_service.dart';
+import '../utils/error_handler.dart';
 import '../utils/logger.dart';
 
 /// Interface for settings provider to allow for testing
@@ -13,6 +15,7 @@ abstract class ISettingsProvider {
 /// Service responsible for managing AI models including loading, selection, and persistence
 class ModelManager {
   final ISettingsProvider _settingsProvider;
+  final ErrorRecoveryService? _errorRecoveryService;
   
   List<String> _availableModels = [];
   String _lastSelectedModel = '';
@@ -23,9 +26,15 @@ class ModelManager {
   static const int _maxRetryAttempts = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
   static const Duration _settingsTimeout = Duration(seconds: 10);
+  
+  // Error handling
+  static const String _serviceName = 'ModelManager';
 
-  ModelManager({required ISettingsProvider settingsProvider})
-      : _settingsProvider = settingsProvider;
+  ModelManager({
+    required ISettingsProvider settingsProvider,
+    ErrorRecoveryService? errorRecoveryService,
+  }) : _settingsProvider = settingsProvider,
+       _errorRecoveryService = errorRecoveryService;
 
   /// Get the list of available models
   List<String> get availableModels => List.unmodifiable(_availableModels);
@@ -64,46 +73,59 @@ class ModelManager {
     _lastError = null;
 
     try {
+      if (_errorRecoveryService != null) {
+        await _errorRecoveryService!.executeServiceOperation(
+          _serviceName,
+          () => _performLoadModels(),
+          operationName: 'loadModels',
+          maxRetries: _maxRetryAttempts,
+          timeout: const Duration(seconds: 30),
+        );
+        return _availableModels.isNotEmpty;
+      } else {
+        return await _performLoadModels();
+      }
+    } catch (e) {
+      await _handleModelError(e, 'loadModels');
+      return false;
+    } finally {
+      _isLoading = false;
+    }
+  }
+
+  /// Perform the actual model loading
+  Future<bool> _performLoadModels() async {
+    try {
       // Wait for settings to be ready before loading models
       await _waitForSettings();
 
       final ollamaService = _settingsProvider.getOllamaService();
       
-      // Attempt to load models with retry mechanism
-      for (int attempt = 1; attempt <= _maxRetryAttempts; attempt++) {
-        try {
-          _availableModels = await ollamaService.getModels();
-          AppLogger.info('Successfully loaded ${_availableModels.length} models on attempt $attempt');
-          _isLoading = false;
-          return true;
-        } on OllamaConnectionException catch (e) {
-          AppLogger.warning('Connection error on attempt $attempt: ${e.message}');
-          _lastError = 'Cannot connect to Ollama server. Please check your connection settings.';
-          
-          if (attempt < _maxRetryAttempts) {
-            AppLogger.info('Retrying in ${_retryDelay.inSeconds} seconds...');
-            await Future.delayed(_retryDelay);
+      // Load models using error handler with retry
+      _availableModels = await ErrorHandler.executeWithRetry(
+        () => ollamaService.getModels(),
+        operationName: 'getModels',
+        maxRetries: _maxRetryAttempts,
+        baseDelay: _retryDelay,
+        shouldRetry: (error) {
+          if (error is OllamaConnectionException || error is OllamaApiException) {
+            return true;
           }
-        } on OllamaApiException catch (e) {
-          AppLogger.error('API error loading models on attempt $attempt', e);
-          _lastError = 'Error communicating with Ollama: ${e.message}';
-          
-          if (attempt < _maxRetryAttempts) {
-            await Future.delayed(_retryDelay);
-          }
-        }
-      }
+          return ErrorHandler.isRetryableError(error);
+        },
+        onRetry: (error, attempt) {
+          _lastError = ErrorHandler.getUserFriendlyMessage(error);
+          AppLogger.warning('Model loading attempt $attempt failed: $_lastError');
+        },
+      );
 
-      // All retry attempts failed
-      _availableModels = [];
-      _isLoading = false;
-      return false;
-
+      AppLogger.info('Successfully loaded ${_availableModels.length} models');
+      _lastError = null;
+      return true;
     } catch (e) {
-      _lastError = 'Unexpected error loading models: ${e.toString()}';
-      AppLogger.error('Unexpected error loading models', e);
+      _lastError = ErrorHandler.getUserFriendlyMessage(e);
+      AppLogger.error('Failed to load models', e);
       _availableModels = [];
-      _isLoading = false;
       return false;
     }
   }
@@ -212,6 +234,80 @@ class ModelManager {
     _lastError = null;
   }
 
+  /// Handle model operation errors
+  Future<void> _handleModelError(Object error, String operation) async {
+    if (_errorRecoveryService != null) {
+      await _errorRecoveryService!.handleServiceError(
+        _serviceName,
+        error,
+        operation: operation,
+        context: {
+          'modelCount': _availableModels.length,
+          'isLoading': _isLoading,
+          'lastSelectedModel': _lastSelectedModel,
+        },
+      );
+    } else {
+      _lastError = ErrorHandler.getUserFriendlyMessage(error);
+      AppLogger.error('Error in $operation', error);
+    }
+  }
+
+  /// Execute model operation with error handling
+  Future<T> _executeModelOperation<T>(
+    Future<T> Function() operation,
+    String operationName,
+  ) async {
+    if (_errorRecoveryService != null) {
+      return await _errorRecoveryService!.executeServiceOperation(
+        _serviceName,
+        operation,
+        operationName: operationName,
+      );
+    } else {
+      return await operation();
+    }
+  }
+
+  /// Validate model manager state
+  bool validateState() {
+    try {
+      // Check for inconsistent state
+      if (_isLoading && _availableModels.isNotEmpty) {
+        AppLogger.warning('Invalid state: loading but models already available');
+        return false;
+      }
+
+      if (_lastSelectedModel.isNotEmpty && 
+          _availableModels.isNotEmpty && 
+          !_availableModels.contains(_lastSelectedModel)) {
+        AppLogger.warning('Invalid state: selected model not in available models');
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      AppLogger.error('Error validating model manager state', e);
+      return false;
+    }
+  }
+
+  /// Reset model manager state
+  void resetState() {
+    try {
+      AppLogger.info('Resetting ModelManager state');
+      
+      _isLoading = false;
+      _lastError = null;
+      
+      // Keep available models and last selected model as they may still be valid
+      
+      AppLogger.info('ModelManager state reset completed');
+    } catch (e) {
+      AppLogger.error('Error resetting model manager state', e);
+    }
+  }
+
   /// Get connection status information
   Map<String, dynamic> getConnectionStatus() {
     return {
@@ -221,6 +317,7 @@ class ModelManager {
       'lastError': _lastError,
       'lastSelectedModel': _lastSelectedModel,
       'availableModels': availableModels,
+      'isStateValid': validateState(),
     };
   }
 }
