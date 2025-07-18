@@ -25,9 +25,14 @@ class MessageStreamingService {
   void Function(StreamingState)? _onStreamingStateChanged;
   void Function(ThinkingState)? _onThinkingStateChanged;
   
+  // ThinkingContentProcessor instance for processing thinking content
+  final ThinkingContentProcessor _thinkingContentProcessor;
+  
   MessageStreamingService({
     required OllamaService ollamaService,
-  }) : _ollamaService = ollamaService;
+    required ThinkingContentProcessor thinkingContentProcessor,
+  }) : _ollamaService = ollamaService,
+       _thinkingContentProcessor = thinkingContentProcessor;
 
   // Getters
   StreamingState get streamingState => _streamingState;
@@ -62,8 +67,8 @@ class MessageStreamingService {
       // Reset states
       _resetStreamingStates();
       
-      // Initialize thinking state for new generation
-      _thinkingState = ThinkingContentProcessor.initializeThinkingState();
+      // Initialize thinking state for new generation using injected processor
+      _thinkingState = _thinkingContentProcessor.initializeThinkingState();
       _notifyThinkingStateChanged();
       
       if (showLiveResponse) {
@@ -136,8 +141,8 @@ class MessageStreamingService {
         if (streamResponse.response.isNotEmpty) {
           accumulatedResponse += streamResponse.response;
           
-          // Process thinking content and filter response
-          final processedResult = ThinkingContentProcessor.processStreamingResponse(
+          // Process thinking content and filter response using injected processor
+          final processedResult = _thinkingContentProcessor.processStreamingResponse(
             fullResponse: accumulatedResponse,
             currentState: _thinkingState,
           );
@@ -152,7 +157,7 @@ class MessageStreamingService {
           );
           
           // Update thinking phase based on content
-          _thinkingState = ThinkingContentProcessor.updateThinkingPhase(
+          _thinkingState = _thinkingContentProcessor.updateThinkingPhase(
             currentState: _thinkingState,
             displayResponse: filteredResponse,
           );
@@ -181,7 +186,7 @@ class MessageStreamingService {
       
       // Complete streaming
       _streamingState = StreamingState.completed(accumulatedResponse);
-      _thinkingState = ThinkingContentProcessor.resetThinkingState(_thinkingState);
+      _thinkingState = _thinkingContentProcessor.resetThinkingState(_thinkingState);
       
       _notifyStreamingStateChanged();
       _notifyThinkingStateChanged();
@@ -231,8 +236,8 @@ class MessageStreamingService {
         return;
       }
       
-      // Process thinking content
-      final processedResult = ThinkingContentProcessor.processStreamingResponse(
+      // Process thinking content using injected processor
+      final processedResult = _thinkingContentProcessor.processStreamingResponse(
         fullResponse: response.response,
         currentState: _thinkingState,
       );
@@ -242,7 +247,7 @@ class MessageStreamingService {
       
       // Update states
       _streamingState = StreamingState.completed(response.response);
-      _thinkingState = ThinkingContentProcessor.resetThinkingState(_thinkingState);
+      _thinkingState = _thinkingContentProcessor.resetThinkingState(_thinkingState);
       
       _notifyStreamingStateChanged();
       _notifyThinkingStateChanged();
@@ -297,7 +302,7 @@ class MessageStreamingService {
 
   /// Toggle thinking bubble expansion
   void toggleThinkingBubble(String messageId) {
-    _thinkingState = ThinkingContentProcessor.toggleBubbleExpansion(
+    _thinkingState = _thinkingContentProcessor.toggleBubbleExpansion(
       currentState: _thinkingState,
       messageId: messageId,
     );
@@ -306,7 +311,7 @@ class MessageStreamingService {
 
   /// Check if thinking bubble is expanded
   bool isThinkingBubbleExpanded(String messageId) {
-    return ThinkingContentProcessor.isBubbleExpanded(
+    return _thinkingContentProcessor.isBubbleExpanded(
       currentState: _thinkingState,
       messageId: messageId,
     );
@@ -318,7 +323,7 @@ class MessageStreamingService {
       'isStreaming': isStreaming,
       'isCancelled': isCancelled,
       'streamingState': _streamingState.toString(),
-      'thinkingStats': ThinkingContentProcessor.getThinkingStats(_thinkingState),
+      'thinkingStats': _thinkingContentProcessor.getThinkingStats(_thinkingState),
       'hasActiveSubscription': _streamSubscription != null,
     };
   }

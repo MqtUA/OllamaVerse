@@ -10,12 +10,7 @@ import 'providers/theme_notifier.dart';
 import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
-import 'services/chat_history_service.dart';
-import 'services/model_manager.dart';
-import 'services/chat_state_manager.dart';
-import 'services/message_streaming_service.dart';
-import 'services/chat_title_generator.dart';
-import 'services/file_processing_manager.dart';
+import 'services/service_locator.dart';
 
 import 'services/storage_service.dart';
 import 'services/file_cleanup_service.dart';
@@ -46,6 +41,9 @@ Future<void> main() async {
 
   // Initialize enhanced file cleanup service
   await FileCleanupService.instance.init();
+  
+  // Reset service locator to ensure clean state on app start
+  await ServiceLocator.instance.reset();
 
   // Initialize performance monitoring in debug mode
   if (kDebugMode) {
@@ -53,6 +51,24 @@ Future<void> main() async {
   }
 
   runApp(MyApp(prefs: prefs));
+}
+
+/// Initialize services asynchronously and trigger provider rebuild
+Future<void> _initializeServicesAsync(SettingsProvider settingsProvider, BuildContext context) async {
+  try {
+    AppLogger.info('Starting async service initialization...');
+    await ServiceLocator.instance.initialize(settingsProvider);
+    
+    // Trigger a rebuild of the ChatProvider after services are initialized
+    if (context.mounted) {
+      // The ChangeNotifierProxyProvider will automatically update when services are ready
+      // No need to manually trigger notifications
+    }
+    
+    AppLogger.info('Async service initialization completed');
+  } catch (e, stackTrace) {
+    AppLogger.error('Failed to initialize services asynchronously', e, stackTrace);
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -102,32 +118,44 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => ThemeNotifier(),
         ),
 
-        // Create ChatProvider with all required services
-        ChangeNotifierProvider(
-          create: (context) {
-            final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-            final chatHistoryService = ChatHistoryService();
+        // Create ChatProvider using service locator with proper async initialization
+        ChangeNotifierProxyProvider<SettingsProvider, ChatProvider?>(
+          create: (_) => null,
+          update: (context, settingsProvider, previous) {
+            // Only create ChatProvider after SettingsProvider is ready
+            if (settingsProvider.isLoading) {
+              return previous;
+            }
             
-            // Create service dependencies
-            final modelManager = ModelManager(settingsProvider: settingsProvider);
-            final chatStateManager = ChatStateManager(chatHistoryService: chatHistoryService);
-            final messageStreamingService = MessageStreamingService(
-              ollamaService: settingsProvider.getOllamaService(),
-            );
-            final chatTitleGenerator = ChatTitleGenerator(
-              ollamaService: settingsProvider.getOllamaService(),
-            );
-            final fileProcessingManager = FileProcessingManager();
+            // Return existing provider if already created and services are still initialized
+            if (previous != null && ServiceLocator.instance.isInitialized) {
+              return previous;
+            }
             
-            return ChatProvider(
-              chatHistoryService: chatHistoryService,
-              settingsProvider: settingsProvider,
-              modelManager: modelManager,
-              chatStateManager: chatStateManager,
-              messageStreamingService: messageStreamingService,
-              chatTitleGenerator: chatTitleGenerator,
-              fileProcessingManager: fileProcessingManager,
-            );
+            // Initialize service locator synchronously if not done
+            // This ensures proper dependency injection setup
+            if (!ServiceLocator.instance.isInitialized) {
+              // Schedule async initialization but return null for now
+              _initializeServicesAsync(settingsProvider, context);
+              return null;
+            }
+            
+            // Create ChatProvider with all required services
+            try {
+              return ChatProvider(
+                chatHistoryService: ServiceLocator.instance.chatHistoryService,
+                settingsProvider: settingsProvider,
+                modelManager: ServiceLocator.instance.modelManager,
+                chatStateManager: ServiceLocator.instance.chatStateManager,
+                messageStreamingService: ServiceLocator.instance.messageStreamingService,
+                chatTitleGenerator: ServiceLocator.instance.chatTitleGenerator,
+                fileProcessingManager: ServiceLocator.instance.fileProcessingManager,
+                thinkingContentProcessor: ServiceLocator.instance.thinkingContentProcessor,
+              );
+            } catch (e) {
+              AppLogger.error('Failed to create ChatProvider', e);
+              return null;
+            }
           },
         ),
       ],

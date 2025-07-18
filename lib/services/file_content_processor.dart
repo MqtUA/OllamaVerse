@@ -69,6 +69,15 @@ class FileContentProcessor {
   static const int maxImageSizeBytes = 100 * 1024 * 1024; // 100MB for images
   static const int maxTextSizeBytes = 50 * 1024 * 1024; // 50MB for text files
   static const int maxPdfSizeBytes = 100 * 1024 * 1024; // 100MB for PDFs
+  
+  // Constructor
+  FileContentProcessor();
+  
+  /// Dispose method for lifecycle management
+  void dispose() {
+    // No resources to dispose, but added for consistency with other services
+    AppLogger.info('FileContentProcessor disposed');
+  }
 
   // Use shared extension lists from FileUtils (avoiding duplication)
 
@@ -234,7 +243,7 @@ class FileContentProcessor {
   }
 
   /// Process a file and extract its content for AI analysis
-  static Future<ProcessedFile> processFile(
+  Future<ProcessedFile> processFile(
     String filePath, {
     void Function(FileProcessingProgress)? onProgress,
     bool Function()? isCancelled,
@@ -307,7 +316,7 @@ class FileContentProcessor {
   }
 
   /// Process multiple files in batch with caching and progress reporting
-  static Future<List<ProcessedFile>> processFiles(
+  Future<List<ProcessedFile>> processFiles(
     List<String> filePaths, {
     void Function(FileProcessingProgress)? onProgress,
     bool Function()? isCancelled,

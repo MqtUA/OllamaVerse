@@ -5,17 +5,19 @@ import '../utils/logger.dart';
 /// Handles stream filtering, content extraction, and thinking bubble state management
 class ThinkingContentProcessor {
   /// List of supported thinking markers with their open/close tags
-  static const List<Map<String, String>> _thinkingMarkers = [
+  final List<Map<String, String>> _thinkingMarkers = const [
     {'open': '<think>', 'close': '</think>'},
     {'open': '<thinking>', 'close': '</thinking>'},
     {'open': '<reasoning>', 'close': '</reasoning>'},
     {'open': '<analysis>', 'close': '</analysis>'},
     {'open': '<reflection>', 'close': '</reflection>'},
   ];
+  
+  ThinkingContentProcessor();
 
   /// Process streaming response and extract thinking content
   /// Returns a map with filtered response and updated thinking state
-  static Map<String, dynamic> processStreamingResponse({
+  Map<String, dynamic> processStreamingResponse({
     required String fullResponse,
     required ThinkingState currentState,
   }) {
@@ -112,7 +114,7 @@ class ThinkingContentProcessor {
 
   /// Update thinking phase based on response content
   /// Determines if the model has moved from thinking to answering
-  static ThinkingState updateThinkingPhase({
+  ThinkingState updateThinkingPhase({
     required ThinkingState currentState,
     required String displayResponse,
   }) {
@@ -135,12 +137,12 @@ class ThinkingContentProcessor {
   }
 
   /// Initialize thinking state for new message generation
-  static ThinkingState initializeThinkingState() {
+  ThinkingState initializeThinkingState() {
     return ThinkingState.initial().copyWith(isThinkingPhase: true);
   }
 
   /// Reset thinking state after message completion
-  static ThinkingState resetThinkingState(ThinkingState currentState) {
+  ThinkingState resetThinkingState(ThinkingState currentState) {
     return currentState.copyWith(
       currentThinkingContent: '',
       hasActiveThinkingBubble: false,
@@ -150,7 +152,7 @@ class ThinkingContentProcessor {
   }
 
   /// Toggle thinking bubble expansion for a specific message
-  static ThinkingState toggleBubbleExpansion({
+  ThinkingState toggleBubbleExpansion({
     required ThinkingState currentState,
     required String messageId,
   }) {
@@ -170,7 +172,7 @@ class ThinkingContentProcessor {
   }
 
   /// Check if a thinking bubble is expanded for a specific message
-  static bool isBubbleExpanded({
+  bool isBubbleExpanded({
     required ThinkingState currentState,
     required String messageId,
   }) {
@@ -178,12 +180,12 @@ class ThinkingContentProcessor {
   }
 
   /// Validate thinking state consistency
-  static bool validateThinkingState(ThinkingState state) {
+  bool validateThinkingState(ThinkingState state) {
     return state.isValid;
   }
 
   /// Get thinking content statistics for debugging
-  static Map<String, dynamic> getThinkingStats(ThinkingState state) {
+  Map<String, dynamic> getThinkingStats(ThinkingState state) {
     return {
       'hasThinkingContent': state.hasThinkingContent,
       'hasActiveThinkingBubble': state.hasActiveThinkingBubble,
@@ -197,7 +199,7 @@ class ThinkingContentProcessor {
   }
 
   /// Clean up excessive whitespace from filtered response
-  static String _cleanupWhitespace(String text) {
+  String _cleanupWhitespace(String text) {
     if (text.isEmpty) return text;
     
     // Remove excessive newlines (more than 2 consecutive)
@@ -205,7 +207,7 @@ class ThinkingContentProcessor {
   }
 
   /// Extract all thinking markers from text for analysis
-  static List<Map<String, dynamic>> extractThinkingMarkers(String text) {
+  List<Map<String, dynamic>> extractThinkingMarkers(String text) {
     final List<Map<String, dynamic>> foundMarkers = [];
     
     for (final markerPair in _thinkingMarkers) {
@@ -248,7 +250,7 @@ class ThinkingContentProcessor {
   }
 
   /// Check if text contains any thinking markers
-  static bool containsThinkingMarkers(String text) {
+  bool containsThinkingMarkers(String text) {
     if (text.isEmpty) return false;
     
     final lowerText = text.toLowerCase();
@@ -264,9 +266,15 @@ class ThinkingContentProcessor {
   }
 
   /// Get supported thinking marker types
-  static List<String> getSupportedMarkerTypes() {
+  List<String> getSupportedMarkerTypes() {
     return _thinkingMarkers
         .map((marker) => marker['open']!.replaceAll('<', '').replaceAll('>', ''))
         .toList();
+  }
+  
+  /// Dispose method for lifecycle management
+  void dispose() {
+    // No resources to dispose, but added for consistency with other services
+    AppLogger.info('ThinkingContentProcessor disposed');
   }
 }

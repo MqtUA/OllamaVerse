@@ -10,6 +10,7 @@ import '../services/message_streaming_service.dart';
 import '../services/chat_title_generator.dart';
 import '../services/file_processing_manager.dart';
 import '../services/file_content_processor.dart';
+import '../services/thinking_content_processor.dart';
 import '../providers/settings_provider.dart';
 import '../utils/logger.dart';
 
@@ -40,6 +41,7 @@ class ChatProvider with ChangeNotifier {
     required MessageStreamingService messageStreamingService,
     required ChatTitleGenerator chatTitleGenerator,
     required FileProcessingManager fileProcessingManager,
+    required ThinkingContentProcessor thinkingContentProcessor,
   })  : _chatHistoryService = chatHistoryService,
         _settingsProvider = settingsProvider,
         _modelManager = modelManager,

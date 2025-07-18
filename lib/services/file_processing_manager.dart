@@ -30,12 +30,20 @@ abstract class IFileProcessingManager {
 
 /// Service responsible for managing file attachment processing with progress tracking and cancellation support
 class FileProcessingManager implements IFileProcessingManager {
+  // Dependencies
+  final FileContentProcessor _fileContentProcessor;
+  
   // File processing state
   bool _isProcessingFiles = false;
   final Map<String, FileProcessingProgress> _fileProcessingProgress = {};
   
   // Stream controllers for progress updates
   final _progressController = StreamController<Map<String, FileProcessingProgress>>.broadcast();
+  
+  /// Constructor with dependency injection
+  FileProcessingManager({
+    required FileContentProcessor fileContentProcessor,
+  }) : _fileContentProcessor = fileContentProcessor;
   
   /// Stream of file processing progress updates
   Stream<Map<String, FileProcessingProgress>> get progressStream => _progressController.stream;
@@ -72,7 +80,7 @@ class FileProcessingManager implements IFileProcessingManager {
       
       final effectiveCancellationToken = cancellationToken ?? CancellationToken();
       
-      final processedFiles = await FileContentProcessor.processFiles(
+      final processedFiles = await _fileContentProcessor.processFiles(
         filePaths,
         onProgress: (progress) {
           _fileProcessingProgress[progress.filePath] = progress;
@@ -108,7 +116,7 @@ class FileProcessingManager implements IFileProcessingManager {
       
       final effectiveCancellationToken = cancellationToken ?? CancellationToken();
       
-      final processedFile = await FileContentProcessor.processFile(
+      final processedFile = await _fileContentProcessor.processFile(
         filePath,
         onProgress: (progress) {
           _fileProcessingProgress[progress.filePath] = progress;
