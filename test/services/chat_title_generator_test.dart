@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ollamaverse/services/chat_title_generator.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
+import 'package:ollamaverse/services/model_manager.dart';
+import 'package:ollamaverse/providers/settings_provider.dart';
+import 'package:ollamaverse/models/app_settings.dart';
 
 // Simple mock implementation without mockito
 class MockOllamaService implements OllamaService {
@@ -37,6 +40,20 @@ class MockOllamaService implements OllamaService {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class MockSettingsProvider implements SettingsProvider {
+  @override
+  AppSettings get settings => AppSettings();
+  
+  @override
+  bool get isLoading => false;
+  
+  @override
+  OllamaService getOllamaService() => MockOllamaService();
+  
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   group('ChatTitleGenerator', () {
     late ChatTitleGenerator titleGenerator;
@@ -44,7 +61,12 @@ void main() {
 
     setUp(() {
       mockOllamaService = MockOllamaService();
-      titleGenerator = ChatTitleGenerator(ollamaService: mockOllamaService);
+      final mockSettingsProvider = MockSettingsProvider();
+      final mockModelManager = ModelManager(settingsProvider: mockSettingsProvider);
+      titleGenerator = ChatTitleGenerator(
+        ollamaService: mockOllamaService,
+        modelManager: mockModelManager,
+      );
     });
 
     group('State Management', () {

@@ -8,6 +8,7 @@ import 'package:ollamaverse/models/processed_file.dart';
 import 'package:ollamaverse/models/streaming_state.dart';
 import 'package:ollamaverse/models/thinking_state.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
+import 'package:ollamaverse/services/thinking_content_processor.dart';
 
 // Simple mock OllamaService for testing
 class TestOllamaService extends OllamaService {
@@ -57,7 +58,11 @@ void main() {
     
     setUp(() {
       mockOllamaService = TestOllamaService();
-      service = MessageStreamingService(ollamaService: mockOllamaService);
+      final thinkingContentProcessor = ThinkingContentProcessor();
+      service = MessageStreamingService(
+        ollamaService: mockOllamaService,
+        thinkingContentProcessor: thinkingContentProcessor,
+      );
     });
     
     tearDown(() {

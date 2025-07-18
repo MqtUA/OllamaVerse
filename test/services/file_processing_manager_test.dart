@@ -126,7 +126,10 @@ void main() {
   late FileProcessingManager fileProcessingManager;
   
   setUp(() {
-    fileProcessingManager = FileProcessingManager();
+    final fileContentProcessor = FileContentProcessor();
+    fileProcessingManager = FileProcessingManager(
+      fileContentProcessor: fileContentProcessor,
+    );
     MockFileContentProcessor.reset();
     
     // TODO: Replace the actual implementation with our mock
