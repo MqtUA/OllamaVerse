@@ -11,6 +11,11 @@ import 'screens/chat_screen.dart';
 import 'screens/settings_screen.dart';
 import 'utils/logger.dart';
 import 'services/chat_history_service.dart';
+import 'services/model_manager.dart';
+import 'services/chat_state_manager.dart';
+import 'services/message_streaming_service.dart';
+import 'services/chat_title_generator.dart';
+import 'services/file_processing_manager.dart';
 
 import 'services/storage_service.dart';
 import 'services/file_cleanup_service.dart';
@@ -97,13 +102,33 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => ThemeNotifier(),
         ),
 
-        // Create ChatProvider independently - it will access SettingsProvider via Provider.of when needed
+        // Create ChatProvider with all required services
         ChangeNotifierProvider(
-          create: (context) => ChatProvider(
-            chatHistoryService: ChatHistoryService(),
-            settingsProvider:
-                Provider.of<SettingsProvider>(context, listen: false),
-          ),
+          create: (context) {
+            final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+            final chatHistoryService = ChatHistoryService();
+            
+            // Create service dependencies
+            final modelManager = ModelManager(settingsProvider: settingsProvider);
+            final chatStateManager = ChatStateManager(chatHistoryService: chatHistoryService);
+            final messageStreamingService = MessageStreamingService(
+              ollamaService: settingsProvider.getOllamaService(),
+            );
+            final chatTitleGenerator = ChatTitleGenerator(
+              ollamaService: settingsProvider.getOllamaService(),
+            );
+            final fileProcessingManager = FileProcessingManager();
+            
+            return ChatProvider(
+              chatHistoryService: chatHistoryService,
+              settingsProvider: settingsProvider,
+              modelManager: modelManager,
+              chatStateManager: chatStateManager,
+              messageStreamingService: messageStreamingService,
+              chatTitleGenerator: chatTitleGenerator,
+              fileProcessingManager: fileProcessingManager,
+            );
+          },
         ),
       ],
       // Use a custom widget to handle theme synchronization

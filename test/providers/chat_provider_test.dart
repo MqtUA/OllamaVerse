@@ -6,6 +6,11 @@ import 'package:ollamaverse/providers/chat_provider.dart';
 import 'package:ollamaverse/providers/settings_provider.dart';
 import 'package:ollamaverse/services/chat_history_service.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
+import 'package:ollamaverse/services/model_manager.dart';
+import 'package:ollamaverse/services/chat_state_manager.dart';
+import 'package:ollamaverse/services/message_streaming_service.dart';
+import 'package:ollamaverse/services/chat_title_generator.dart';
+import 'package:ollamaverse/services/file_processing_manager.dart';
 
 import 'package:ollamaverse/models/app_settings.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
@@ -51,10 +56,21 @@ void main() {
     when(mockSettingsProvider.getLastSelectedModel())
         .thenAnswer((_) async => 'llama2');
 
-    // Create the provider with the mocks
+    // Create the provider with the mocks and required services
+    final modelManager = ModelManager(settingsProvider: mockSettingsProvider);
+    final chatStateManager = ChatStateManager(chatHistoryService: mockChatHistoryService);
+    final messageStreamingService = MessageStreamingService(ollamaService: mockOllamaService);
+    final chatTitleGenerator = ChatTitleGenerator(ollamaService: mockOllamaService);
+    final fileProcessingManager = FileProcessingManager();
+    
     chatProvider = ChatProvider(
       chatHistoryService: mockChatHistoryService,
       settingsProvider: mockSettingsProvider,
+      modelManager: modelManager,
+      chatStateManager: chatStateManager,
+      messageStreamingService: messageStreamingService,
+      chatTitleGenerator: chatTitleGenerator,
+      fileProcessingManager: fileProcessingManager,
     );
   });
 
