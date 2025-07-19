@@ -36,6 +36,7 @@ class FileProcessingManager implements IFileProcessingManager {
   // File processing state
   bool _isProcessingFiles = false;
   final Map<String, FileProcessingProgress> _fileProcessingProgress = {};
+  bool _disposed = false;
   
   // Stream controllers for progress updates
   final _progressController = StreamController<Map<String, FileProcessingProgress>>.broadcast();
@@ -147,14 +148,23 @@ class FileProcessingManager implements IFileProcessingManager {
   
   /// Notify progress listeners of updates
   void _notifyProgressListeners() {
-    if (!_progressController.isClosed) {
+    if (!_disposed && !_progressController.isClosed) {
       _progressController.add(Map.from(_fileProcessingProgress));
     }
   }
   
   /// Dispose resources
   void dispose() {
-    _progressController.close();
+    if (_disposed) return;
+    _disposed = true;
+    
+    // Clear processing state
+    clearProcessingState();
+    
+    // Close stream controller
+    if (!_progressController.isClosed) {
+      _progressController.close();
+    }
   }
 }
 

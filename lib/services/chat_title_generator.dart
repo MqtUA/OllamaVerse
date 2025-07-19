@@ -10,6 +10,7 @@ class ChatTitleGenerator {
 
   /// Set of chat IDs currently generating titles
   final Set<String> _chatsGeneratingTitle = <String>{};
+  bool _disposed = false;
 
   /// Timeout duration for title generation
   static const Duration _titleGenerationTimeout = Duration(seconds: 30);
@@ -52,6 +53,11 @@ class ChatTitleGenerator {
     required String aiResponse,
     required String modelName,
   }) async {
+    if (_disposed) {
+      AppLogger.warning('ChatTitleGenerator is disposed, cannot generate title');
+      return '';
+    }
+    
     if (_chatsGeneratingTitle.contains(chatId)) {
       AppLogger.warning(
           'Title generation already in progress for chat $chatId');
@@ -161,5 +167,16 @@ Title:''';
 
     // Final fallback
     return 'New Chat';
+  }
+  
+  /// Dispose resources
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    
+    // Clear all title generation states
+    clearAllTitleGenerationState();
+    
+    AppLogger.info('ChatTitleGenerator disposed');
   }
 }

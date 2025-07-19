@@ -253,21 +253,7 @@ class ModelManager {
     }
   }
 
-  /// Execute model operation with error handling
-  Future<T> _executeModelOperation<T>(
-    Future<T> Function() operation,
-    String operationName,
-  ) async {
-    if (_errorRecoveryService != null) {
-      return await _errorRecoveryService!.executeServiceOperation(
-        _serviceName,
-        operation,
-        operationName: operationName,
-      );
-    } else {
-      return await operation();
-    }
-  }
+
 
   /// Validate model manager state
   bool validateState() {

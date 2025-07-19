@@ -13,6 +13,7 @@ import 'package:ollamaverse/services/chat_title_generator.dart';
 import 'package:ollamaverse/services/file_processing_manager.dart';
 import 'package:ollamaverse/services/thinking_content_processor.dart';
 import 'package:ollamaverse/services/file_content_processor.dart';
+import 'package:ollamaverse/services/error_recovery_service.dart';
 
 import 'package:ollamaverse/models/app_settings.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
@@ -75,6 +76,8 @@ void main() {
       fileContentProcessor: fileContentProcessor,
     );
     
+    final errorRecoveryService = ErrorRecoveryService();
+    
     chatProvider = ChatProvider(
       chatHistoryService: mockChatHistoryService,
       settingsProvider: mockSettingsProvider,
@@ -84,6 +87,7 @@ void main() {
       chatTitleGenerator: chatTitleGenerator,
       fileProcessingManager: fileProcessingManager,
       thinkingContentProcessor: thinkingContentProcessor,
+      errorRecoveryService: errorRecoveryService,
     );
   });
 

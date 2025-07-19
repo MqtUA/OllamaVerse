@@ -432,6 +432,7 @@ void main() {
       );
       
       expect(strategy, isA<StateRecoveryStrategy>());
+      expect(callbackCalled, isFalse); // Use the variable
     });
 
     test('should create title generation strategy', () {

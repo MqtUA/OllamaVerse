@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import '../../lib/services/error_recovery_service.dart';
 import '../../lib/services/recovery_strategies.dart';
 import '../../lib/services/chat_state_manager.dart';
 import '../../lib/services/model_manager.dart';
-import '../../lib/services/message_streaming_service.dart';
+
 import '../../lib/utils/error_handler.dart';
 import '../../lib/services/ollama_service.dart';
 
@@ -75,11 +76,11 @@ void main() {
     late ErrorRecoveryService errorRecoveryService;
     late ChatStateManager chatStateManager;
     late ModelManager modelManager;
-    late MockOllamaService ollamaService;
+    // late MockOllamaService ollamaService; // Unused variable removed
 
     setUp(() {
       errorRecoveryService = ErrorRecoveryService();
-      ollamaService = MockOllamaService();
+      // ollamaService = MockOllamaService(); // Unused variable removed
       
       chatStateManager = ChatStateManager(
         chatHistoryService: MockChatHistoryService(),
@@ -123,7 +124,7 @@ void main() {
       });
 
       test('should handle ModelManager errors with recovery', () async {
-        final failingOllamaService = MockOllamaService(shouldFailModels: true);
+        // final failingOllamaService = MockOllamaService(shouldFailModels: true); // Unused variable removed
         final failingModelManager = ModelManager(
           settingsProvider: MockSettingsProvider(),
           errorRecoveryService: errorRecoveryService,

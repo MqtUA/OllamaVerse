@@ -5,6 +5,7 @@ import 'package:ollamaverse/services/ollama_service.dart';
 import 'package:ollamaverse/services/model_manager.dart';
 import 'package:ollamaverse/providers/settings_provider.dart';
 import 'package:ollamaverse/models/app_settings.dart';
+import 'package:ollamaverse/models/ollama_response.dart';
 
 // Simple mock implementation without mockito
 class MockOllamaService implements OllamaService {
@@ -20,6 +21,22 @@ class MockOllamaService implements OllamaService {
       {String? model,
       List<dynamic>? processedFiles,
       List<int>? context}) async {
+    return _generateResponse(prompt, model);
+  }
+
+  @override
+  Future<OllamaResponse> generateResponseWithContext(String prompt,
+      {String? model,
+      List<dynamic>? processedFiles,
+      List<int>? context,
+      List<dynamic>? conversationHistory,
+      int? contextLength,
+      bool Function()? isCancelled}) async {
+    final response = await _generateResponse(prompt, model);
+    return OllamaResponse(response: response, context: context);
+  }
+
+  Future<String> _generateResponse(String prompt, String? model) async {
     generateResponseCallCount++;
     lastPrompt = prompt;
     lastModel = model;

@@ -18,6 +18,33 @@ import '../widgets/live_thinking_bubble.dart';
 import '../theme/dracula_theme.dart';
 import '../theme/material_light_theme.dart';
 
+/// Helper widget to handle nullable ChatProvider
+class SafeChatConsumer extends StatelessWidget {
+  final Widget Function(BuildContext context, ChatProvider chatProvider, Widget? child) builder;
+  final Widget? child;
+  final Widget? loadingWidget;
+
+  const SafeChatConsumer({
+    super.key,
+    required this.builder,
+    this.child,
+    this.loadingWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatProvider?>(
+      builder: (context, chatProvider, child) {
+        if (chatProvider == null) {
+          return loadingWidget ?? const Center(child: CircularProgressIndicator());
+        }
+        return builder(context, chatProvider, child);
+      },
+      child: child,
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -46,7 +73,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Add a listener to the chat provider to handle autoscrolling during message generation
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _chatProvider = Provider.of<ChatProvider>(context, listen: false);
+        _chatProvider = Provider.of<ChatProvider?>(context, listen: false);
         _chatProvider?.addListener(_handleChatProviderChanges);
       }
     });
@@ -203,11 +230,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Use cached provider reference or get fresh one if needed
     final chatProvider =
-        _chatProvider ?? Provider.of<ChatProvider>(context, listen: false);
+        _chatProvider ?? Provider.of<ChatProvider?>(context, listen: false);
 
     // Use the new method that handles chat creation if needed
     chatProvider
-        .sendMessageWithOptionalChatCreation(
+        ?.sendMessageWithOptionalChatCreation(
       message,
       attachedFiles: _attachedFiles,
     )
@@ -264,10 +291,10 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {
               final newTitle = controller.text.trim();
               if (newTitle.isNotEmpty) {
-                Provider.of<ChatProvider>(
+                Provider.of<ChatProvider?>(
                   context,
                   listen: false,
-                ).updateChatTitle(chatId, newTitle);
+                )?.updateChatTitle(chatId, newTitle);
               }
               Navigator.pop(context);
             },
@@ -296,10 +323,10 @@ class _ChatScreenState extends State<ChatScreen> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                Provider.of<ChatProvider>(
+                Provider.of<ChatProvider?>(
                   context,
                   listen: false,
-                ).deleteChat(chatId);
+                )?.deleteChat(chatId);
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete'),
@@ -325,7 +352,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<ChatProvider>(
+        title: SafeChatConsumer(
           builder: (context, chatProvider, child) {
             final activeChat = chatProvider.activeChat;
             return Row(
@@ -360,7 +387,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         actions: [
           // Chat options menu (rename, delete)
-          Consumer<ChatProvider>(
+          SafeChatConsumer(
             builder: (context, chatProvider, child) {
               final activeChat = chatProvider.activeChat;
               if (activeChat != null) {
@@ -457,7 +484,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Column(
             children: [
               // Error message display
-              Consumer<ChatProvider>(
+              SafeChatConsumer(
                 builder: (context, chatProvider, child) {
                   if (chatProvider.error?.isNotEmpty ?? false) {
                     return Container(
@@ -479,7 +506,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
               // Chat messages
               Expanded(
-                child: Consumer<ChatProvider>(
+                child: SafeChatConsumer(
                   builder: (context, chatProvider, child) {
                     final activeChat = chatProvider.activeChat;
 
@@ -714,7 +741,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               // Add padding for system UI (Android navigation bar)
               padding: EdgeInsets.only(bottom: bottomPadding),
-              child: Consumer<ChatProvider>(
+              child: SafeChatConsumer(
                 builder: (context, chatProvider, child) {
                   return Container(
                     padding: const EdgeInsets.all(8.0),
@@ -809,7 +836,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildFileProcessingIndicator() {
-    return Consumer<ChatProvider>(
+    return SafeChatConsumer(
       builder: (context, chatProvider, child) {
         if (!chatProvider.isProcessingFiles ||
             chatProvider.fileProcessingProgress.isEmpty) {
@@ -932,7 +959,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             // Display thinking bubble for AI messages with thinking content
             if (!isUser && message.hasThinking)
-              Consumer<ChatProvider>(
+              SafeChatConsumer(
                 builder: (context, chatProvider, child) {
                   return ThinkingBubble(
                     message: message,

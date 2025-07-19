@@ -129,10 +129,10 @@ class _UnifiedThinkingBubbleState extends State<UnifiedThinkingBubble>
 
       final settings =
           Provider.of<SettingsProvider>(context, listen: false).settings;
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
 
       // Initialize expansion state based on settings
-      if (!chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
+      if (chatProvider != null && !chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
         if (settings.thinkingBubbleDefaultExpanded) {
           chatProvider.toggleThinkingBubble(widget.bubbleId!);
         }
@@ -140,7 +140,7 @@ class _UnifiedThinkingBubbleState extends State<UnifiedThinkingBubble>
 
       // Set animation state
       final isExpanded =
-          chatProvider.isThinkingBubbleExpanded(widget.bubbleId!);
+          chatProvider?.isThinkingBubbleExpanded(widget.bubbleId!) ?? false;
       if (isExpanded) {
         _expandController.forward();
       }
@@ -175,15 +175,17 @@ class _UnifiedThinkingBubbleState extends State<UnifiedThinkingBubble>
 
   void _toggleExpansion() {
     if (widget.isLiveMode) {
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-      chatProvider.toggleThinkingBubble(widget.bubbleId!);
+      final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
+      if (chatProvider != null) {
+        chatProvider.toggleThinkingBubble(widget.bubbleId!);
 
-      final isExpanded =
-          chatProvider.isThinkingBubbleExpanded(widget.bubbleId!);
-      if (isExpanded) {
-        _expandController.forward();
-      } else {
-        _expandController.reverse();
+        final isExpanded =
+            chatProvider.isThinkingBubbleExpanded(widget.bubbleId!);
+        if (isExpanded) {
+          _expandController.forward();
+        } else {
+          _expandController.reverse();
+        }
       }
     } else {
       widget.onToggleExpanded?.call();

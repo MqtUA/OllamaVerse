@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import '../services/ollama_service.dart';
 import '../utils/logger.dart';
 import 'cancellation_token.dart';

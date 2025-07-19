@@ -13,6 +13,8 @@ class ThinkingContentProcessor {
     {'open': '<reflection>', 'close': '</reflection>'},
   ];
   
+  bool _disposed = false;
+  
   ThinkingContentProcessor();
 
   /// Process streaming response and extract thinking content
@@ -21,7 +23,7 @@ class ThinkingContentProcessor {
     required String fullResponse,
     required ThinkingState currentState,
   }) {
-    if (fullResponse.isEmpty) {
+    if (_disposed || fullResponse.isEmpty) {
       return {
         'filteredResponse': fullResponse,
         'thinkingState': currentState,
@@ -92,10 +94,13 @@ class ThinkingContentProcessor {
         isInsideThinkingBlock: isInsideThinkingBlock,
       );
 
-      AppLogger.info(
-        'Processed thinking content: hasActive=$hasActiveThinkingBubble, '
-        'isInside=$isInsideThinkingBlock, contentLength=${extractedThinkingContent.length}',
-      );
+      // Only log when there's actual thinking content or state changes
+      if (hasActiveThinkingBubble || isInsideThinkingBlock || extractedThinkingContent.isNotEmpty) {
+        AppLogger.info(
+          'Processed thinking content: hasActive=$hasActiveThinkingBubble, '
+          'isInside=$isInsideThinkingBlock, contentLength=${extractedThinkingContent.length}',
+        );
+      }
 
       return {
         'filteredResponse': filteredResponse,
@@ -274,7 +279,9 @@ class ThinkingContentProcessor {
   
   /// Dispose method for lifecycle management
   void dispose() {
-    // No resources to dispose, but added for consistency with other services
+    if (_disposed) return;
+    _disposed = true;
+    
     AppLogger.info('ThinkingContentProcessor disposed');
   }
 }

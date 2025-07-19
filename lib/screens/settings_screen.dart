@@ -10,6 +10,33 @@ import '../services/file_content_cache.dart';
 import '../services/performance_monitor.dart';
 import '../widgets/simple_theme_switch.dart';
 
+/// Helper widget to handle nullable ChatProvider
+class SafeChatConsumer extends StatelessWidget {
+  final Widget Function(BuildContext context, ChatProvider chatProvider, Widget? child) builder;
+  final Widget? child;
+  final Widget? loadingWidget;
+
+  const SafeChatConsumer({
+    super.key,
+    required this.builder,
+    this.child,
+    this.loadingWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatProvider?>(
+      builder: (context, chatProvider, child) {
+        if (chatProvider == null) {
+          return loadingWidget ?? const Center(child: CircularProgressIndicator());
+        }
+        return builder(context, chatProvider, child);
+      },
+      child: child,
+    );
+  }
+}
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -146,8 +173,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
 
       if (isConnected) {
-        final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-        await chatProvider.refreshModels();
+        final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
+        await chatProvider?.refreshModels();
 
         if (!mounted) return;
 
@@ -430,7 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       // Button to apply system prompt to all existing chats
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Consumer<ChatProvider>(
+                        child: SafeChatConsumer(
                           builder: (context, chatProvider, child) {
                             return OutlinedButton.icon(
                               onPressed: () async {

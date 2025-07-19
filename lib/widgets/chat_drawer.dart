@@ -4,6 +4,33 @@ import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import 'markdown_title.dart';
 
+/// Helper widget to handle nullable ChatProvider
+class SafeChatConsumer extends StatelessWidget {
+  final Widget Function(BuildContext context, ChatProvider chatProvider, Widget? child) builder;
+  final Widget? child;
+  final Widget? loadingWidget;
+
+  const SafeChatConsumer({
+    super.key,
+    required this.builder,
+    this.child,
+    this.loadingWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatProvider?>(
+      builder: (context, chatProvider, child) {
+        if (chatProvider == null) {
+          return loadingWidget ?? const Center(child: CircularProgressIndicator());
+        }
+        return builder(context, chatProvider, child);
+      },
+      child: child,
+    );
+  }
+}
+
 class ChatDrawer extends StatelessWidget {
   const ChatDrawer({super.key});
 
@@ -47,7 +74,7 @@ class ChatDrawer extends StatelessWidget {
                 ),
                 const Spacer(),
                 const SizedBox(height: 8),
-                Consumer<ChatProvider>(
+                SafeChatConsumer(
                   builder: (context, chatProvider, child) {
                     return SizedBox(
                       width: double.infinity,
@@ -83,7 +110,7 @@ class ChatDrawer extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Consumer<ChatProvider>(
+            child: SafeChatConsumer(
               builder: (context, chatProvider, child) {
                 if (chatProvider.isLoading) {
                   return const Center(child: CircularProgressIndicator());
@@ -202,11 +229,11 @@ class ChatDrawer extends StatelessWidget {
                   leading: const Icon(Icons.refresh),
                   title: const Text('Refresh Models'),
                   onTap: () {
-                    final chatProvider = Provider.of<ChatProvider>(
+                    final chatProvider = Provider.of<ChatProvider?>(
                       context,
                       listen: false,
                     );
-                    chatProvider.refreshModels();
+                    chatProvider?.refreshModels();
                     Navigator.pop(context); // Close drawer
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Refreshing models...')),
@@ -303,10 +330,10 @@ class ChatDrawer extends StatelessWidget {
             onPressed: () {
               final newTitle = controller.text.trim();
               if (newTitle.isNotEmpty) {
-                Provider.of<ChatProvider>(
+                Provider.of<ChatProvider?>(
                   context,
                   listen: false,
-                ).updateChatTitle(chatId, newTitle);
+                )?.updateChatTitle(chatId, newTitle);
               }
               Navigator.pop(context);
             },

@@ -37,6 +37,9 @@ class ChatProvider with ChangeNotifier {
   StreamSubscription? _chatStateSubscription;
   StreamSubscription? _errorStateSubscription;
   bool _disposed = false;
+  
+  // Synchronization for state updates
+  bool _isUpdatingState = false;
 
   ChatProvider({
     required ChatHistoryService chatHistoryService,
@@ -95,17 +98,32 @@ class ChatProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    
+    // Cancel all subscriptions first to prevent further state updates
     _chatStateSubscription?.cancel();
+    _chatStateSubscription = null;
     _errorStateSubscription?.cancel();
+    _errorStateSubscription = null;
+    
+    // Dispose services in reverse dependency order
     _messageStreamingService.dispose();
     _chatStateManager.dispose();
     _errorRecoveryService.dispose();
+    
     super.dispose();
   }
 
   void _safeNotifyListeners() {
-    if (!_disposed) notifyListeners();
+    if (_disposed || _isUpdatingState) return;
+    
+    _isUpdatingState = true;
+    try {
+      notifyListeners();
+    } finally {
+      _isUpdatingState = false;
+    }
   }
 
   /// Setup error recovery strategies for all services

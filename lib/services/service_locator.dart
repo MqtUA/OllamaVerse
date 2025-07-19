@@ -7,6 +7,7 @@ import '../services/chat_title_generator.dart';
 import '../services/file_processing_manager.dart';
 import '../services/thinking_content_processor.dart';
 import '../services/file_content_processor.dart';
+import '../services/error_recovery_service.dart';
 import '../utils/logger.dart';
 
 /// Service locator for managing dependency injection and service lifecycle
@@ -27,6 +28,7 @@ class ServiceLocator {
   FileProcessingManager? _fileProcessingManager;
   ThinkingContentProcessor? _thinkingContentProcessor;
   FileContentProcessor? _fileContentProcessor;
+  ErrorRecoveryService? _errorRecoveryService;
 
   bool _isInitialized = false;
   bool _isDisposed = false;
@@ -75,15 +77,19 @@ class ServiceLocator {
         fileContentProcessor: _fileContentProcessor!
       );
       
+      _errorRecoveryService = ErrorRecoveryService();
+      
       _modelManager = ModelManager(
-        settingsProvider: settingsProvider
+        settingsProvider: settingsProvider,
+        errorRecoveryService: _errorRecoveryService,
       );
       
       _thinkingContentProcessor = ThinkingContentProcessor();
       
       _messageStreamingService = MessageStreamingService(
         ollamaService: settingsProvider.getOllamaService(),
-        thinkingContentProcessor: _thinkingContentProcessor!
+        thinkingContentProcessor: _thinkingContentProcessor!,
+        errorRecoveryService: _errorRecoveryService,
       );
       
       _chatTitleGenerator = ChatTitleGenerator(
@@ -92,7 +98,8 @@ class ServiceLocator {
       );
       
       _chatStateManager = ChatStateManager(
-        chatHistoryService: _chatHistoryService!
+        chatHistoryService: _chatHistoryService!,
+        errorRecoveryService: _errorRecoveryService,
       );
 
       // Initialize services that require async initialization
@@ -136,6 +143,7 @@ class ServiceLocator {
       _fileProcessingManager?.dispose();
       _messageStreamingService?.dispose();
       _chatStateManager?.dispose();
+      _errorRecoveryService?.dispose();
       await _chatHistoryService?.dispose();
 
       // Clear all references
@@ -147,6 +155,7 @@ class ServiceLocator {
       _modelManager = null;
       _fileContentProcessor = null;
       _chatHistoryService = null;
+      _errorRecoveryService = null;
       
       AppLogger.info('Partial initialization cleanup completed');
     } catch (e, stackTrace) {
@@ -202,6 +211,12 @@ class ServiceLocator {
     return _fileContentProcessor!;
   }
 
+  /// Get ErrorRecoveryService instance
+  ErrorRecoveryService get errorRecoveryService {
+    _ensureInitialized();
+    return _errorRecoveryService!;
+  }
+
   /// Check if services are initialized
   bool get isInitialized => _isInitialized;
 
@@ -217,6 +232,7 @@ class ServiceLocator {
     if (T == FileProcessingManager) return _fileProcessingManager != null;
     if (T == ThinkingContentProcessor) return _thinkingContentProcessor != null;
     if (T == FileContentProcessor) return _fileContentProcessor != null;
+    if (T == ErrorRecoveryService) return _errorRecoveryService != null;
     
     return false;
   }
@@ -235,6 +251,7 @@ class ServiceLocator {
         'FileProcessingManager': _fileProcessingManager != null,
         'ThinkingContentProcessor': _thinkingContentProcessor != null,
         'FileContentProcessor': _fileContentProcessor != null,
+        'ErrorRecoveryService': _errorRecoveryService != null,
       }
     };
   }
@@ -254,6 +271,7 @@ class ServiceLocator {
       _fileProcessingManager?.dispose();
       _messageStreamingService?.dispose();
       _chatStateManager?.dispose();
+      _errorRecoveryService?.dispose();
       await _chatHistoryService?.dispose();
 
       // Clear references
@@ -265,6 +283,7 @@ class ServiceLocator {
       _modelManager = null;
       _fileContentProcessor = null;
       _chatHistoryService = null;
+      _errorRecoveryService = null;
 
       _isInitialized = false;
       _isDisposed = true;

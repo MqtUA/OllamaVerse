@@ -20,6 +20,7 @@ class ChatHistoryService {
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
+  bool _disposed = false;
 
   DateTime? _lastCleanup;
   Timer? _cleanupTimer;
@@ -55,7 +56,7 @@ class ChatHistoryService {
       if (!await chatsDir.exists()) {
         await chatsDir.create(recursive: true);
         _chats = [];
-        _chatController.add(_chats);
+        _notifyListeners();
         return;
       }
 
@@ -79,7 +80,7 @@ class ChatHistoryService {
 
       // Limit the number of chats
       _chats = loadedChats.take(_maxChats).toList();
-      _chatController.add(_chats);
+      _notifyListeners();
     } catch (e) {
       AppLogger.error('Error loading chats', e);
       rethrow;
@@ -125,7 +126,7 @@ class ChatHistoryService {
       _chats.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
 
       // Notify listeners
-      _chatController.add(_chats);
+      _notifyListeners();
     } catch (e) {
       AppLogger.error('Error saving chat', e);
       rethrow;
@@ -160,7 +161,7 @@ class ChatHistoryService {
 
       // Update in-memory list
       _chats.removeWhere((c) => c.id == chatId);
-      _chatController.add(_chats);
+      _notifyListeners();
     } catch (e) {
       AppLogger.error('Error deleting chat', e);
       rethrow;
@@ -213,8 +214,22 @@ class ChatHistoryService {
     return true;
   }
 
+  /// Notify listeners of chat list changes
+  void _notifyListeners() {
+    if (!_disposed && !_chatController.isClosed) {
+      _chatController.add(_chats);
+    }
+  }
+
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    
     _cleanupTimer?.cancel();
-    await _chatController.close();
+    _cleanupTimer = null;
+    
+    if (!_chatController.isClosed) {
+      await _chatController.close();
+    }
   }
 }

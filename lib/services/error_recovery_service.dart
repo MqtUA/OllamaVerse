@@ -16,6 +16,7 @@ class ErrorRecoveryService {
   
   // Stream controller for error state changes
   final _errorStateController = StreamController<Map<String, ErrorState>>.broadcast();
+  bool _disposed = false;
   
   // Configuration
   static const int _maxErrorsPerService = 5;
@@ -78,7 +79,7 @@ class ErrorRecoveryService {
       
       // Log the error
       ErrorHandler.logError(
-        '${serviceName}${operation != null ? '.$operation' : ''}',
+        '$serviceName${operation != null ? '.$operation' : ''}',
         error,
         context: context,
       );
@@ -132,13 +133,13 @@ class ErrorRecoveryService {
       final result = await ErrorHandler.executeWithTimeout(
         () => ErrorHandler.executeWithRetry(
           operation,
-          operationName: '${serviceName}${operationName != null ? '.$operationName' : ''}',
+          operationName: '$serviceName${operationName != null ? '.$operationName' : ''}',
           maxRetries: maxRetries,
           shouldRetry: ErrorHandler.isRetryableError,
           cancellationToken: cancellationToken,
         ),
         timeout: timeout,
-        operationName: '${serviceName}${operationName != null ? '.$operationName' : ''}',
+        operationName: '$serviceName${operationName != null ? '.$operationName' : ''}',
         cancellationToken: cancellationToken,
       );
       
@@ -245,7 +246,7 @@ class ErrorRecoveryService {
 
   /// Notify listeners of error state changes
   void _notifyErrorStateChange() {
-    if (!_errorStateController.isClosed) {
+    if (!_disposed && !_errorStateController.isClosed) {
       _errorStateController.add(Map.from(_serviceErrors));
     }
   }
@@ -275,7 +276,6 @@ class ErrorRecoveryService {
       return SystemHealthStatus.healthy;
     }
     
-    int healthyCount = 0;
     int degradedCount = 0;
     int unavailableCount = 0;
     
@@ -284,7 +284,7 @@ class ErrorRecoveryService {
       switch (health) {
         case ServiceHealthStatus.healthy:
         case ServiceHealthStatus.recovering:
-          healthyCount++;
+          // Healthy services don't affect system health negatively
           break;
         case ServiceHealthStatus.degraded:
           degradedCount++;
@@ -308,11 +308,20 @@ class ErrorRecoveryService {
 
   /// Dispose resources
   void dispose() {
-    _errorStateController.close();
+    if (_disposed) return;
+    _disposed = true;
+    
+    // Close stream controller first
+    if (!_errorStateController.isClosed) {
+      _errorStateController.close();
+    }
+    
+    // Clear all state
     _serviceErrors.clear();
     _errorCounts.clear();
     _lastErrorTimes.clear();
     _recoveryStrategies.clear();
+    
     AppLogger.info('ErrorRecoveryService disposed');
   }
 }

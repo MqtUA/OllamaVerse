@@ -7,7 +7,7 @@ import '../services/ollama_service.dart';
 import '../services/thinking_content_processor.dart';
 import '../services/error_recovery_service.dart';
 import '../utils/cancellation_token.dart';
-import '../utils/error_handler.dart';
+
 import '../utils/logger.dart';
 
 /// Service responsible for message generation coordination and streaming response handling
@@ -23,6 +23,7 @@ class MessageStreamingService {
   // Stream management
   StreamSubscription? _streamSubscription;
   CancellationToken _cancellationToken = CancellationToken();
+  bool _disposed = false;
   
   // Callbacks for state updates
   void Function(StreamingState)? _onStreamingStateChanged;
@@ -279,6 +280,8 @@ class MessageStreamingService {
 
   /// Cancel current streaming operation
   void cancelStreaming() {
+    if (_disposed) return;
+    
     AppLogger.info('Cancelling streaming operation');
     
     _cancellationToken.cancel();
@@ -291,6 +294,8 @@ class MessageStreamingService {
 
   /// Reset streaming and thinking states
   void _resetStreamingStates() {
+    if (_disposed) return;
+    
     _streamingState = StreamingState.initial();
     _thinkingState = ThinkingState.initial();
     _cancellationToken = CancellationToken();
@@ -301,12 +306,16 @@ class MessageStreamingService {
 
   /// Notify streaming state change
   void _notifyStreamingStateChanged() {
-    _onStreamingStateChanged?.call(_streamingState);
+    if (!_disposed) {
+      _onStreamingStateChanged?.call(_streamingState);
+    }
   }
 
   /// Notify thinking state change
   void _notifyThinkingStateChanged() {
-    _onThinkingStateChanged?.call(_thinkingState);
+    if (!_disposed) {
+      _onThinkingStateChanged?.call(_thinkingState);
+    }
   }
 
   /// Toggle thinking bubble expansion
@@ -360,22 +369,7 @@ class MessageStreamingService {
     }
   }
 
-  /// Execute streaming operation with error handling
-  Future<T> _executeStreamingOperation<T>(
-    Future<T> Function() operation,
-    String operationName,
-  ) async {
-    if (_errorRecoveryService != null) {
-      return await _errorRecoveryService!.executeServiceOperation(
-        _serviceName,
-        operation,
-        operationName: operationName,
-        timeout: const Duration(minutes: 5), // Longer timeout for streaming
-      );
-    } else {
-      return await operation();
-    }
-  }
+
 
   /// Validate streaming state consistency
   bool validateStreamingState() {
@@ -417,12 +411,20 @@ class MessageStreamingService {
 
   /// Dispose resources
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    
     AppLogger.info('Disposing MessageStreamingService');
     
-    _streamSubscription?.cancel();
-    _streamSubscription = null;
-    _cancellationToken.cancel();
+    // Cancel streaming first
+    cancelStreaming();
     
+    // Ensure cancellation token is cancelled
+    if (!_cancellationToken.isCancelled) {
+      _cancellationToken.cancel();
+    }
+    
+    // Clear callbacks to prevent further notifications
     _onStreamingStateChanged = null;
     _onThinkingStateChanged = null;
   }

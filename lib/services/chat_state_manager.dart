@@ -3,7 +3,7 @@ import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/chat_history_service.dart';
 import '../services/error_recovery_service.dart';
-import '../utils/error_handler.dart';
+
 import '../utils/logger.dart';
 
 /// Manages chat list and active chat state
@@ -18,6 +18,9 @@ class ChatStateManager {
   
   StreamSubscription? _chatStreamSubscription;
   bool _disposed = false;
+  
+  // Synchronization for state updates
+  bool _isUpdatingState = false;
   
   // Stream controller for state changes
   final _stateController = StreamController<ChatStateManagerState>.broadcast();
@@ -218,34 +221,28 @@ class ChatStateManager {
 
   /// Set the active chat by ID
   void setActiveChat(String chatId) {
-    try {
-      _validateNotDisposed();
-      
-      final chat = _chats.firstWhere(
-        (c) => c.id == chatId,
-        orElse: () => throw ArgumentError('Chat with ID $chatId not found'),
-      );
-      
-      final previousActiveChat = _activeChat;
-      _activeChat = chat;
+    _validateNotDisposed();
+    
+    final chat = _chats.firstWhere(
+      (c) => c.id == chatId,
+      orElse: () => throw ArgumentError('Chat with ID $chatId not found'),
+    );
+    
+    final previousActiveChat = _activeChat;
+    _activeChat = chat;
 
-      // Check if we're switching to a different chat with existing messages
-      // and should trigger auto-scroll to bottom
-      if ((previousActiveChat?.id != chatId || previousActiveChat == null) &&
-          chat.messages.isNotEmpty) {
-        _shouldScrollToBottomOnChatSwitch = true;
-        AppLogger.info('Triggering auto-scroll for chat switch to: ${chat.title}');
-      } else {
-        _shouldScrollToBottomOnChatSwitch = false;
-      }
-
-      _notifyStateChange();
-      AppLogger.info('Set active chat to: ${chat.title}');
-    } catch (e) {
-      // Handle error but don't rethrow for UI operations
-      _handleOperationError(e, 'setActiveChat');
-      AppLogger.error('Error setting active chat', e);
+    // Check if we're switching to a different chat with existing messages
+    // and should trigger auto-scroll to bottom
+    if ((previousActiveChat?.id != chatId || previousActiveChat == null) &&
+        chat.messages.isNotEmpty) {
+      _shouldScrollToBottomOnChatSwitch = true;
+      AppLogger.info('Triggering auto-scroll for chat switch to: ${chat.title}');
+    } else {
+      _shouldScrollToBottomOnChatSwitch = false;
     }
+
+    _notifyStateChange();
+    AppLogger.info('Set active chat to: ${chat.title}');
   }
 
   /// Reset the scroll to bottom flag after scrolling is complete
@@ -419,8 +416,15 @@ class ChatStateManager {
 
   /// Notify listeners of state changes
   void _notifyStateChange() {
-    if (!_disposed) {
-      _stateController.add(currentState);
+    if (_disposed || _isUpdatingState) return;
+    
+    _isUpdatingState = true;
+    try {
+      if (!_stateController.isClosed) {
+        _stateController.add(currentState);
+      }
+    } finally {
+      _isUpdatingState = false;
     }
   }
 
@@ -451,23 +455,6 @@ class ChatStateManager {
       );
     } else {
       return await operation();
-    }
-  }
-
-  /// Handle operation error
-  Future<T?> _handleOperationError<T>(
-    Object error,
-    String operationName,
-  ) async {
-    if (_errorRecoveryService != null) {
-      return await _errorRecoveryService!.handleServiceError<T>(
-        _serviceName,
-        error,
-        operation: operationName,
-      );
-    } else {
-      AppLogger.error('Error in $operationName', error);
-      return null;
     }
   }
 
@@ -515,9 +502,18 @@ class ChatStateManager {
 
   /// Dispose of resources
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    
+    // Cancel subscription first to prevent further state updates
     _chatStreamSubscription?.cancel();
-    _stateController.close();
+    _chatStreamSubscription = null;
+    
+    // Close stream controller
+    if (!_stateController.isClosed) {
+      _stateController.close();
+    }
+    
     AppLogger.info('ChatStateManager disposed');
   }
 }

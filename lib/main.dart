@@ -61,8 +61,16 @@ Future<void> _initializeServicesAsync(SettingsProvider settingsProvider, BuildCo
     
     // Trigger a rebuild of the ChatProvider after services are initialized
     if (context.mounted) {
-      // The ChangeNotifierProxyProvider will automatically update when services are ready
-      // No need to manually trigger notifications
+      // Force a rebuild by notifying the SettingsProvider
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          try {
+            Provider.of<SettingsProvider>(context, listen: false).notifyListeners();
+          } catch (e) {
+            AppLogger.error('Error triggering provider rebuild', e);
+          }
+        }
+      });
     }
     
     AppLogger.info('Async service initialization completed');
@@ -151,6 +159,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 chatTitleGenerator: ServiceLocator.instance.chatTitleGenerator,
                 fileProcessingManager: ServiceLocator.instance.fileProcessingManager,
                 thinkingContentProcessor: ServiceLocator.instance.thinkingContentProcessor,
+                errorRecoveryService: ServiceLocator.instance.errorRecoveryService,
               );
             } catch (e) {
               AppLogger.error('Failed to create ChatProvider', e);

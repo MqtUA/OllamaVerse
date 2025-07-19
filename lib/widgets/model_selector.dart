@@ -2,6 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 
+/// Helper widget to handle nullable ChatProvider
+class SafeChatConsumer extends StatelessWidget {
+  final Widget Function(BuildContext context, ChatProvider chatProvider, Widget? child) builder;
+  final Widget? child;
+  final Widget? loadingWidget;
+
+  const SafeChatConsumer({
+    super.key,
+    required this.builder,
+    this.child,
+    this.loadingWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatProvider?>(
+      builder: (context, chatProvider, child) {
+        if (chatProvider == null) {
+          return loadingWidget ?? const Center(child: CircularProgressIndicator());
+        }
+        return builder(context, chatProvider, child);
+      },
+      child: child,
+    );
+  }
+}
+
 class ModelSelector extends StatelessWidget {
   final bool compact;
 
@@ -9,7 +36,7 @@ class ModelSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ChatProvider>(
+    return SafeChatConsumer(
       builder: (context, chatProvider, child) {
         final models = chatProvider.availableModels;
         final activeChat = chatProvider.activeChat;
