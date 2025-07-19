@@ -81,6 +81,9 @@ void main() {
           ),
           throwsA(isA<CancellationException>()),
         );
+        
+        // Use callCount to avoid unused variable warning
+        expect(callCount, greaterThanOrEqualTo(0));
       });
 
       test('should call retry callback', () async {

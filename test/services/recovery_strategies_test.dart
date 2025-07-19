@@ -6,22 +6,25 @@ import '../../lib/services/ollama_service.dart';
 import '../../lib/services/model_manager.dart';
 
 // Mock classes for testing
-class MockOllamaService extends OllamaService {
+class MockOllamaService implements OllamaService {
   final bool shouldSucceed;
   int testConnectionCallCount = 0;
 
   MockOllamaService({
     this.shouldSucceed = true,
-  }) : super(
-    client: MockHttpClient(),
-    settings: MockAppSettings(),
-  );
+  });
 
   @override
   Future<bool> testConnection() async {
     testConnectionCallCount++;
     return shouldSucceed;
   }
+
+  @override
+  void dispose() {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class MockModelManager extends ModelManager {
@@ -52,13 +55,6 @@ class MockModelManager extends ModelManager {
 }
 
 // Mock implementations for dependencies
-class MockHttpClient {
-  // Mock implementation
-}
-
-class MockAppSettings {
-  // Mock implementation
-}
 
 class MockSettingsProvider implements ISettingsProvider {
   @override

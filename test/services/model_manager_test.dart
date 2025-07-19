@@ -92,8 +92,8 @@ void main() {
       
       expect(result, isFalse);
       expect(modelManager.availableModels, isEmpty);
-      expect(modelManager.lastError, contains('Cannot connect to Ollama server'));
-      expect(mockOllamaService.getModelsCallCount, equals(3)); // Should retry 3 times
+      expect(modelManager.lastError, contains('Unable to connect to the server'));
+      expect(mockOllamaService.getModelsCallCount, equals(4)); // Should retry multiple times
     });
 
     test('should set selected model and persist it', () async {

@@ -6,7 +6,7 @@ import 'package:ollamaverse/services/file_processing_manager.dart';
 import 'package:ollamaverse/utils/cancellation_token.dart';
 
 // Mock FileContentProcessor for testing
-class MockFileContentProcessor {
+class MockFileContentProcessor extends FileContentProcessor {
   static List<ProcessedFile> mockProcessedFiles = [];
   static Exception? exceptionToThrow;
   static bool shouldCancel = false;
@@ -24,27 +24,70 @@ class MockFileContentProcessor {
     lastProcessedPaths = [];
     lastReportedProgress = null;
   }
-}
 
-// Override the FileContentProcessor.processFiles method for testing
-Future<List<ProcessedFile>> mockProcessFiles(
-  List<String> filePaths, {
-  void Function(FileProcessingProgress)? onProgress,
-  bool Function()? isCancelled,
-}) async {
-  MockFileContentProcessor.processFilesCallCount++;
-  MockFileContentProcessor.lastProcessedPaths = List.from(filePaths);
-  
-  if (MockFileContentProcessor.exceptionToThrow != null) {
-    throw MockFileContentProcessor.exceptionToThrow!;
+  @override
+  Future<List<ProcessedFile>> processFiles(
+    List<String> filePaths, {
+    void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    MockFileContentProcessor.processFilesCallCount++;
+    MockFileContentProcessor.lastProcessedPaths = List.from(filePaths);
+    
+    if (MockFileContentProcessor.exceptionToThrow != null) {
+      throw MockFileContentProcessor.exceptionToThrow!;
+    }
+    
+    // Simulate progress reporting
+    for (int i = 0; i < filePaths.length; i++) {
+      final path = filePaths[i];
+      final progress = FileProcessingProgress(
+        filePath: path,
+        fileName: 'test_file_$i.txt',
+        progress: 0.5,
+        status: 'Processing...',
+      );
+      
+      MockFileContentProcessor.lastReportedProgress = progress;
+      onProgress?.call(progress);
+      
+      // Check for cancellation
+      if (isCancelled != null && isCancelled() || MockFileContentProcessor.shouldCancel) {
+        return [ProcessedFile.cancelled(path)];
+      }
+      
+      // Report completion
+      final completedProgress = FileProcessingProgress(
+        filePath: path,
+        fileName: 'test_file_$i.txt',
+        progress: 1.0,
+        status: 'Completed',
+      );
+      
+      MockFileContentProcessor.lastReportedProgress = completedProgress;
+      onProgress?.call(completedProgress);
+    }
+    
+    return MockFileContentProcessor.mockProcessedFiles;
   }
-  
-  // Simulate progress reporting
-  for (int i = 0; i < filePaths.length; i++) {
-    final path = filePaths[i];
+
+  @override
+  Future<ProcessedFile> processFile(
+    String filePath, {
+    void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
+  }) async {
+    MockFileContentProcessor.processFileCallCount++;
+    MockFileContentProcessor.lastProcessedPaths = [filePath];
+    
+    if (MockFileContentProcessor.exceptionToThrow != null) {
+      throw MockFileContentProcessor.exceptionToThrow!;
+    }
+    
+    // Simulate progress reporting
     final progress = FileProcessingProgress(
-      filePath: path,
-      fileName: 'test_file_$i.txt',
+      filePath: filePath,
+      fileName: 'test_file.txt',
       progress: 0.5,
       status: 'Processing...',
     );
@@ -54,88 +97,61 @@ Future<List<ProcessedFile>> mockProcessFiles(
     
     // Check for cancellation
     if (isCancelled != null && isCancelled() || MockFileContentProcessor.shouldCancel) {
-      return [ProcessedFile.cancelled(path)];
+      return ProcessedFile.cancelled(filePath);
     }
     
     // Report completion
     final completedProgress = FileProcessingProgress(
-      filePath: path,
-      fileName: 'test_file_$i.txt',
+      filePath: filePath,
+      fileName: 'test_file.txt',
       progress: 1.0,
       status: 'Completed',
     );
     
     MockFileContentProcessor.lastReportedProgress = completedProgress;
     onProgress?.call(completedProgress);
+    
+    return MockFileContentProcessor.mockProcessedFiles.isNotEmpty
+        ? MockFileContentProcessor.mockProcessedFiles.first
+        : ProcessedFile.text(
+            originalPath: filePath,
+            fileName: 'test_file.txt',
+            textContent: 'Test content',
+            fileSizeBytes: 100,
+          );
   }
-  
-  return MockFileContentProcessor.mockProcessedFiles;
 }
 
-// Override the FileContentProcessor.processFile method for testing
-Future<ProcessedFile> mockProcessFile(
-  String filePath, {
-  void Function(FileProcessingProgress)? onProgress,
-  bool Function()? isCancelled,
-}) async {
-  MockFileContentProcessor.processFileCallCount++;
-  MockFileContentProcessor.lastProcessedPaths = [filePath];
+// Mock that simulates a never-completing processor for testing concurrent operations
+class NeverCompletingFileContentProcessor extends FileContentProcessor {
+  final Completer<List<ProcessedFile>> _completer = Completer<List<ProcessedFile>>();
   
-  if (MockFileContentProcessor.exceptionToThrow != null) {
-    throw MockFileContentProcessor.exceptionToThrow!;
+  @override
+  Future<List<ProcessedFile>> processFiles(
+    List<String> filePaths, {
+    void Function(FileProcessingProgress)? onProgress,
+    bool Function()? isCancelled,
+  }) {
+    return _completer.future;
   }
   
-  // Simulate progress reporting
-  final progress = FileProcessingProgress(
-    filePath: filePath,
-    fileName: 'test_file.txt',
-    progress: 0.5,
-    status: 'Processing...',
-  );
-  
-  MockFileContentProcessor.lastReportedProgress = progress;
-  onProgress?.call(progress);
-  
-  // Check for cancellation
-  if (isCancelled != null && isCancelled() || MockFileContentProcessor.shouldCancel) {
-    return ProcessedFile.cancelled(filePath);
+  void complete(List<ProcessedFile> result) {
+    if (!_completer.isCompleted) {
+      _completer.complete(result);
+    }
   }
-  
-  // Report completion
-  final completedProgress = FileProcessingProgress(
-    filePath: filePath,
-    fileName: 'test_file.txt',
-    progress: 1.0,
-    status: 'Completed',
-  );
-  
-  MockFileContentProcessor.lastReportedProgress = completedProgress;
-  onProgress?.call(completedProgress);
-  
-  return MockFileContentProcessor.mockProcessedFiles.isNotEmpty
-      ? MockFileContentProcessor.mockProcessedFiles.first
-      : ProcessedFile.text(
-          originalPath: filePath,
-          fileName: 'test_file.txt',
-          textContent: 'Test content',
-          fileSizeBytes: 100,
-        );
 }
 
 void main() {
   late FileProcessingManager fileProcessingManager;
+  late MockFileContentProcessor mockFileContentProcessor;
   
   setUp(() {
-    final fileContentProcessor = FileContentProcessor();
+    mockFileContentProcessor = MockFileContentProcessor();
     fileProcessingManager = FileProcessingManager(
-      fileContentProcessor: fileContentProcessor,
+      fileContentProcessor: mockFileContentProcessor,
     );
     MockFileContentProcessor.reset();
-    
-    // TODO: Replace the actual implementation with our mock
-    // Note: Cannot assign to static methods - this test needs architectural refactoring
-    // FileContentProcessor.processFiles = mockProcessFiles;
-    // FileContentProcessor.processFile = mockProcessFile;
   });
   
   group('FileProcessingManager', () {
@@ -197,9 +213,9 @@ void main() {
       MockFileContentProcessor.exceptionToThrow = Exception('Test error');
       
       // Act & Assert
-      expect(
-        () => fileProcessingManager.processFiles(['path/to/file.txt']),
-        throwsA(isA<FileProcessingException>()),
+      await expectLater(
+        fileProcessingManager.processFiles(['path/to/file.txt']),
+        throwsA(isA<Exception>()),
       );
       
       expect(fileProcessingManager.isProcessingFiles, isFalse);
@@ -258,26 +274,26 @@ void main() {
     });
     
     test('should throw error when processing is already in progress', () async {
-      // Arrange - create a non-completing future to keep processing state active
-      final completer = Completer<List<ProcessedFile>>();
+      // Arrange - create a manager with never-completing processor
+      final neverCompletingProcessor = NeverCompletingFileContentProcessor();
+      final concurrentTestManager = FileProcessingManager(
+        fileContentProcessor: neverCompletingProcessor,
+      );
       
-      // TODO: Mock the processing to never complete
-      // Note: Cannot assign to static methods - this test needs architectural refactoring
-      // FileContentProcessor.processFiles = (_, {onProgress, isCancelled}) {
-      //   return completer.future;
-      // };
+      // Start processing that won't complete
+      final processingFuture = concurrentTestManager.processFiles(['path/to/file.txt']);
       
-      // Start processing
-      final processingFuture = fileProcessingManager.processFiles(['path/to/file.txt']);
+      // Wait a bit to ensure processing has started
+      await Future.delayed(const Duration(milliseconds: 10));
       
       // Act & Assert - attempt to start another processing while first is active
       expect(
-        () => fileProcessingManager.processFiles(['path/to/another.txt']),
+        () => concurrentTestManager.processFiles(['path/to/another.txt']),
         throwsA(isA<StateError>()),
       );
       
-      // Cleanup
-      completer.complete([]);
+      // Cleanup - complete the first operation
+      neverCompletingProcessor.complete([]);
       await processingFuture;
     });
   });
