@@ -2,9 +2,12 @@ import '../models/thinking_state.dart';
 import '../utils/logger.dart';
 
 /// Service responsible for processing thinking content from AI responses
-/// Handles stream filtering, content extraction, and thinking bubble state management
+///
+/// This service extracts and manages "thinking" content to provide users with
+/// insight into the AI's reasoning process while keeping the main response clean
 class ThinkingContentProcessor {
-  /// List of supported thinking markers with their open/close tags
+  /// Supported thinking markers - these are common patterns used by AI models
+  /// to denote internal reasoning that should be shown separately from the main response
   final List<Map<String, String>> _thinkingMarkers = const [
     {'open': '<think>', 'close': '</think>'},
     {'open': '<thinking>', 'close': '</thinking>'},
@@ -12,9 +15,9 @@ class ThinkingContentProcessor {
     {'open': '<analysis>', 'close': '</analysis>'},
     {'open': '<reflection>', 'close': '</reflection>'},
   ];
-  
+
   bool _disposed = false;
-  
+
   ThinkingContentProcessor();
 
   /// Process streaming response and extract thinking content
@@ -44,22 +47,22 @@ class ThinkingContentProcessor {
 
         // Keep processing until no more markers of this type
         while (true) {
-          final openIndex = filteredResponse
-              .toLowerCase()
-              .indexOf(openMarker.toLowerCase());
-          
+          final openIndex =
+              filteredResponse.toLowerCase().indexOf(openMarker.toLowerCase());
+
           if (openIndex == -1) break;
 
           final closeIndex = filteredResponse.toLowerCase().indexOf(
-            closeMarker.toLowerCase(),
-            openIndex + openMarker.length,
-          );
+                closeMarker.toLowerCase(),
+                openIndex + openMarker.length,
+              );
 
           if (closeIndex == -1) {
             // Opening marker found but no closing marker yet
             // Extract thinking content and hide from main display
             final thinkingStart = openIndex + openMarker.length;
-            extractedThinkingContent = fullResponse.substring(thinkingStart).trim();
+            extractedThinkingContent =
+                fullResponse.substring(thinkingStart).trim();
             hasActiveThinkingBubble = true;
             isInsideThinkingBlock = true;
 
@@ -69,16 +72,15 @@ class ThinkingContentProcessor {
           } else {
             // Complete thinking block found
             final thinkingStart = openIndex + openMarker.length;
-            extractedThinkingContent = fullResponse
-                .substring(thinkingStart, closeIndex)
-                .trim();
+            extractedThinkingContent =
+                fullResponse.substring(thinkingStart, closeIndex).trim();
             hasActiveThinkingBubble = extractedThinkingContent.isNotEmpty;
             isInsideThinkingBlock = false;
 
             // Remove the complete thinking block from display
             final beforeThinking = filteredResponse.substring(0, openIndex);
-            final afterThinking = filteredResponse
-                .substring(closeIndex + closeMarker.length);
+            final afterThinking =
+                filteredResponse.substring(closeIndex + closeMarker.length);
             filteredResponse = (beforeThinking + afterThinking).trim();
           }
         }
@@ -95,7 +97,9 @@ class ThinkingContentProcessor {
       );
 
       // Only log when there's actual thinking content or state changes
-      if (hasActiveThinkingBubble || isInsideThinkingBlock || extractedThinkingContent.isNotEmpty) {
+      if (hasActiveThinkingBubble ||
+          isInsideThinkingBlock ||
+          extractedThinkingContent.isNotEmpty) {
         AppLogger.info(
           'Processed thinking content: hasActive=$hasActiveThinkingBubble, '
           'isInside=$isInsideThinkingBlock, contentLength=${extractedThinkingContent.length}',
@@ -108,7 +112,7 @@ class ThinkingContentProcessor {
       };
     } catch (e) {
       AppLogger.error('Error processing thinking content', e);
-      
+
       // Return original response and state on error
       return {
         'filteredResponse': fullResponse,
@@ -130,7 +134,7 @@ class ThinkingContentProcessor {
           displayResponse.isNotEmpty &&
           !currentState.isInsideThinkingBlock) {
         AppLogger.info('Transitioning from thinking phase to answer phase');
-        
+
         return currentState.copyWith(isThinkingPhase: false);
       }
 
@@ -163,12 +167,12 @@ class ThinkingContentProcessor {
   }) {
     try {
       final updatedState = currentState.toggleBubbleExpansion(messageId);
-      
+
       AppLogger.info(
         'Toggled thinking bubble for message $messageId: '
         '${updatedState.isBubbleExpanded(messageId)}',
       );
-      
+
       return updatedState;
     } catch (e) {
       AppLogger.error('Error toggling thinking bubble expansion', e);
@@ -206,7 +210,7 @@ class ThinkingContentProcessor {
   /// Clean up excessive whitespace from filtered response
   String _cleanupWhitespace(String text) {
     if (text.isEmpty) return text;
-    
+
     // Remove excessive newlines (more than 2 consecutive)
     return text.replaceAll(RegExp(r'\n\s*\n\s*\n'), '\n\n');
   }
@@ -214,24 +218,23 @@ class ThinkingContentProcessor {
   /// Extract all thinking markers from text for analysis
   List<Map<String, dynamic>> extractThinkingMarkers(String text) {
     final List<Map<String, dynamic>> foundMarkers = [];
-    
+
     for (final markerPair in _thinkingMarkers) {
       final openMarker = markerPair['open']!;
       final closeMarker = markerPair['close']!;
-      
+
       int searchStart = 0;
       while (true) {
-        final openIndex = text
-            .toLowerCase()
-            .indexOf(openMarker.toLowerCase(), searchStart);
-        
+        final openIndex =
+            text.toLowerCase().indexOf(openMarker.toLowerCase(), searchStart);
+
         if (openIndex == -1) break;
-        
+
         final closeIndex = text.toLowerCase().indexOf(
-          closeMarker.toLowerCase(),
-          openIndex + openMarker.length,
-        );
-        
+              closeMarker.toLowerCase(),
+              openIndex + openMarker.length,
+            );
+
         foundMarkers.add({
           'type': openMarker.replaceAll('<', '').replaceAll('>', ''),
           'openIndex': openIndex,
@@ -241,47 +244,47 @@ class ThinkingContentProcessor {
               ? text.substring(openIndex + openMarker.length, closeIndex)
               : text.substring(openIndex + openMarker.length),
         });
-        
-        searchStart = closeIndex != -1 
-            ? closeIndex + closeMarker.length 
-            : text.length;
+
+        searchStart =
+            closeIndex != -1 ? closeIndex + closeMarker.length : text.length;
       }
     }
-    
+
     // Sort by position in text
     foundMarkers.sort((a, b) => a['openIndex'].compareTo(b['openIndex']));
-    
+
     return foundMarkers;
   }
 
   /// Check if text contains any thinking markers
   bool containsThinkingMarkers(String text) {
     if (text.isEmpty) return false;
-    
+
     final lowerText = text.toLowerCase();
-    
+
     for (final markerPair in _thinkingMarkers) {
       final openMarker = markerPair['open']!.toLowerCase();
       if (lowerText.contains(openMarker)) {
         return true;
       }
     }
-    
+
     return false;
   }
 
   /// Get supported thinking marker types
   List<String> getSupportedMarkerTypes() {
     return _thinkingMarkers
-        .map((marker) => marker['open']!.replaceAll('<', '').replaceAll('>', ''))
+        .map(
+            (marker) => marker['open']!.replaceAll('<', '').replaceAll('>', ''))
         .toList();
   }
-  
+
   /// Dispose method for lifecycle management
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     AppLogger.info('ThinkingContentProcessor disposed');
   }
 }

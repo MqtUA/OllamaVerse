@@ -69,10 +69,10 @@ class FileContentProcessor {
   static const int maxImageSizeBytes = 100 * 1024 * 1024; // 100MB for images
   static const int maxTextSizeBytes = 50 * 1024 * 1024; // 50MB for text files
   static const int maxPdfSizeBytes = 100 * 1024 * 1024; // 100MB for PDFs
-  
+
   // Constructor
   FileContentProcessor();
-  
+
   /// Dispose method for lifecycle management
   void dispose() {
     // No resources to dispose, but added for consistency with other services

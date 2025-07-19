@@ -31,14 +31,13 @@ class ErrorHandler {
         }
 
         final result = await operation();
-        
+
         // Log successful retry if this wasn't the first attempt
         if (attempt > 0) {
           AppLogger.info(
-            '${operationName ?? 'Operation'} succeeded on attempt ${attempt + 1}'
-          );
+              '${operationName ?? 'Operation'} succeeded on attempt ${attempt + 1}');
         }
-        
+
         return result;
       } catch (error) {
         lastError = error;
@@ -50,18 +49,16 @@ class ErrorHandler {
         // Check if we should retry this error
         if (shouldRetry != null && !shouldRetry(error)) {
           AppLogger.warning(
-            '${operationName ?? 'Operation'} failed with non-retryable error: $error'
-          );
+              '${operationName ?? 'Operation'} failed with non-retryable error: $error');
           break;
         }
 
         // Calculate delay with exponential backoff
         final delay = _calculateRetryDelay(attempt, baseDelay);
-        
+
         AppLogger.warning(
-          '${operationName ?? 'Operation'} failed on attempt $attempt: $error. '
-          'Retrying in ${delay.inMilliseconds}ms...'
-        );
+            '${operationName ?? 'Operation'} failed on attempt $attempt: $error. '
+            'Retrying in ${delay.inMilliseconds}ms...');
 
         // Notify retry callback
         onRetry?.call(error, attempt);
@@ -76,7 +73,7 @@ class ErrorHandler {
       '${operationName ?? 'Operation'} failed after $maxRetries retries',
       lastError,
     );
-    
+
     throw lastError!;
   }
 
@@ -97,7 +94,7 @@ class ErrorHandler {
           );
         },
       );
-      
+
       return result;
     } catch (error) {
       AppLogger.error('${operationName ?? 'Operation'} failed', error);
@@ -129,7 +126,7 @@ class ErrorHandler {
   /// Check if an error is retryable
   static bool isRetryableError(Object error) {
     final errorType = classifyError(error);
-    
+
     switch (errorType) {
       case ErrorType.connection:
       case ErrorType.timeout:
@@ -147,7 +144,7 @@ class ErrorHandler {
   /// Get user-friendly error message
   static String getUserFriendlyMessage(Object error) {
     final errorType = classifyError(error);
-    
+
     switch (errorType) {
       case ErrorType.connection:
         return 'Unable to connect to the server. Please check your connection settings.';
@@ -174,7 +171,7 @@ class ErrorHandler {
   /// Get recovery suggestions for an error
   static List<String> getRecoverySuggestions(Object error) {
     final errorType = classifyError(error);
-    
+
     switch (errorType) {
       case ErrorType.connection:
         return [
@@ -220,7 +217,9 @@ class ErrorHandler {
   /// Calculate retry delay with exponential backoff
   static Duration _calculateRetryDelay(int attempt, Duration baseDelay) {
     final exponentialDelay = baseDelay * (1 << (attempt - 1)); // 2^(attempt-1)
-    return exponentialDelay > _maxRetryDelay ? _maxRetryDelay : exponentialDelay;
+    return exponentialDelay > _maxRetryDelay
+        ? _maxRetryDelay
+        : exponentialDelay;
   }
 
   /// Delay with cancellation support
@@ -234,7 +233,7 @@ class ErrorHandler {
     }
 
     final completer = Completer<void>();
-    
+
     // Set up the delay
     Timer(delay, () {
       if (!completer.isCompleted) {
@@ -267,7 +266,7 @@ class ErrorHandler {
   }) {
     final errorType = classifyError(error);
     final contextInfo = context != null ? ' Context: $context' : '';
-    
+
     AppLogger.error(
       '$operation failed with ${errorType.name} error: $error$contextInfo',
       error,
@@ -355,7 +354,7 @@ class ErrorState {
   @override
   String toString() {
     return 'ErrorState(type: ${errorType.name}, message: $message, '
-           'canRetry: $canRetry, operation: $operation)';
+        'canRetry: $canRetry, operation: $operation)';
   }
 
   @override

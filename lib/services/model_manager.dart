@@ -13,28 +13,31 @@ abstract class ISettingsProvider {
 }
 
 /// Service responsible for managing AI models including loading, selection, and persistence
+///
+/// This service centralizes model management to ensure consistent model availability
+/// checks and prevent connection issues from affecting the entire application
 class ModelManager {
   final ISettingsProvider _settingsProvider;
   final ErrorRecoveryService? _errorRecoveryService;
-  
+
   List<String> _availableModels = [];
   String _lastSelectedModel = '';
   bool _isLoading = false;
   String? _lastError;
-  
-  // Connection retry configuration
+
+  // Retry configuration balances reliability with responsiveness
   static const int _maxRetryAttempts = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
   static const Duration _settingsTimeout = Duration(seconds: 10);
-  
+
   // Error handling
   static const String _serviceName = 'ModelManager';
 
   ModelManager({
     required ISettingsProvider settingsProvider,
     ErrorRecoveryService? errorRecoveryService,
-  }) : _settingsProvider = settingsProvider,
-       _errorRecoveryService = errorRecoveryService;
+  })  : _settingsProvider = settingsProvider,
+        _errorRecoveryService = errorRecoveryService;
 
   /// Get the list of available models
   List<String> get availableModels => List.unmodifiable(_availableModels);
@@ -55,7 +58,8 @@ class ModelManager {
   Future<void> initialize() async {
     try {
       await _loadLastSelectedModel();
-      AppLogger.info('ModelManager initialized with last selected model: $_lastSelectedModel');
+      AppLogger.info(
+          'ModelManager initialized with last selected model: $_lastSelectedModel');
     } catch (e) {
       AppLogger.error('Error initializing ModelManager', e);
       _lastError = 'Failed to initialize: ${e.toString()}';
@@ -100,7 +104,7 @@ class ModelManager {
       await _waitForSettings();
 
       final ollamaService = _settingsProvider.getOllamaService();
-      
+
       // Load models using error handler with retry
       _availableModels = await ErrorHandler.executeWithRetry(
         () => ollamaService.getModels(),
@@ -108,14 +112,16 @@ class ModelManager {
         maxRetries: _maxRetryAttempts,
         baseDelay: _retryDelay,
         shouldRetry: (error) {
-          if (error is OllamaConnectionException || error is OllamaApiException) {
+          if (error is OllamaConnectionException ||
+              error is OllamaApiException) {
             return true;
           }
           return ErrorHandler.isRetryableError(error);
         },
         onRetry: (error, attempt) {
           _lastError = ErrorHandler.getUserFriendlyMessage(error);
-          AppLogger.warning('Model loading attempt $attempt failed: $_lastError');
+          AppLogger.warning(
+              'Model loading attempt $attempt failed: $_lastError');
         },
       );
 
@@ -136,13 +142,13 @@ class ModelManager {
       await _waitForSettings();
       final ollamaService = _settingsProvider.getOllamaService();
       final isConnected = await ollamaService.testConnection();
-      
+
       if (!isConnected) {
         _lastError = 'Failed to connect to Ollama server';
       } else {
         _lastError = null;
       }
-      
+
       return isConnected;
     } catch (e) {
       _lastError = 'Connection test failed: ${e.toString()}';
@@ -180,7 +186,8 @@ class ModelManager {
     }
 
     // Use last selected model if it's still available
-    if (_lastSelectedModel.isNotEmpty && _availableModels.contains(_lastSelectedModel)) {
+    if (_lastSelectedModel.isNotEmpty &&
+        _availableModels.contains(_lastSelectedModel)) {
       return _lastSelectedModel;
     }
 
@@ -198,7 +205,7 @@ class ModelManager {
     if (preferredModel != null && isModelAvailable(preferredModel)) {
       return preferredModel;
     }
-    
+
     return getBestAvailableModel();
   }
 
@@ -218,13 +225,15 @@ class ModelManager {
   /// Wait for settings to be ready with timeout
   Future<void> _waitForSettings() async {
     final stopwatch = Stopwatch()..start();
-    
-    while (_settingsProvider.isLoading && stopwatch.elapsed < _settingsTimeout) {
+
+    while (
+        _settingsProvider.isLoading && stopwatch.elapsed < _settingsTimeout) {
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
     if (_settingsProvider.isLoading) {
-      AppLogger.warning('Settings still loading after ${_settingsTimeout.inSeconds}s timeout');
+      AppLogger.warning(
+          'Settings still loading after ${_settingsTimeout.inSeconds}s timeout');
       throw TimeoutException('Settings loading timeout', _settingsTimeout);
     }
   }
@@ -253,21 +262,21 @@ class ModelManager {
     }
   }
 
-
-
   /// Validate model manager state
   bool validateState() {
     try {
       // Check for inconsistent state
       if (_isLoading && _availableModels.isNotEmpty) {
-        AppLogger.warning('Invalid state: loading but models already available');
+        AppLogger.warning(
+            'Invalid state: loading but models already available');
         return false;
       }
 
-      if (_lastSelectedModel.isNotEmpty && 
-          _availableModels.isNotEmpty && 
+      if (_lastSelectedModel.isNotEmpty &&
+          _availableModels.isNotEmpty &&
           !_availableModels.contains(_lastSelectedModel)) {
-        AppLogger.warning('Invalid state: selected model not in available models');
+        AppLogger.warning(
+            'Invalid state: selected model not in available models');
         return false;
       }
 
@@ -282,12 +291,12 @@ class ModelManager {
   void resetState() {
     try {
       AppLogger.info('Resetting ModelManager state');
-      
+
       _isLoading = false;
       _lastError = null;
-      
+
       // Keep available models and last selected model as they may still be valid
-      
+
       AppLogger.info('ModelManager state reset completed');
     } catch (e) {
       AppLogger.error('Error resetting model manager state', e);

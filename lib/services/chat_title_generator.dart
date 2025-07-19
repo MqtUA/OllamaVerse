@@ -4,15 +4,17 @@ import '../services/model_manager.dart';
 import '../utils/logger.dart';
 
 /// Service responsible for generating chat titles automatically
-/// Handles title generation logic with fallback handling and timeout management
+///
+/// This service improves user experience by creating meaningful titles
+/// instead of generic "New Chat" labels, making chat history more navigable
 class ChatTitleGenerator {
   final OllamaService _ollamaService;
 
-  /// Set of chat IDs currently generating titles
+  /// Tracks which chats are generating titles to prevent duplicate requests
   final Set<String> _chatsGeneratingTitle = <String>{};
   bool _disposed = false;
 
-  /// Timeout duration for title generation
+  /// Timeout prevents hanging requests from blocking the UI indefinitely
   static const Duration _titleGenerationTimeout = Duration(seconds: 30);
 
   ChatTitleGenerator({
@@ -54,10 +56,11 @@ class ChatTitleGenerator {
     required String modelName,
   }) async {
     if (_disposed) {
-      AppLogger.warning('ChatTitleGenerator is disposed, cannot generate title');
+      AppLogger.warning(
+          'ChatTitleGenerator is disposed, cannot generate title');
       return '';
     }
-    
+
     if (_chatsGeneratingTitle.contains(chatId)) {
       AppLogger.warning(
           'Title generation already in progress for chat $chatId');
@@ -168,15 +171,15 @@ Title:''';
     // Final fallback
     return 'New Chat';
   }
-  
+
   /// Dispose resources
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     // Clear all title generation states
     clearAllTitleGenerationState();
-    
+
     AppLogger.info('ChatTitleGenerator disposed');
   }
 }

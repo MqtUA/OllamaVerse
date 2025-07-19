@@ -67,8 +67,8 @@ class ChatOperationState {
       titleState: titleState ?? this.titleState,
       fileProcessingProgress:
           fileProcessingProgress ?? this.fileProcessingProgress,
-      shouldScrollToBottomOnChatSwitch:
-          shouldScrollToBottomOnChatSwitch ?? this.shouldScrollToBottomOnChatSwitch,
+      shouldScrollToBottomOnChatSwitch: shouldScrollToBottomOnChatSwitch ??
+          this.shouldScrollToBottomOnChatSwitch,
     );
   }
 
@@ -137,16 +137,16 @@ class ChatOperationState {
   /// Update file processing progress
   ChatOperationState updateFileProgress(
       String fileName, FileProcessingProgress progress) {
-    final newProgress = Map<String, FileProcessingProgress>.from(
-        fileProcessingProgress);
+    final newProgress =
+        Map<String, FileProcessingProgress>.from(fileProcessingProgress);
     newProgress[fileName] = progress;
     return copyWith(fileProcessingProgress: newProgress);
   }
 
   /// Remove file processing progress
   ChatOperationState removeFileProgress(String fileName) {
-    final newProgress = Map<String, FileProcessingProgress>.from(
-        fileProcessingProgress);
+    final newProgress =
+        Map<String, FileProcessingProgress>.from(fileProcessingProgress);
     newProgress.remove(fileName);
     return copyWith(fileProcessingProgress: newProgress);
   }
@@ -196,8 +196,8 @@ class ChatOperationState {
       final progressJson =
           json['fileProcessingProgress'] as Map<String, dynamic>;
       for (final entry in progressJson.entries) {
-        fileProgressMap[entry.key] =
-            FileProcessingProgress.fromJson(entry.value as Map<String, dynamic>);
+        fileProgressMap[entry.key] = FileProcessingProgress.fromJson(
+            entry.value as Map<String, dynamic>);
       }
     }
 
@@ -247,7 +247,8 @@ class ChatOperationState {
         other.streamingState == streamingState &&
         other.thinkingState == thinkingState &&
         other.titleState == titleState &&
-        other.shouldScrollToBottomOnChatSwitch == shouldScrollToBottomOnChatSwitch;
+        other.shouldScrollToBottomOnChatSwitch ==
+            shouldScrollToBottomOnChatSwitch;
   }
 
   @override

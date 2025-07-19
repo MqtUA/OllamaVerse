@@ -4,7 +4,8 @@ import '../providers/chat_provider.dart';
 
 /// Helper widget to handle nullable ChatProvider
 class SafeChatConsumer extends StatelessWidget {
-  final Widget Function(BuildContext context, ChatProvider chatProvider, Widget? child) builder;
+  final Widget Function(
+      BuildContext context, ChatProvider chatProvider, Widget? child) builder;
   final Widget? child;
   final Widget? loadingWidget;
 
@@ -20,7 +21,8 @@ class SafeChatConsumer extends StatelessWidget {
     return Consumer<ChatProvider?>(
       builder: (context, chatProvider, child) {
         if (chatProvider == null) {
-          return loadingWidget ?? const Center(child: CircularProgressIndicator());
+          return loadingWidget ??
+              const Center(child: CircularProgressIndicator());
         }
         return builder(context, chatProvider, child);
       },

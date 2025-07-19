@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
 /// A lightweight markdown renderer specifically for chat titles
-/// 
+///
 /// This widget is optimized for short text with basic markdown formatting
 /// such as bold, italic, and inline code, without the overhead of
 /// handling complex elements like code blocks.

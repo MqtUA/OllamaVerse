@@ -7,51 +7,55 @@ import '../services/error_recovery_service.dart';
 import '../utils/logger.dart';
 
 /// Manages chat list and active chat state
-/// Handles chat CRUD operations and state synchronization
+///
+/// This service centralizes chat state management to ensure consistency
+/// across the application and prevent race conditions that occurred when
+/// state was managed directly in the provider
 class ChatStateManager {
   final ChatHistoryService _chatHistoryService;
   final ErrorRecoveryService? _errorRecoveryService;
-  
+
   List<Chat> _chats = [];
   Chat? _activeChat;
   bool _shouldScrollToBottomOnChatSwitch = false;
-  
+
   StreamSubscription? _chatStreamSubscription;
   bool _disposed = false;
-  
-  // Synchronization for state updates
+
+  // Prevents race conditions during concurrent state updates
   bool _isUpdatingState = false;
-  
+
   // Stream controller for state changes
   final _stateController = StreamController<ChatStateManagerState>.broadcast();
-  
+
   // Error handling
   static const String _serviceName = 'ChatStateManager';
-  
+
   /// Stream of state changes
   Stream<ChatStateManagerState> get stateStream => _stateController.stream;
-  
+
   /// Current list of chats (immutable)
   List<Chat> get chats => List.unmodifiable(_chats);
-  
+
   /// Currently active chat
   Chat? get activeChat => _activeChat;
-  
+
   /// Whether to scroll to bottom on chat switch
-  bool get shouldScrollToBottomOnChatSwitch => _shouldScrollToBottomOnChatSwitch;
-  
+  bool get shouldScrollToBottomOnChatSwitch =>
+      _shouldScrollToBottomOnChatSwitch;
+
   /// Current state snapshot
   ChatStateManagerState get currentState => ChatStateManagerState(
-    chats: chats,
-    activeChat: activeChat,
-    shouldScrollToBottomOnChatSwitch: shouldScrollToBottomOnChatSwitch,
-  );
+        chats: chats,
+        activeChat: activeChat,
+        shouldScrollToBottomOnChatSwitch: shouldScrollToBottomOnChatSwitch,
+      );
 
   ChatStateManager({
     required ChatHistoryService chatHistoryService,
     ErrorRecoveryService? errorRecoveryService,
-  }) : _chatHistoryService = chatHistoryService,
-       _errorRecoveryService = errorRecoveryService {
+  })  : _chatHistoryService = chatHistoryService,
+        _errorRecoveryService = errorRecoveryService {
     _initialize();
   }
 
@@ -72,7 +76,7 @@ class ChatStateManager {
   Future<void> _performInitialization() async {
     try {
       AppLogger.info('Initializing ChatStateManager');
-      
+
       // Listen to chat updates from the history service
       _chatStreamSubscription = _chatHistoryService.chatStream.listen(
         (chats) {
@@ -87,7 +91,7 @@ class ChatStateManager {
 
       // Load existing chats immediately
       await _loadExistingChats();
-      
+
       AppLogger.info('ChatStateManager initialized successfully');
     } catch (e) {
       AppLogger.error('Error initializing ChatStateManager', e);
@@ -143,10 +147,11 @@ class ChatStateManager {
   }
 
   /// Set active chat to most recent if no active chat is currently set
+  ///
+  /// This ensures users always have a chat selected when the app starts,
+  /// providing a better user experience than showing an empty state
   void _setActiveToMostRecentIfNeeded() {
-    // Only set active chat if none is currently active and chats exist
     if (_activeChat == null && _chats.isNotEmpty) {
-      // Sort chats by last updated time to find most recent
       final sortedChats = List<Chat>.from(_chats);
       sortedChats.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
 
@@ -180,10 +185,10 @@ class ChatStateManager {
   }) async {
     try {
       _validateNotDisposed();
-      
+
       final chatId = DateTime.now().millisecondsSinceEpoch.toString();
       final chatTitle = title ?? 'New chat with $modelName';
-      
+
       final newChat = Chat(
         id: chatId,
         title: chatTitle,
@@ -210,7 +215,7 @@ class ChatStateManager {
       // Set as active chat
       _activeChat = newChat;
       _notifyStateChange();
-      
+
       AppLogger.info('Created new chat: $chatTitle');
       return newChat;
     } catch (e) {
@@ -222,21 +227,22 @@ class ChatStateManager {
   /// Set the active chat by ID
   void setActiveChat(String chatId) {
     _validateNotDisposed();
-    
+
     final chat = _chats.firstWhere(
       (c) => c.id == chatId,
       orElse: () => throw ArgumentError('Chat with ID $chatId not found'),
     );
-    
+
     final previousActiveChat = _activeChat;
     _activeChat = chat;
 
-    // Check if we're switching to a different chat with existing messages
-    // and should trigger auto-scroll to bottom
+    // Auto-scroll is needed when switching to a different chat with messages
+    // to ensure users see the latest conversation context immediately
     if ((previousActiveChat?.id != chatId || previousActiveChat == null) &&
         chat.messages.isNotEmpty) {
       _shouldScrollToBottomOnChatSwitch = true;
-      AppLogger.info('Triggering auto-scroll for chat switch to: ${chat.title}');
+      AppLogger.info(
+          'Triggering auto-scroll for chat switch to: ${chat.title}');
     } else {
       _shouldScrollToBottomOnChatSwitch = false;
     }
@@ -255,7 +261,7 @@ class ChatStateManager {
   Future<void> updateChatTitle(String chatId, String newTitle) async {
     try {
       _validateNotDisposed();
-      
+
       final chatIndex = _chats.indexWhere((c) => c.id == chatId);
       if (chatIndex == -1) {
         throw ArgumentError('Chat with ID $chatId not found');
@@ -274,7 +280,7 @@ class ChatStateManager {
       // Save to service - this will trigger the stream update
       await _chatHistoryService.saveChat(updatedChat);
       _notifyStateChange();
-      
+
       AppLogger.info('Updated chat title: $newTitle');
     } catch (e) {
       AppLogger.error('Error updating chat title', e);
@@ -286,28 +292,27 @@ class ChatStateManager {
   Future<void> updateChatModel(String chatId, String newModelName) async {
     try {
       _validateNotDisposed();
-      
+
       final chatIndex = _chats.indexWhere((c) => c.id == chatId);
       if (chatIndex == -1) {
         throw ArgumentError('Chat with ID $chatId not found');
       }
 
       final currentChat = _chats[chatIndex];
-      
+
       // Check if this is a new chat (only has system messages, no user/assistant messages)
       final hasUserMessages = currentChat.messages
           .where((msg) => msg.role != MessageRole.system)
           .isNotEmpty;
-      
+
       bool isDefaultTitle = !hasUserMessages &&
           (currentChat.title == 'New Chat' ||
               currentChat.title.startsWith('New chat with'));
 
       final updatedChat = currentChat.copyWith(
         modelName: newModelName,
-        title: isDefaultTitle
-            ? 'New chat with $newModelName'
-            : currentChat.title,
+        title:
+            isDefaultTitle ? 'New chat with $newModelName' : currentChat.title,
         lastUpdatedAt: DateTime.now(),
       );
 
@@ -319,7 +324,7 @@ class ChatStateManager {
       // Save to service - this will trigger the stream update
       await _chatHistoryService.saveChat(updatedChat);
       _notifyStateChange();
-      
+
       AppLogger.info('Updated chat model to: $newModelName');
     } catch (e) {
       AppLogger.error('Error updating chat model', e);
@@ -331,7 +336,7 @@ class ChatStateManager {
   Future<void> updateChat(Chat updatedChat) async {
     try {
       _validateNotDisposed();
-      
+
       // Validate that the chat exists
       final chatIndex = _chats.indexWhere((c) => c.id == updatedChat.id);
       if (chatIndex == -1) {
@@ -346,7 +351,7 @@ class ChatStateManager {
       // Save to service - this will trigger the stream update
       await _chatHistoryService.saveChat(updatedChat);
       _notifyStateChange();
-      
+
       AppLogger.info('Updated chat: ${updatedChat.title}');
     } catch (e) {
       AppLogger.error('Error updating chat', e);
@@ -358,7 +363,7 @@ class ChatStateManager {
   Future<void> deleteChat(String chatId) async {
     try {
       _validateNotDisposed();
-      
+
       // Find the index of the chat to be deleted
       final int index = _chats.indexWhere((c) => c.id == chatId);
       if (index == -1) {
@@ -377,7 +382,7 @@ class ChatStateManager {
 
       // Now, perform the asynchronous deletion from the history service
       await _chatHistoryService.deleteChat(chatId);
-      
+
       AppLogger.info('Deleted chat: $chatId');
     } catch (e) {
       AppLogger.error('Error deleting chat', e);
@@ -417,7 +422,7 @@ class ChatStateManager {
   /// Notify listeners of state changes
   void _notifyStateChange() {
     if (_disposed || _isUpdatingState) return;
-    
+
     _isUpdatingState = true;
     try {
       if (!_stateController.isClosed) {
@@ -463,11 +468,13 @@ class ChatStateManager {
     try {
       // Check basic state consistency
       if (_chats.isEmpty && _activeChat != null) {
-        AppLogger.warning('Invalid state: active chat exists but no chats available');
+        AppLogger.warning(
+            'Invalid state: active chat exists but no chats available');
         return false;
       }
 
-      if (_activeChat != null && !_chats.any((chat) => chat.id == _activeChat!.id)) {
+      if (_activeChat != null &&
+          !_chats.any((chat) => chat.id == _activeChat!.id)) {
         AppLogger.warning('Invalid state: active chat not found in chats list');
         return false;
       }
@@ -483,17 +490,18 @@ class ChatStateManager {
   void resetState() {
     try {
       AppLogger.info('Resetting ChatStateManager state');
-      
+
       // Clear active chat if it's not in the chats list
-      if (_activeChat != null && !_chats.any((chat) => chat.id == _activeChat!.id)) {
+      if (_activeChat != null &&
+          !_chats.any((chat) => chat.id == _activeChat!.id)) {
         _activeChat = null;
       }
-      
+
       // Set active chat to most recent if none is set
       _setActiveToMostRecentIfNeeded();
-      
+
       _notifyStateChange();
-      
+
       AppLogger.info('ChatStateManager state reset completed');
     } catch (e) {
       AppLogger.error('Error resetting state', e);
@@ -504,16 +512,16 @@ class ChatStateManager {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     // Cancel subscription first to prevent further state updates
     _chatStreamSubscription?.cancel();
     _chatStreamSubscription = null;
-    
+
     // Close stream controller
     if (!_stateController.isClosed) {
       _stateController.close();
     }
-    
+
     AppLogger.info('ChatStateManager disposed');
   }
 }
@@ -549,8 +557,8 @@ class ChatStateManagerState {
     return ChatStateManagerState(
       chats: chats ?? this.chats,
       activeChat: clearActiveChat ? null : (activeChat ?? this.activeChat),
-      shouldScrollToBottomOnChatSwitch:
-          shouldScrollToBottomOnChatSwitch ?? this.shouldScrollToBottomOnChatSwitch,
+      shouldScrollToBottomOnChatSwitch: shouldScrollToBottomOnChatSwitch ??
+          this.shouldScrollToBottomOnChatSwitch,
     );
   }
 
@@ -585,7 +593,8 @@ class ChatStateManagerState {
     return other is ChatStateManagerState &&
         other.chats.length == chats.length &&
         other.activeChat?.id == activeChat?.id &&
-        other.shouldScrollToBottomOnChatSwitch == shouldScrollToBottomOnChatSwitch;
+        other.shouldScrollToBottomOnChatSwitch ==
+            shouldScrollToBottomOnChatSwitch;
   }
 
   @override

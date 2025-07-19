@@ -1,5 +1,7 @@
 /// State container for thinking content processing
-/// Manages thinking bubbles, content extraction, and display state
+///
+/// This state manages the complex interaction between thinking content extraction,
+/// bubble display, and user interaction to provide insight into AI reasoning
 class ThinkingState {
   final String currentThinkingContent;
   final bool hasActiveThinkingBubble;
@@ -53,7 +55,8 @@ class ThinkingState {
           currentThinkingContent ?? this.currentThinkingContent,
       hasActiveThinkingBubble:
           hasActiveThinkingBubble ?? this.hasActiveThinkingBubble,
-      isInsideThinkingBlock: isInsideThinkingBlock ?? this.isInsideThinkingBlock,
+      isInsideThinkingBlock:
+          isInsideThinkingBlock ?? this.isInsideThinkingBlock,
       isThinkingPhase: isThinkingPhase ?? this.isThinkingPhase,
       expandedBubbles: expandedBubbles ?? Map.from(this.expandedBubbles),
     );
@@ -98,21 +101,21 @@ class ThinkingState {
   int get expandedBubbleCount =>
       expandedBubbles.values.where((expanded) => expanded).length;
 
-  /// Validation
+  /// Validation ensures thinking state consistency across the processing pipeline
   bool get isValid => _validateState();
 
   bool _validateState() {
-    // If has active thinking bubble, should have thinking content
+    // Active bubble requires content to display
     if (hasActiveThinkingBubble && currentThinkingContent.isEmpty) {
       return false;
     }
 
-    // If not in thinking phase, shouldn't have active bubble
+    // Bubbles should only be active during thinking phase
     if (!isThinkingPhase && hasActiveThinkingBubble) {
       return false;
     }
 
-    // If inside thinking block, should be in thinking phase
+    // Being inside a thinking block implies we're in thinking phase
     if (isInsideThinkingBlock && !isThinkingPhase) {
       return false;
     }
@@ -135,7 +138,8 @@ class ThinkingState {
   factory ThinkingState.fromJson(Map<String, dynamic> json) {
     return ThinkingState(
       currentThinkingContent: json['currentThinkingContent'] as String? ?? '',
-      hasActiveThinkingBubble: json['hasActiveThinkingBubble'] as bool? ?? false,
+      hasActiveThinkingBubble:
+          json['hasActiveThinkingBubble'] as bool? ?? false,
       isInsideThinkingBlock: json['isInsideThinkingBlock'] as bool? ?? false,
       isThinkingPhase: json['isThinkingPhase'] as bool? ?? false,
       expandedBubbles: Map<String, bool>.from(

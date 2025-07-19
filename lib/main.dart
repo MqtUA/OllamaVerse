@@ -41,7 +41,7 @@ Future<void> main() async {
 
   // Initialize enhanced file cleanup service
   await FileCleanupService.instance.init();
-  
+
   // Reset service locator to ensure clean state on app start
   await ServiceLocator.instance.reset();
 
@@ -54,28 +54,34 @@ Future<void> main() async {
 }
 
 /// Initialize services asynchronously and trigger provider rebuild
-Future<void> _initializeServicesAsync(SettingsProvider settingsProvider, BuildContext context) async {
+Future<void> _initializeServicesAsync(
+    SettingsProvider settingsProvider, BuildContext context) async {
   try {
     AppLogger.info('Starting async service initialization...');
     await ServiceLocator.instance.initialize(settingsProvider);
-    
+
     // Trigger a rebuild of the ChatProvider after services are initialized
     if (context.mounted) {
-      // Force a rebuild by notifying the SettingsProvider
+      // Force a rebuild by refreshing the SettingsProvider
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           try {
-            Provider.of<SettingsProvider>(context, listen: false).notifyListeners();
+            // Use a proper method instead of directly calling notifyListeners
+            final settingsProvider =
+                Provider.of<SettingsProvider>(context, listen: false);
+            // The provider should handle its own notification internally
+            settingsProvider.refreshSettings();
           } catch (e) {
             AppLogger.error('Error triggering provider rebuild', e);
           }
         }
       });
     }
-    
+
     AppLogger.info('Async service initialization completed');
   } catch (e, stackTrace) {
-    AppLogger.error('Failed to initialize services asynchronously', e, stackTrace);
+    AppLogger.error(
+        'Failed to initialize services asynchronously', e, stackTrace);
   }
 }
 
@@ -134,12 +140,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             if (settingsProvider.isLoading) {
               return previous;
             }
-            
+
             // Return existing provider if already created and services are still initialized
             if (previous != null && ServiceLocator.instance.isInitialized) {
               return previous;
             }
-            
+
             // Initialize service locator synchronously if not done
             // This ensures proper dependency injection setup
             if (!ServiceLocator.instance.isInitialized) {
@@ -147,7 +153,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               _initializeServicesAsync(settingsProvider, context);
               return null;
             }
-            
+
             // Create ChatProvider with all required services
             try {
               return ChatProvider(
@@ -155,11 +161,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 settingsProvider: settingsProvider,
                 modelManager: ServiceLocator.instance.modelManager,
                 chatStateManager: ServiceLocator.instance.chatStateManager,
-                messageStreamingService: ServiceLocator.instance.messageStreamingService,
+                messageStreamingService:
+                    ServiceLocator.instance.messageStreamingService,
                 chatTitleGenerator: ServiceLocator.instance.chatTitleGenerator,
-                fileProcessingManager: ServiceLocator.instance.fileProcessingManager,
-                thinkingContentProcessor: ServiceLocator.instance.thinkingContentProcessor,
-                errorRecoveryService: ServiceLocator.instance.errorRecoveryService,
+                fileProcessingManager:
+                    ServiceLocator.instance.fileProcessingManager,
+                thinkingContentProcessor:
+                    ServiceLocator.instance.thinkingContentProcessor,
+                errorRecoveryService:
+                    ServiceLocator.instance.errorRecoveryService,
               );
             } catch (e) {
               AppLogger.error('Failed to create ChatProvider', e);

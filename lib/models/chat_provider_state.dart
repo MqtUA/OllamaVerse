@@ -2,7 +2,9 @@ import 'chat.dart';
 import 'chat_operation_state.dart';
 
 /// Main state container for the ChatProvider
-/// Contains all the high-level state information needed by the UI
+///
+/// This immutable state object ensures predictable UI updates and makes
+/// state management easier to reason about and test
 class ChatProviderState {
   final List<Chat> chats;
   final Chat? activeChat;
@@ -71,11 +73,11 @@ class ChatProviderState {
       isAnyOperationInProgress &&
       operationState.currentGeneratingChatId == activeChat?.id;
 
-  /// Validation methods
+  /// Validation ensures state consistency and helps catch bugs early
   bool get isValid => _validateState();
 
   bool _validateState() {
-    // Basic validation rules
+    // These validation rules prevent impossible UI states
     if (chats.isEmpty && activeChat != null) {
       return false; // Can't have active chat without any chats
     }

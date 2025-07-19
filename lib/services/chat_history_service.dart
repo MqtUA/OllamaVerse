@@ -224,10 +224,10 @@ class ChatHistoryService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    
+
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
-    
+
     if (!_chatController.isClosed) {
       await _chatController.close();
     }

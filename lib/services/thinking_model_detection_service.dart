@@ -23,8 +23,6 @@ class ThinkingModelDetectionService {
     'To solve this:',
   ];
 
-  
-
   // Paired thinking markers for explicit extraction
   static const Map<String, String> _pairedThinkingMarkers = {
     '<thinking>': '</thinking>',
@@ -147,8 +145,7 @@ class ThinkingModelDetectionService {
       }
 
       final thinkingStart = startIndex + startMarker.length;
-      final thinkingText =
-          response.substring(thinkingStart, endIndex).trim();
+      final thinkingText = response.substring(thinkingStart, endIndex).trim();
 
       // Extract final answer (everything after thinking section)
       final finalAnswerStart = endIndex + endMarker.length;

@@ -33,7 +33,7 @@ class ServiceLocator {
   bool _isInitialized = false;
   bool _isDisposed = false;
   bool _isInitializing = false;
-  
+
   // Track initialization errors for debugging
   String? _lastInitializationError;
 
@@ -46,14 +46,16 @@ class ServiceLocator {
 
     // Prevent concurrent initialization attempts
     if (_isInitializing) {
-      AppLogger.info('ServiceLocator initialization already in progress, waiting...');
+      AppLogger.info(
+          'ServiceLocator initialization already in progress, waiting...');
       // Wait for initialization to complete
       while (_isInitializing && !_isInitialized) {
         await Future.delayed(const Duration(milliseconds: 50));
       }
       if (_isInitialized) return;
       if (_lastInitializationError != null) {
-        throw StateError('Previous initialization failed: $_lastInitializationError');
+        throw StateError(
+            'Previous initialization failed: $_lastInitializationError');
       }
     }
 
@@ -65,38 +67,37 @@ class ServiceLocator {
 
       // Validate input
       if (settingsProvider.isLoading) {
-        throw StateError('SettingsProvider is still loading, cannot initialize services');
+        throw StateError(
+            'SettingsProvider is still loading, cannot initialize services');
       }
 
       // Initialize services in dependency order
       _chatHistoryService = ChatHistoryService();
-      
+
       _fileContentProcessor = FileContentProcessor();
-      
-      _fileProcessingManager = FileProcessingManager(
-        fileContentProcessor: _fileContentProcessor!
-      );
-      
+
+      _fileProcessingManager =
+          FileProcessingManager(fileContentProcessor: _fileContentProcessor!);
+
       _errorRecoveryService = ErrorRecoveryService();
-      
+
       _modelManager = ModelManager(
         settingsProvider: settingsProvider,
         errorRecoveryService: _errorRecoveryService,
       );
-      
+
       _thinkingContentProcessor = ThinkingContentProcessor();
-      
+
       _messageStreamingService = MessageStreamingService(
         ollamaService: settingsProvider.getOllamaService(),
         thinkingContentProcessor: _thinkingContentProcessor!,
         errorRecoveryService: _errorRecoveryService,
       );
-      
+
       _chatTitleGenerator = ChatTitleGenerator(
-        ollamaService: settingsProvider.getOllamaService(),
-        modelManager: _modelManager!
-      );
-      
+          ollamaService: settingsProvider.getOllamaService(),
+          modelManager: _modelManager!);
+
       _chatStateManager = ChatStateManager(
         chatHistoryService: _chatHistoryService!,
         errorRecoveryService: _errorRecoveryService,
@@ -111,10 +112,10 @@ class ServiceLocator {
     } catch (e, stackTrace) {
       _lastInitializationError = e.toString();
       _isInitializing = false;
-      
+
       // Clean up partially initialized services
       await _cleanupPartialInitialization();
-      
+
       AppLogger.error('Failed to initialize ServiceLocator', e, stackTrace);
       rethrow;
     }
@@ -127,9 +128,9 @@ class ServiceLocator {
       if (_modelManager != null) {
         await _modelManager!.initialize();
       }
-      
     } catch (e, stackTrace) {
-      AppLogger.error('Error during async service initialization', e, stackTrace);
+      AppLogger.error(
+          'Error during async service initialization', e, stackTrace);
       rethrow;
     }
   }
@@ -138,7 +139,7 @@ class ServiceLocator {
   Future<void> _cleanupPartialInitialization() async {
     try {
       AppLogger.info('Cleaning up partially initialized services...');
-      
+
       // Dispose services that may have been partially initialized
       _fileProcessingManager?.dispose();
       _messageStreamingService?.dispose();
@@ -156,10 +157,11 @@ class ServiceLocator {
       _fileContentProcessor = null;
       _chatHistoryService = null;
       _errorRecoveryService = null;
-      
+
       AppLogger.info('Partial initialization cleanup completed');
     } catch (e, stackTrace) {
-      AppLogger.error('Error during partial initialization cleanup', e, stackTrace);
+      AppLogger.error(
+          'Error during partial initialization cleanup', e, stackTrace);
     }
   }
 
@@ -204,7 +206,7 @@ class ServiceLocator {
     _ensureInitialized();
     return _thinkingContentProcessor!;
   }
-  
+
   /// Get FileContentProcessor instance
   FileContentProcessor get fileContentProcessor {
     _ensureInitialized();
@@ -223,7 +225,7 @@ class ServiceLocator {
   /// Check if a service is registered
   bool isServiceRegistered<T>() {
     if (!_isInitialized) return false;
-    
+
     if (T == ChatHistoryService) return _chatHistoryService != null;
     if (T == ModelManager) return _modelManager != null;
     if (T == ChatStateManager) return _chatStateManager != null;
@@ -233,10 +235,10 @@ class ServiceLocator {
     if (T == ThinkingContentProcessor) return _thinkingContentProcessor != null;
     if (T == FileContentProcessor) return _fileContentProcessor != null;
     if (T == ErrorRecoveryService) return _errorRecoveryService != null;
-    
+
     return false;
   }
-  
+
   /// Get service lifecycle status
   Map<String, dynamic> getServiceStatus() {
     return {
@@ -287,7 +289,7 @@ class ServiceLocator {
 
       _isInitialized = false;
       _isDisposed = true;
-      
+
       AppLogger.info('ServiceLocator disposed successfully');
     } catch (e, stackTrace) {
       AppLogger.error('Error disposing ServiceLocator', e, stackTrace);
@@ -303,7 +305,8 @@ class ServiceLocator {
   /// Ensure services are initialized before access
   void _ensureInitialized() {
     if (!_isInitialized) {
-      throw StateError('ServiceLocator not initialized. Call initialize() first.');
+      throw StateError(
+          'ServiceLocator not initialized. Call initialize() first.');
     }
     if (_isDisposed) {
       throw StateError('ServiceLocator has been disposed.');

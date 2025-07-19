@@ -11,37 +11,39 @@ import '../utils/cancellation_token.dart';
 import '../utils/logger.dart';
 
 /// Service responsible for message generation coordination and streaming response handling
-/// Manages streaming operations, cancellation, and response processing coordination
+///
+/// This service was extracted to isolate complex streaming logic and prevent
+/// memory leaks from uncancelled streams that occurred in the monolithic provider
 class MessageStreamingService {
   final OllamaService _ollamaService;
   final ErrorRecoveryService? _errorRecoveryService;
-  
+
   // Current streaming state
   StreamingState _streamingState = StreamingState.initial();
   ThinkingState _thinkingState = ThinkingState.initial();
-  
+
   // Stream management
   StreamSubscription? _streamSubscription;
   CancellationToken _cancellationToken = CancellationToken();
   bool _disposed = false;
-  
-  // Callbacks for state updates
+
+  // Callbacks allow loose coupling with the provider while maintaining reactivity
   void Function(StreamingState)? _onStreamingStateChanged;
   void Function(ThinkingState)? _onThinkingStateChanged;
-  
+
   // ThinkingContentProcessor instance for processing thinking content
   final ThinkingContentProcessor _thinkingContentProcessor;
-  
+
   // Error handling
   static const String _serviceName = 'MessageStreamingService';
-  
+
   MessageStreamingService({
     required OllamaService ollamaService,
     required ThinkingContentProcessor thinkingContentProcessor,
     ErrorRecoveryService? errorRecoveryService,
-  }) : _ollamaService = ollamaService,
-       _thinkingContentProcessor = thinkingContentProcessor,
-       _errorRecoveryService = errorRecoveryService;
+  })  : _ollamaService = ollamaService,
+        _thinkingContentProcessor = thinkingContentProcessor,
+        _errorRecoveryService = errorRecoveryService;
 
   // Getters
   StreamingState get streamingState => _streamingState;
@@ -71,17 +73,18 @@ class MessageStreamingService {
     bool showLiveResponse = true,
   }) async* {
     try {
-      AppLogger.info('Starting streaming message generation with model: $model');
-      
+      AppLogger.info(
+          'Starting streaming message generation with model: $model');
+
       // Reset states
       _resetStreamingStates();
-      
+
       // Initialize thinking state for new generation using injected processor
       _thinkingState = _thinkingContentProcessor.initializeThinkingState();
       _notifyThinkingStateChanged();
-      
+
       if (showLiveResponse) {
-        // Use streaming response for live updates
+        // Streaming provides better UX with live updates but uses more resources
         yield* _handleStreamingResponse(
           content: content,
           model: model,
@@ -91,7 +94,7 @@ class MessageStreamingService {
           contextLength: contextLength,
         );
       } else {
-        // Use non-streaming response for faster completion
+        // Non-streaming is faster for batch processing or when UX doesn't require live updates
         yield* _handleNonStreamingResponse(
           content: content,
           model: model,
@@ -104,10 +107,10 @@ class MessageStreamingService {
     } catch (e) {
       // Handle error with recovery service
       await _handleStreamingError(e, 'generateStreamingMessage');
-      
+
       // Reset states on error
       _resetStreamingStates();
-      
+
       rethrow;
     }
   }
@@ -128,11 +131,12 @@ class MessageStreamingService {
         displayResponse: '',
       );
       _notifyStreamingStateChanged();
-      
+
       String accumulatedResponse = '';
       List<int>? finalContext;
-      
-      await for (final streamResponse in _ollamaService.generateStreamingResponseWithContext(
+
+      await for (final streamResponse
+          in _ollamaService.generateStreamingResponseWithContext(
         content,
         model: model,
         processedFiles: processedFiles,
@@ -146,36 +150,38 @@ class MessageStreamingService {
           AppLogger.warning('Stream cancelled during generation');
           break;
         }
-        
+
         // Process response chunk
         if (streamResponse.response.isNotEmpty) {
           accumulatedResponse += streamResponse.response;
-          
+
           // Process thinking content and filter response using injected processor
-          final processedResult = _thinkingContentProcessor.processStreamingResponse(
+          final processedResult =
+              _thinkingContentProcessor.processStreamingResponse(
             fullResponse: accumulatedResponse,
             currentState: _thinkingState,
           );
-          
-          final filteredResponse = processedResult['filteredResponse'] as String;
+
+          final filteredResponse =
+              processedResult['filteredResponse'] as String;
           _thinkingState = processedResult['thinkingState'] as ThinkingState;
-          
+
           // Update streaming state
           _streamingState = _streamingState.copyWith(
             currentResponse: accumulatedResponse,
             displayResponse: filteredResponse,
           );
-          
+
           // Update thinking phase based on content
           _thinkingState = _thinkingContentProcessor.updateThinkingPhase(
             currentState: _thinkingState,
             displayResponse: filteredResponse,
           );
-          
+
           // Notify state changes
           _notifyStreamingStateChanged();
           _notifyThinkingStateChanged();
-          
+
           // Yield current state
           yield {
             'type': 'chunk',
@@ -185,7 +191,7 @@ class MessageStreamingService {
             'thinkingState': _thinkingState,
           };
         }
-        
+
         // Handle completion
         if (streamResponse.done) {
           finalContext = streamResponse.context;
@@ -193,14 +199,15 @@ class MessageStreamingService {
           break;
         }
       }
-      
+
       // Complete streaming
       _streamingState = StreamingState.completed(accumulatedResponse);
-      _thinkingState = _thinkingContentProcessor.resetThinkingState(_thinkingState);
-      
+      _thinkingState =
+          _thinkingContentProcessor.resetThinkingState(_thinkingState);
+
       _notifyStreamingStateChanged();
       _notifyThinkingStateChanged();
-      
+
       // Yield final result
       yield {
         'type': 'complete',
@@ -210,7 +217,6 @@ class MessageStreamingService {
         'streamingState': _streamingState,
         'thinkingState': _thinkingState,
       };
-      
     } catch (e) {
       AppLogger.error('Error in streaming response handling', e);
       rethrow;
@@ -228,7 +234,7 @@ class MessageStreamingService {
   }) async* {
     try {
       AppLogger.info('Using non-streaming response for faster completion');
-      
+
       // Generate complete response
       final response = await _ollamaService.generateResponseWithContext(
         content,
@@ -239,29 +245,31 @@ class MessageStreamingService {
         contextLength: contextLength,
         isCancelled: () => _cancellationToken.isCancelled,
       );
-      
+
       // Check for cancellation
       if (_cancellationToken.isCancelled) {
         AppLogger.warning('Non-streaming generation cancelled');
         return;
       }
-      
+
       // Process thinking content using injected processor
-      final processedResult = _thinkingContentProcessor.processStreamingResponse(
+      final processedResult =
+          _thinkingContentProcessor.processStreamingResponse(
         fullResponse: response.response,
         currentState: _thinkingState,
       );
-      
+
       final filteredResponse = processedResult['filteredResponse'] as String;
       _thinkingState = processedResult['thinkingState'] as ThinkingState;
-      
+
       // Update states
       _streamingState = StreamingState.completed(response.response);
-      _thinkingState = _thinkingContentProcessor.resetThinkingState(_thinkingState);
-      
+      _thinkingState =
+          _thinkingContentProcessor.resetThinkingState(_thinkingState);
+
       _notifyStreamingStateChanged();
       _notifyThinkingStateChanged();
-      
+
       // Yield complete result
       yield {
         'type': 'complete',
@@ -271,7 +279,6 @@ class MessageStreamingService {
         'streamingState': _streamingState,
         'thinkingState': _thinkingState,
       };
-      
     } catch (e) {
       AppLogger.error('Error in non-streaming response handling', e);
       rethrow;
@@ -281,13 +288,13 @@ class MessageStreamingService {
   /// Cancel current streaming operation
   void cancelStreaming() {
     if (_disposed) return;
-    
+
     AppLogger.info('Cancelling streaming operation');
-    
+
     _cancellationToken.cancel();
     _streamSubscription?.cancel();
     _streamSubscription = null;
-    
+
     // Reset states
     _resetStreamingStates();
   }
@@ -295,11 +302,11 @@ class MessageStreamingService {
   /// Reset streaming and thinking states
   void _resetStreamingStates() {
     if (_disposed) return;
-    
+
     _streamingState = StreamingState.initial();
     _thinkingState = ThinkingState.initial();
     _cancellationToken = CancellationToken();
-    
+
     _notifyStreamingStateChanged();
     _notifyThinkingStateChanged();
   }
@@ -341,7 +348,8 @@ class MessageStreamingService {
       'isStreaming': isStreaming,
       'isCancelled': isCancelled,
       'streamingState': _streamingState.toString(),
-      'thinkingStats': _thinkingContentProcessor.getThinkingStats(_thinkingState),
+      'thinkingStats':
+          _thinkingContentProcessor.getThinkingStats(_thinkingState),
       'hasActiveSubscription': _streamSubscription != null,
     };
   }
@@ -369,19 +377,19 @@ class MessageStreamingService {
     }
   }
 
-
-
   /// Validate streaming state consistency
   bool validateStreamingState() {
     try {
       // Check state consistency
       if (_streamingState.isStreaming && _streamSubscription == null) {
-        AppLogger.warning('Invalid streaming state: marked as streaming but no active subscription');
+        AppLogger.warning(
+            'Invalid streaming state: marked as streaming but no active subscription');
         return false;
       }
 
       if (_cancellationToken.isCancelled && _streamingState.isStreaming) {
-        AppLogger.warning('Invalid streaming state: cancelled but still marked as streaming');
+        AppLogger.warning(
+            'Invalid streaming state: cancelled but still marked as streaming');
         return false;
       }
 
@@ -396,13 +404,13 @@ class MessageStreamingService {
   void resetStreamingState() {
     try {
       AppLogger.info('Resetting MessageStreamingService state');
-      
+
       // Cancel any active operations
       cancelStreaming();
-      
+
       // Reset states
       _resetStreamingStates();
-      
+
       AppLogger.info('MessageStreamingService state reset completed');
     } catch (e) {
       AppLogger.error('Error resetting streaming state', e);
@@ -413,17 +421,17 @@ class MessageStreamingService {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     AppLogger.info('Disposing MessageStreamingService');
-    
+
     // Cancel streaming first
     cancelStreaming();
-    
+
     // Ensure cancellation token is cancelled
     if (!_cancellationToken.isCancelled) {
       _cancellationToken.cancel();
     }
-    
+
     // Clear callbacks to prevent further notifications
     _onStreamingStateChanged = null;
     _onThinkingStateChanged = null;

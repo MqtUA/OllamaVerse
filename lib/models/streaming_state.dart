@@ -1,5 +1,7 @@
 /// State container for streaming operations
-/// Manages the current streaming response and display state
+///
+/// Separates raw response from display response to handle thinking content
+/// filtering while maintaining the complete response for processing
 class StreamingState {
   final String currentResponse;
   final String displayResponse;
@@ -66,16 +68,16 @@ class StreamingState {
   /// Check if display content is different from current response
   bool get hasFilteredContent => currentResponse != displayResponse;
 
-  /// Validation
+  /// Validation prevents inconsistent streaming states that could confuse the UI
   bool get isValid => _validateState();
 
   bool _validateState() {
-    // If not streaming, current and display response should be the same
+    // When not streaming, both responses should match (no filtering needed)
     if (!isStreaming && currentResponse != displayResponse) {
       return false;
     }
 
-    // Display response should never be longer than current response
+    // Display response is filtered from current, so it can't be longer
     if (displayResponse.length > currentResponse.length) {
       return false;
     }

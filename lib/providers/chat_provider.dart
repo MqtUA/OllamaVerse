@@ -18,7 +18,9 @@ import '../utils/error_handler.dart';
 import '../utils/logger.dart';
 
 /// Refactored ChatProvider that orchestrates services and maintains UI state
-/// Follows clean architecture with complete separation of UI and business logic
+///
+/// This provider was refactored from a 1300+ line monolith to focus solely on
+/// UI state coordination, delegating business logic to specialized services
 class ChatProvider with ChangeNotifier {
   final ChatHistoryService _chatHistoryService;
   final SettingsProvider _settingsProvider;
@@ -29,16 +31,16 @@ class ChatProvider with ChangeNotifier {
   final FileProcessingManager _fileProcessingManager;
   final ErrorRecoveryService _errorRecoveryService;
 
-  // UI state only - business logic delegated to services
+  // Minimal UI state - all business logic is handled by injected services
   bool _isLoading = true;
   String? _error;
-  
-  // Stream subscriptions for service coordination
+
+  // Subscriptions coordinate between services and maintain UI reactivity
   StreamSubscription? _chatStateSubscription;
   StreamSubscription? _errorStateSubscription;
   bool _disposed = false;
-  
-  // Synchronization for state updates
+
+  // Prevents race conditions during rapid state changes
   bool _isUpdatingState = false;
 
   ChatProvider({
@@ -73,8 +75,7 @@ class ChatProvider with ChangeNotifier {
   bool get isProcessingFiles => _fileProcessingManager.isProcessingFiles;
 
   // Unified operation status getters
-  bool get isAnyOperationInProgress =>
-      isGenerating || isProcessingFiles;
+  bool get isAnyOperationInProgress => isGenerating || isProcessingFiles;
 
   bool get isActiveChatGenerating => isGenerating;
   bool get isActiveChatBusy => isAnyOperationInProgress;
@@ -83,41 +84,51 @@ class ChatProvider with ChangeNotifier {
   String? get error => _error;
   Map<String, FileProcessingProgress> get fileProcessingProgress =>
       _fileProcessingManager.fileProcessingProgress;
-  String get currentStreamingResponse => _messageStreamingService.streamingState.currentResponse;
-  String get currentDisplayResponse => _messageStreamingService.streamingState.displayResponse;
-  String get currentThinkingContent => _messageStreamingService.thinkingState.currentThinkingContent;
-  bool get hasActiveThinkingBubble => _messageStreamingService.thinkingState.hasActiveThinkingBubble;
-  bool get isThinkingPhase => _messageStreamingService.thinkingState.isThinkingPhase;
-  bool get isInsideThinkingBlock => _messageStreamingService.thinkingState.isInsideThinkingBlock;
-  bool get shouldScrollToBottomOnChatSwitch => _chatStateManager.shouldScrollToBottomOnChatSwitch;
+  String get currentStreamingResponse =>
+      _messageStreamingService.streamingState.currentResponse;
+  String get currentDisplayResponse =>
+      _messageStreamingService.streamingState.displayResponse;
+  String get currentThinkingContent =>
+      _messageStreamingService.thinkingState.currentThinkingContent;
+  bool get hasActiveThinkingBubble =>
+      _messageStreamingService.thinkingState.hasActiveThinkingBubble;
+  bool get isThinkingPhase =>
+      _messageStreamingService.thinkingState.isThinkingPhase;
+  bool get isInsideThinkingBlock =>
+      _messageStreamingService.thinkingState.isInsideThinkingBlock;
+  bool get shouldScrollToBottomOnChatSwitch =>
+      _chatStateManager.shouldScrollToBottomOnChatSwitch;
   SettingsProvider get settingsProvider => _settingsProvider;
   bool get isGeneratingTitle => _chatTitleGenerator.isGeneratingTitle;
-  bool isChatGeneratingTitle(String chatId) => _chatTitleGenerator.isChatGeneratingTitle(chatId);
-  bool isThinkingBubbleExpanded(String messageId) => _messageStreamingService.isThinkingBubbleExpanded(messageId);
-  void toggleThinkingBubble(String messageId) => _messageStreamingService.toggleThinkingBubble(messageId);
+  bool isChatGeneratingTitle(String chatId) =>
+      _chatTitleGenerator.isChatGeneratingTitle(chatId);
+  bool isThinkingBubbleExpanded(String messageId) =>
+      _messageStreamingService.isThinkingBubbleExpanded(messageId);
+  void toggleThinkingBubble(String messageId) =>
+      _messageStreamingService.toggleThinkingBubble(messageId);
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     // Cancel all subscriptions first to prevent further state updates
     _chatStateSubscription?.cancel();
     _chatStateSubscription = null;
     _errorStateSubscription?.cancel();
     _errorStateSubscription = null;
-    
+
     // Dispose services in reverse dependency order
     _messageStreamingService.dispose();
     _chatStateManager.dispose();
     _errorRecoveryService.dispose();
-    
+
     super.dispose();
   }
 
   void _safeNotifyListeners() {
     if (_disposed || _isUpdatingState) return;
-    
+
     _isUpdatingState = true;
     try {
       notifyListeners();
@@ -182,7 +193,7 @@ class ChatProvider with ChangeNotifier {
         'isGenerating': isGenerating,
       },
     );
-    
+
     _error = errorState.message;
     ErrorHandler.logError(logContext ?? message, error);
     _safeNotifyListeners();
@@ -238,8 +249,10 @@ class ChatProvider with ChangeNotifier {
       },
     );
 
-    _messageStreamingService.setStreamingStateCallback((_) => _safeNotifyListeners());
-    _messageStreamingService.setThinkingStateCallback((_) => _safeNotifyListeners());
+    _messageStreamingService
+        .setStreamingStateCallback((_) => _safeNotifyListeners());
+    _messageStreamingService
+        .setThinkingStateCallback((_) => _safeNotifyListeners());
   }
 
   /// Update error state based on service error states
@@ -275,22 +288,23 @@ class ChatProvider with ChangeNotifier {
     _safeNotifyListeners();
   }
 
-  List<Message> get displayableMessages => _chatStateManager.displayableMessages;
+  List<Message> get displayableMessages =>
+      _chatStateManager.displayableMessages;
 
   Future<void> createNewChat([String? modelName]) async {
     try {
       cancelGeneration();
-      
+
       final selectedModel = _modelManager.getModelForNewChat(modelName);
       await _modelManager.setSelectedModel(selectedModel);
 
       final systemPrompt = _settingsProvider.settings.systemPrompt;
-      
+
       await _chatStateManager.createNewChat(
         modelName: selectedModel,
         systemPrompt: systemPrompt.isNotEmpty ? systemPrompt : null,
       );
-      
+
       _safeNotifyListeners();
     } catch (e) {
       _handleError('Failed to create new chat', e, 'Error creating new chat');
@@ -337,7 +351,8 @@ class ChatProvider with ChangeNotifier {
       }
       _safeNotifyListeners();
     } catch (e) {
-      _handleError('Failed to update chat system prompt', e, 'Error updating chat system prompt');
+      _handleError('Failed to update chat system prompt', e,
+          'Error updating chat system prompt');
     }
   }
 
@@ -378,7 +393,8 @@ class ChatProvider with ChangeNotifier {
       }
       _safeNotifyListeners();
     } catch (e) {
-      _handleError('Failed to update system prompt for all chats', e, 'Error updating system prompt for all chats');
+      _handleError('Failed to update system prompt for all chats', e,
+          'Error updating system prompt for all chats');
     }
   }
 
@@ -398,7 +414,8 @@ class ChatProvider with ChangeNotifier {
     try {
       await _chatStateManager.updateChatTitle(chatId, newTitle);
     } catch (e) {
-      _handleError('Failed to update chat title', e, 'Error updating chat title');
+      _handleError(
+          'Failed to update chat title', e, 'Error updating chat title');
       return;
     }
     _safeNotifyListeners();
@@ -410,7 +427,8 @@ class ChatProvider with ChangeNotifier {
       await _chatStateManager.updateChatModel(chatId, newModelName);
       _safeNotifyListeners();
     } catch (e) {
-      _handleError('Failed to update chat model', e, 'Error updating chat model');
+      _handleError(
+          'Failed to update chat model', e, 'Error updating chat model');
     }
   }
 
@@ -429,7 +447,8 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String content, {List<String>? attachedFiles}) async {
+  Future<void> sendMessage(String content,
+      {List<String>? attachedFiles}) async {
     if (activeChat == null) {
       _error = 'No active chat';
       _safeNotifyListeners();
@@ -440,7 +459,8 @@ class ChatProvider with ChangeNotifier {
       // Process attached files if any
       List<ProcessedFile> processedFiles = [];
       if (attachedFiles != null && attachedFiles.isNotEmpty) {
-        processedFiles = await _fileProcessingManager.processFiles(attachedFiles);
+        processedFiles =
+            await _fileProcessingManager.processFiles(attachedFiles);
       }
 
       // Create user message
@@ -462,7 +482,8 @@ class ChatProvider with ChangeNotifier {
       await _chatStateManager.updateChat(updatedChat);
 
       // Generate AI response using streaming service
-      await for (final streamResult in _messageStreamingService.generateStreamingMessage(
+      await for (final streamResult
+          in _messageStreamingService.generateStreamingMessage(
         content: content,
         model: activeChat!.modelName,
         conversationHistory: activeChat!.messages,
@@ -502,7 +523,7 @@ class ChatProvider with ChangeNotifier {
           break;
         }
       }
-      
+
       _safeNotifyListeners();
     } catch (e) {
       _handleError('Failed to send message', e, 'Error sending message');
@@ -576,7 +597,7 @@ class ChatProvider with ChangeNotifier {
           aiResponse: aiResponseContent,
           modelName: chat.modelName,
         );
-        
+
         if (newTitle.isNotEmpty && newTitle != chat.title) {
           await updateChatTitle(chat.id, newTitle);
         }
@@ -588,13 +609,15 @@ class ChatProvider with ChangeNotifier {
 
   /// Validate system prompt support for the current model
   Future<Map<String, dynamic>> validateCurrentModelSystemPromptSupport() async {
-    final currentModel = activeChat?.modelName ?? _modelManager.lastSelectedModel;
+    final currentModel =
+        activeChat?.modelName ?? _modelManager.lastSelectedModel;
     if (currentModel.isEmpty) {
       return {
         'supported': true,
         'modelName': 'unknown',
         'fallbackMethod': 'native',
-        'recommendation': 'No model selected. System prompt support cannot be determined.',
+        'recommendation':
+            'No model selected. System prompt support cannot be determined.',
       };
     }
 
@@ -605,7 +628,8 @@ class ChatProvider with ChangeNotifier {
       }
 
       final ollamaService = _settingsProvider.getOllamaService();
-      final validation = await ollamaService.validateSystemPromptSupport(currentModel);
+      final validation =
+          await ollamaService.validateSystemPromptSupport(currentModel);
       return validation;
     } catch (e) {
       AppLogger.error('Error validating system prompt support', e);
@@ -613,7 +637,8 @@ class ChatProvider with ChangeNotifier {
         'supported': true, // Default to supported
         'modelName': currentModel,
         'fallbackMethod': 'native',
-        'recommendation': 'Unable to validate system prompt support. Assuming native support.',
+        'recommendation':
+            'Unable to validate system prompt support. Assuming native support.',
         'error': e.toString(),
       };
     }
@@ -621,7 +646,8 @@ class ChatProvider with ChangeNotifier {
 
   /// Get system prompt handling strategy for current model
   String getCurrentModelSystemPromptStrategy() {
-    final currentModel = activeChat?.modelName ?? _modelManager.lastSelectedModel;
+    final currentModel =
+        activeChat?.modelName ?? _modelManager.lastSelectedModel;
     if (currentModel.isEmpty) return 'native';
 
     try {
@@ -643,17 +669,17 @@ class ChatProvider with ChangeNotifier {
   Map<String, dynamic> getErrorRecoveryStatus() {
     final serviceErrors = _errorRecoveryService.currentErrorStates;
     final systemHealth = _errorRecoveryService.getSystemHealth();
-    
+
     return {
       'systemHealth': systemHealth.name,
       'serviceErrors': serviceErrors.map((key, value) => MapEntry(key, {
-        'errorType': value.errorType.name,
-        'message': value.message,
-        'canRetry': value.canRetry,
-        'severity': value.severity.name,
-        'isRecent': value.isRecent,
-        'operation': value.operation,
-      })),
+            'errorType': value.errorType.name,
+            'message': value.message,
+            'canRetry': value.canRetry,
+            'severity': value.severity.name,
+            'isRecent': value.isRecent,
+            'operation': value.operation,
+          })),
       'hasActiveErrors': serviceErrors.isNotEmpty,
       'errorCount': serviceErrors.length,
     };
@@ -693,7 +719,7 @@ class ChatProvider with ChangeNotifier {
   Map<String, String> getServiceHealthStatus() {
     final services = [
       'ModelManager',
-      'MessageStreamingService', 
+      'MessageStreamingService',
       'ChatStateManager',
       'FileProcessingManager',
       'ChatTitleGenerator',
@@ -701,9 +727,9 @@ class ChatProvider with ChangeNotifier {
 
     return Map.fromEntries(
       services.map((service) => MapEntry(
-        service,
-        _errorRecoveryService.getServiceHealth(service).name,
-      )),
+            service,
+            _errorRecoveryService.getServiceHealth(service).name,
+          )),
     );
   }
 
@@ -713,16 +739,16 @@ class ChatProvider with ChangeNotifier {
       final modelManagerValid = _modelManager.validateState();
       final chatStateValid = _chatStateManager.validateState();
       final streamingValid = _messageStreamingService.validateStreamingState();
-      
+
       final allValid = modelManagerValid && chatStateValid && streamingValid;
-      
+
       if (!allValid) {
         AppLogger.warning('Service state validation failed: '
-          'ModelManager=$modelManagerValid, '
-          'ChatState=$chatStateValid, '
-          'Streaming=$streamingValid');
+            'ModelManager=$modelManagerValid, '
+            'ChatState=$chatStateValid, '
+            'Streaming=$streamingValid');
       }
-      
+
       return allValid;
     } catch (e) {
       AppLogger.error('Error validating service states', e);
@@ -734,23 +760,23 @@ class ChatProvider with ChangeNotifier {
   Future<void> resetAllServiceStates() async {
     try {
       AppLogger.info('Resetting all service states');
-      
+
       // Cancel any ongoing operations
       cancelGeneration();
-      
+
       // Reset individual service states
       _modelManager.resetState();
       _chatStateManager.resetState();
       _messageStreamingService.resetStreamingState();
-      
+
       // Clear error recovery state
       _errorRecoveryService.clearAllErrors();
-      
+
       // Reset provider state
       _error = null;
-      
+
       _safeNotifyListeners();
-      
+
       AppLogger.info('All service states reset completed');
     } catch (e) {
       AppLogger.error('Error resetting service states', e);

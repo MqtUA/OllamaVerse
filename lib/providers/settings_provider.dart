@@ -108,4 +108,10 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
   Future<void> setLastSelectedModel(String modelName) async {
     await _storageService.saveLastSelectedModel(modelName);
   }
+
+  /// Refresh settings and notify listeners
+  /// This method provides a clean way to trigger UI updates when needed
+  void refreshSettings() {
+    _safeNotifyListeners();
+  }
 }

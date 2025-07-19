@@ -132,7 +132,8 @@ class _UnifiedThinkingBubbleState extends State<UnifiedThinkingBubble>
       final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
 
       // Initialize expansion state based on settings
-      if (chatProvider != null && !chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
+      if (chatProvider != null &&
+          !chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
         if (settings.thinkingBubbleDefaultExpanded) {
           chatProvider.toggleThinkingBubble(widget.bubbleId!);
         }

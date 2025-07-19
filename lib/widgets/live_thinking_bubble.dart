@@ -50,7 +50,8 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
       final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
 
       // Initialize the expansion state in ChatProvider if not already set
-      if (chatProvider != null && !chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId)) {
+      if (chatProvider != null &&
+          !chatProvider.isThinkingBubbleExpanded(_liveThinkingBubbleId)) {
         if (settings.thinkingBubbleDefaultExpanded) {
           chatProvider.toggleThinkingBubble(_liveThinkingBubbleId);
         }
@@ -58,7 +59,8 @@ class _LiveThinkingBubbleState extends State<LiveThinkingBubble>
 
       // Set animation state based on ChatProvider state
       final isExpanded =
-          chatProvider?.isThinkingBubbleExpanded(_liveThinkingBubbleId) ?? false;
+          chatProvider?.isThinkingBubbleExpanded(_liveThinkingBubbleId) ??
+              false;
       if (isExpanded) {
         _animationController.forward();
       }

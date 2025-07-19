@@ -11,49 +11,54 @@ abstract class IFileProcessingManager {
     List<String> filePaths, {
     CancellationToken? cancellationToken,
   });
-  
+
   /// Process a single file with progress tracking
   Future<ProcessedFile> processFile(
     String filePath, {
     CancellationToken? cancellationToken,
   });
-  
+
   /// Get current file processing progress
   Map<String, FileProcessingProgress> get fileProcessingProgress;
-  
+
   /// Check if file processing is in progress
   bool get isProcessingFiles;
-  
+
   /// Clear processing state and progress data
   void clearProcessingState();
 }
 
 /// Service responsible for managing file attachment processing with progress tracking and cancellation support
+///
+/// This service provides a clean interface for file processing while handling
+/// progress updates and cancellation to improve user experience during long operations
 class FileProcessingManager implements IFileProcessingManager {
   // Dependencies
   final FileContentProcessor _fileContentProcessor;
-  
-  // File processing state
+
+  // State tracking prevents concurrent processing and provides progress visibility
   bool _isProcessingFiles = false;
   final Map<String, FileProcessingProgress> _fileProcessingProgress = {};
   bool _disposed = false;
-  
-  // Stream controllers for progress updates
-  final _progressController = StreamController<Map<String, FileProcessingProgress>>.broadcast();
-  
+
+  // Broadcast stream allows multiple listeners to track progress updates
+  final _progressController =
+      StreamController<Map<String, FileProcessingProgress>>.broadcast();
+
   /// Constructor with dependency injection
   FileProcessingManager({
     required FileContentProcessor fileContentProcessor,
   }) : _fileContentProcessor = fileContentProcessor;
-  
+
   /// Stream of file processing progress updates
-  Stream<Map<String, FileProcessingProgress>> get progressStream => _progressController.stream;
-  
+  Stream<Map<String, FileProcessingProgress>> get progressStream =>
+      _progressController.stream;
+
   /// Get current file processing progress
   @override
-  Map<String, FileProcessingProgress> get fileProcessingProgress => 
+  Map<String, FileProcessingProgress> get fileProcessingProgress =>
       Map.unmodifiable(_fileProcessingProgress);
-  
+
   /// Check if file processing is in progress
   @override
   bool get isProcessingFiles => _isProcessingFiles;
@@ -67,20 +72,21 @@ class FileProcessingManager implements IFileProcessingManager {
     if (filePaths.isEmpty) {
       return [];
     }
-    
+
     if (_isProcessingFiles) {
       throw StateError('File processing is already in progress');
     }
-    
+
     try {
       _isProcessingFiles = true;
       _fileProcessingProgress.clear();
       _notifyProgressListeners();
-      
+
       AppLogger.info('Processing ${filePaths.length} attached files');
-      
-      final effectiveCancellationToken = cancellationToken ?? CancellationToken();
-      
+
+      final effectiveCancellationToken =
+          cancellationToken ?? CancellationToken();
+
       final processedFiles = await _fileContentProcessor.processFiles(
         filePaths,
         onProgress: (progress) {
@@ -89,7 +95,7 @@ class FileProcessingManager implements IFileProcessingManager {
         },
         isCancelled: () => effectiveCancellationToken.isCancelled,
       );
-      
+
       AppLogger.info('Successfully processed ${processedFiles.length} files');
       return processedFiles;
     } catch (e) {
@@ -101,7 +107,7 @@ class FileProcessingManager implements IFileProcessingManager {
       _notifyProgressListeners();
     }
   }
-  
+
   /// Process a single file with progress tracking and cancellation support
   @override
   Future<ProcessedFile> processFile(
@@ -112,11 +118,12 @@ class FileProcessingManager implements IFileProcessingManager {
       _isProcessingFiles = true;
       _fileProcessingProgress.clear();
       _notifyProgressListeners();
-      
+
       AppLogger.info('Processing file: $filePath');
-      
-      final effectiveCancellationToken = cancellationToken ?? CancellationToken();
-      
+
+      final effectiveCancellationToken =
+          cancellationToken ?? CancellationToken();
+
       final processedFile = await _fileContentProcessor.processFile(
         filePath,
         onProgress: (progress) {
@@ -125,7 +132,7 @@ class FileProcessingManager implements IFileProcessingManager {
         },
         isCancelled: () => effectiveCancellationToken.isCancelled,
       );
-      
+
       AppLogger.info('Successfully processed file: ${processedFile.fileName}');
       return processedFile;
     } catch (e) {
@@ -137,7 +144,7 @@ class FileProcessingManager implements IFileProcessingManager {
       _notifyProgressListeners();
     }
   }
-  
+
   /// Clear processing state and progress data
   @override
   void clearProcessingState() {
@@ -145,22 +152,22 @@ class FileProcessingManager implements IFileProcessingManager {
     _fileProcessingProgress.clear();
     _notifyProgressListeners();
   }
-  
+
   /// Notify progress listeners of updates
   void _notifyProgressListeners() {
     if (!_disposed && !_progressController.isClosed) {
       _progressController.add(Map.from(_fileProcessingProgress));
     }
   }
-  
+
   /// Dispose resources
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    
+
     // Clear processing state
     clearProcessingState();
-    
+
     // Close stream controller
     if (!_progressController.isClosed) {
       _progressController.close();
@@ -171,9 +178,9 @@ class FileProcessingManager implements IFileProcessingManager {
 /// Exception thrown when file processing fails
 class FileProcessingException implements Exception {
   final String message;
-  
+
   FileProcessingException(this.message);
-  
+
   @override
   String toString() => 'FileProcessingException: $message';
 }

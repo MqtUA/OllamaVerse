@@ -83,8 +83,7 @@ class Message {
       processedFiles.any((file) => file.type == FileType.image);
 
   /// Check if this message has text content
-  bool get hasTextContent =>
-      processedFiles.any((file) => file.hasTextContent);
+  bool get hasTextContent => processedFiles.any((file) => file.hasTextContent);
 
   /// Check if this message has text files (PDFs, documents, etc.)
   bool get hasTextFiles => processedFiles.any((file) => file.hasTextContent);
