@@ -9,6 +9,7 @@ import '../services/file_cleanup_service.dart';
 import '../services/file_content_cache.dart';
 import '../services/performance_monitor.dart';
 import '../widgets/simple_theme_switch.dart';
+import '../widgets/generation_settings_widget.dart';
 
 /// Helper widget to handle nullable ChatProvider
 class SafeChatConsumer extends StatelessWidget {
@@ -511,6 +512,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Generation Settings Section
+              const GenerationSettingsWidget(),
 
               const SizedBox(height: 16),
 

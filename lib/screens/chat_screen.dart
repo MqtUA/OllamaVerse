@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/message.dart';
+import '../models/chat.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/file_utils.dart';
@@ -15,6 +16,8 @@ import '../widgets/typing_indicator.dart';
 import '../widgets/thinking_bubble.dart';
 import '../widgets/thinking_indicator.dart';
 import '../widgets/live_thinking_bubble.dart';
+import '../widgets/chat_generation_settings_dialog.dart';
+import '../widgets/generation_settings_indicator.dart';
 import '../theme/dracula_theme.dart';
 import '../theme/material_light_theme.dart';
 
@@ -339,6 +342,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // Show dialog to configure generation settings for a chat
+  void _showGenerationSettingsDialog(Chat chat) {
+    showDialog(
+      context: context,
+      builder: (context) => ChatGenerationSettingsDialog(chat: chat),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
@@ -366,6 +377,21 @@ class _ChatScreenState extends State<ChatScreen> {
                         Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
+                // Generation settings indicator
+                if (activeChat != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Consumer<SettingsProvider>(
+                      builder: (context, settingsProvider, child) {
+                        return GenerationSettingsIndicator(
+                          chat: activeChat,
+                          globalSettings: settingsProvider.settings.generationSettings,
+                          compact: true,
+                          onTap: () => _showGenerationSettingsDialog(activeChat),
+                        );
+                      },
+                    ),
+                  ),
                 if (activeChat != null &&
                     chatProvider.isChatGeneratingTitle(activeChat.id))
                   Padding(
@@ -398,6 +424,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   tooltip: 'Chat options',
                   itemBuilder: (context) => [
                     const PopupMenuItem<String>(
+                      value: 'generation_settings',
+                      child: Row(
+                        children: [
+                          Icon(Icons.tune),
+                          SizedBox(width: 8),
+                          Text('Generation Settings'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
                       value: 'rename',
                       child: Row(
                         children: [
@@ -422,7 +458,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ],
                   onSelected: (value) {
-                    if (value == 'rename') {
+                    if (value == 'generation_settings') {
+                      _showGenerationSettingsDialog(activeChat);
+                    } else if (value == 'rename') {
                       _showRenameChatDialog(activeChat.id, activeChat.title);
                     } else if (value == 'delete') {
                       _showDeleteChatDialog(activeChat.id);
