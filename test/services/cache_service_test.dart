@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ollamaverse/services/cache_service.dart';
 
 void main() {
@@ -6,6 +7,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    // Mock SharedPreferences for testing
+    SharedPreferences.setMockInitialValues({});
     await CacheService.init();
   });
 

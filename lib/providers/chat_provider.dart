@@ -559,6 +559,7 @@ class ChatProvider with ChangeNotifier {
       _safeNotifyListeners();
     } catch (e) {
       AppLogger.error('Error refreshing models', e);
+      _error = e.toString();
       _safeNotifyListeners();
     }
   }

@@ -41,7 +41,7 @@ void main() {
 
   final testModels = ['llama2', 'mistral'];
 
-  setUp(() {
+  setUp(() async {
     mockOllamaService = MockOllamaServiceTest();
     mockChatHistoryService = MockChatHistoryServiceTest();
     mockSettingsProvider = MockSettingsProviderTest();
@@ -105,6 +105,33 @@ void main() {
       thinkingContentProcessor: thinkingContentProcessor,
       errorRecoveryService: errorRecoveryService,
     );
+    
+    // Initialize the model manager with test models
+    await modelManager.refreshModels();
+    
+    // Reset mock call counts after initialization
+    reset(mockOllamaService);
+    
+    // Re-setup the mock behavior after reset
+    when(mockOllamaService.getModels()).thenAnswer((_) async => testModels);
+    when(mockOllamaService.validateSystemPromptSupport(any)).thenAnswer((_) async => {
+      'supported': true,
+      'modelName': 'llama2',
+      'fallbackMethod': 'native',
+      'recommendation': 'Model supports system prompts natively.',
+    });
+    when(mockOllamaService.getSystemPromptStrategy(any)).thenReturn('native');
+    
+    // Setup default mock for generateResponseWithContext
+    when(mockOllamaService.generateResponseWithContext(
+      any,
+      model: anyNamed('model'),
+      processedFiles: anyNamed('processedFiles'),
+      context: anyNamed('context'),
+      conversationHistory: anyNamed('conversationHistory'),
+      contextLength: anyNamed('contextLength'),
+      isCancelled: anyNamed('isCancelled'),
+    )).thenAnswer((_) async => OllamaResponse(response: 'Test response', context: []));
   });
 
   group('ChatProvider', () {
