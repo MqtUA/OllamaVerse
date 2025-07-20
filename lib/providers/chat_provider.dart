@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
 import '../models/processed_file.dart';
+import '../models/generation_settings.dart';
 import '../services/chat_history_service.dart';
 import '../services/model_manager.dart';
 import '../services/chat_state_manager.dart';
@@ -429,6 +430,22 @@ class ChatProvider with ChangeNotifier {
     } catch (e) {
       _handleError(
           'Failed to update chat model', e, 'Error updating chat model');
+    }
+  }
+
+  Future<void> updateChatGenerationSettings(String chatId, GenerationSettings? customSettings) async {
+    try {
+      final chat = _chatHistoryService.chats.where((c) => c.id == chatId).firstOrNull;
+      if (chat == null) {
+        throw Exception('Chat not found');
+      }
+
+      final updatedChat = chat.copyWith(customGenerationSettings: customSettings);
+      await _chatStateManager.updateChat(updatedChat);
+      _safeNotifyListeners();
+    } catch (e) {
+      _handleError(
+          'Failed to update chat generation settings', e, 'Error updating chat settings');
     }
   }
 
