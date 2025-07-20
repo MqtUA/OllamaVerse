@@ -207,6 +207,29 @@ class StorageService {
     }
   }
 
+  /// Store a double value (regular storage)
+  Future<void> setDouble(String key, double value) async {
+    try {
+      await _preferences.setDouble(key, value);
+      AppLogger.debug('Stored double value for key: $key');
+    } catch (e) {
+      AppLogger.error('Error storing double value for key: $key', e);
+      rethrow;
+    }
+  }
+
+  /// Get a double value (regular storage)
+  double? getDouble(String key, {double? defaultValue}) {
+    try {
+      final value = _preferences.getDouble(key) ?? defaultValue;
+      AppLogger.debug('Retrieved double value for key: $key');
+      return value;
+    } catch (e) {
+      AppLogger.error('Error retrieving double value for key: $key', e);
+      return defaultValue;
+    }
+  }
+
   /// Store a secure string value (secure storage)
   Future<void> setSecureString(String key, String value) async {
     try {

@@ -3,6 +3,7 @@ import '../models/app_settings.dart';
 import '../services/storage_service.dart';
 import '../services/ollama_service.dart';
 import '../services/model_manager.dart';
+import '../services/settings_validation_service.dart';
 import '../utils/logger.dart';
 
 class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
@@ -59,7 +60,10 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
     bool? darkMode,
+    bool validateSettings = true,
   }) async {
+    final oldSettings = _settings;
+    
     _settings = _settings.copyWith(
       ollamaHost: ollamaHost,
       ollamaPort: ollamaPort,
@@ -71,6 +75,25 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
       thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
       darkMode: darkMode,
     );
+
+    // Validate settings if requested
+    if (validateSettings) {
+      final validation = SettingsValidationService.validateAllSettings(_settings);
+      if (!(validation['isValid'] as bool)) {
+        final errors = validation['errors'] as List<String>;
+        AppLogger.warning('Settings validation failed: ${errors.join(', ')}');
+        
+        // Auto-fix critical issues
+        _settings = SettingsValidationService.autoFixSettings(_settings);
+        AppLogger.info('Applied auto-fixes to settings');
+      }
+      
+      // Log migration recommendations
+      final recommendations = SettingsValidationService.getMigrationRecommendations(oldSettings, _settings);
+      if (recommendations.isNotEmpty) {
+        AppLogger.info('Settings migration recommendations: ${recommendations.join(', ')}');
+      }
+    }
 
     if (authToken != null) {
       _authToken = authToken;
@@ -113,5 +136,37 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
   /// This method provides a clean way to trigger UI updates when needed
   void refreshSettings() {
     _safeNotifyListeners();
+  }
+
+  /// Get settings validation results
+  Map<String, dynamic> validateCurrentSettings() {
+    return SettingsValidationService.validateAllSettings(_settings);
+  }
+
+  /// Get settings health score (0-100)
+  int getSettingsHealthScore() {
+    return SettingsValidationService.getSettingsHealthScore(_settings);
+  }
+
+  /// Get settings status string
+  String getSettingsStatus() {
+    return SettingsValidationService.getSettingsStatus(_settings);
+  }
+
+  /// Auto-fix settings issues
+  Future<void> autoFixSettings() async {
+    final oldSettings = _settings;
+    _settings = SettingsValidationService.autoFixSettings(_settings);
+    
+    if (_settings != oldSettings) {
+      await _storageService.saveSettings(_settings);
+      _safeNotifyListeners();
+      AppLogger.info('Settings auto-fixed and saved');
+    }
+  }
+
+  /// Check if existing chats should be updated with new settings
+  bool shouldUpdateExistingChats(AppSettings oldSettings) {
+    return SettingsValidationService.shouldUpdateExistingChats(oldSettings, _settings);
   }
 }

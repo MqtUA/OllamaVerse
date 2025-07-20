@@ -6,6 +6,7 @@ import '../models/processed_file.dart';
 import '../models/ollama_response.dart';
 import '../models/message.dart';
 import '../services/model_capability_service.dart';
+import '../services/ollama_optimization_service.dart';
 import '../utils/logger.dart';
 
 /// Custom exception for Ollama API errors
@@ -44,9 +45,10 @@ class OllamaService {
 
   bool _isDisposed = false;
 
-  // Connection timeout for Android devices
-  static const Duration _connectionTimeout = Duration(seconds: 30);
-  static const Duration _receiveTimeout = Duration(seconds: 60);
+  // Connection timeout for Android devices - optimized for better responsiveness
+  static const Duration _connectionTimeout = Duration(seconds: 15);
+  static const Duration _receiveTimeout = Duration(seconds: 120);
+  static const Duration _streamTimeout = Duration(seconds: 300); // Longer for streaming
 
   OllamaService({
     required AppSettings settings,
@@ -69,6 +71,22 @@ class OllamaService {
     }
 
     return headers;
+  }
+
+  /// Get optimized options using the optimization service
+  Map<String, dynamic> _getOptimizedOptions({
+    required String modelName,
+    int? contextLength,
+    bool isStreaming = false,
+    String operationType = 'generate',
+  }) {
+    return OllamaOptimizationService.getOptimizedOptions(
+      modelName: modelName,
+      settings: _settings,
+      isStreaming: isStreaming,
+      operationType: operationType,
+      contextLength: contextLength,
+    );
   }
 
   Future<T> _makeRequest<T>(
@@ -188,11 +206,15 @@ class OllamaService {
         'stream': false,
       };
 
-      // Add context length if specified
-      if (contextLength != null && contextLength > 0) {
-        requestBody['options'] = {
-          'num_ctx': contextLength,
-        };
+      // Add optimized options
+      final options = _getOptimizedOptions(
+        modelName: modelName,
+        contextLength: contextLength,
+        isStreaming: false,
+        operationType: capabilities.supportsVision ? 'chat' : 'generate',
+      );
+      if (options.isNotEmpty) {
+        requestBody['options'] = options;
       }
 
       // Handle vision models with images
@@ -470,11 +492,15 @@ class OllamaService {
           'stream': true,
         };
 
-        // Add context length if specified
-        if (contextLength != null && contextLength > 0) {
-          requestBody['options'] = {
-            'num_ctx': contextLength,
-          };
+        // Add optimized streaming options
+        final options = _getOptimizedOptions(
+          modelName: modelName,
+          contextLength: contextLength,
+          isStreaming: true,
+          operationType: 'chat',
+        );
+        if (options.isNotEmpty) {
+          requestBody['options'] = options;
         }
 
         request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
@@ -523,11 +549,15 @@ class OllamaService {
           'stream': true,
         };
 
-        // Add context length if specified
-        if (contextLength != null && contextLength > 0) {
-          requestBody['options'] = {
-            'num_ctx': contextLength,
-          };
+        // Add optimized generate options
+        final options = _getOptimizedOptions(
+          modelName: modelName,
+          contextLength: contextLength,
+          isStreaming: true,
+          operationType: 'generate',
+        );
+        if (options.isNotEmpty) {
+          requestBody['options'] = options;
         }
 
         // Add context if available for conversation memory
@@ -640,6 +670,27 @@ class OllamaService {
     return capabilities.supportsSystemPrompts
         ? 'native'
         : 'instruction-prepend';
+  }
+
+  /// Get performance recommendations for current settings and model
+  Map<String, dynamic> getPerformanceRecommendations(String modelName) {
+    return OllamaOptimizationService.getPerformanceRecommendations(
+      modelName: modelName,
+      settings: _settings,
+    );
+  }
+
+  /// Validate current settings for optimal performance
+  bool validateSettingsForModel(String modelName) {
+    return OllamaOptimizationService.validateSettings(
+      modelName: modelName,
+      settings: _settings,
+    );
+  }
+
+  /// Get recommended context length for a model
+  int getRecommendedContextLength(String modelName) {
+    return OllamaOptimizationService.getRecommendedContextLength(modelName);
   }
 
   void dispose() {

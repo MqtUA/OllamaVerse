@@ -514,6 +514,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               const SizedBox(height: 16),
 
+              // Settings Diagnostics Section (only in debug builds)
+              if (kDebugMode) ...[
+                Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Settings Diagnostics',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Settings health indicator
+                        Consumer<SettingsProvider>(
+                          builder: (context, settingsProvider, child) {
+                            final healthScore = settingsProvider.getSettingsHealthScore();
+                            final status = settingsProvider.getSettingsStatus();
+                            final validation = settingsProvider.validateCurrentSettings();
+                            
+                            Color statusColor;
+                            IconData statusIcon;
+                            
+                            if (healthScore >= 90) {
+                              statusColor = Colors.green;
+                              statusIcon = Icons.check_circle;
+                            } else if (healthScore >= 75) {
+                              statusColor = Colors.blue;
+                              statusIcon = Icons.info;
+                            } else if (healthScore >= 60) {
+                              statusColor = Colors.orange;
+                              statusIcon = Icons.warning;
+                            } else {
+                              statusColor = Colors.red;
+                              statusIcon = Icons.error;
+                            }
+                            
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 8.0),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(statusIcon, color: statusColor, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Settings Health: $status ($healthScore/100)',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if ((validation['errors'] as List).isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Text('Errors:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+                                      for (final error in validation['errors'] as List<String>)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 16.0),
+                                          child: Text('• $error', style: const TextStyle(color: Colors.red, fontSize: 12)),
+                                        ),
+                                    ],
+                                    if ((validation['warnings'] as List).isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Text('Warnings:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.orange)),
+                                      for (final warning in validation['warnings'] as List<String>)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 16.0),
+                                          child: Text('• $warning', style: const TextStyle(color: Colors.orange, fontSize: 12)),
+                                        ),
+                                    ],
+                                    if ((validation['recommendations'] as List).isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      const Text('Recommendations:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blue)),
+                                      for (final rec in validation['recommendations'] as List<String>)
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 16.0),
+                                          child: Text('• $rec', style: const TextStyle(color: Colors.blue, fontSize: 12)),
+                                        ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        // Auto-fix button
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+                              await settingsProvider.autoFixSettings();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Settings auto-fixed'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.auto_fix_high, size: 16),
+                            label: const Text('Auto-Fix Issues'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // Performance Settings Section (only in debug builds)
               if (kDebugMode) ...[
                 Card(

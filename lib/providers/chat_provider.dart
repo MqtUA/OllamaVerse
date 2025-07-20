@@ -686,6 +686,46 @@ class ChatProvider with ChangeNotifier {
     };
   }
 
+  /// Validate settings for current model and provide recommendations
+  Future<Map<String, dynamic>> validateSettingsForCurrentModel() async {
+    final currentModel = activeChat?.modelName ?? _modelManager.lastSelectedModel;
+    if (currentModel.isEmpty) {
+      return {
+        'isValid': true,
+        'recommendations': ['No model selected for validation'],
+        'modelName': 'unknown',
+      };
+    }
+
+    try {
+      // Wait for settings to be ready
+      while (_settingsProvider.isLoading) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
+      final ollamaService = _settingsProvider.getOllamaService();
+      final recommendations = ollamaService.getPerformanceRecommendations(currentModel);
+      final isValid = ollamaService.validateSettingsForModel(currentModel);
+      final recommendedContext = ollamaService.getRecommendedContextLength(currentModel);
+
+      return {
+        'isValid': isValid,
+        'modelName': currentModel,
+        'recommendedContextLength': recommendedContext,
+        'currentContextLength': _settingsProvider.settings.contextLength,
+        'recommendations': recommendations,
+      };
+    } catch (e) {
+      AppLogger.error('Error validating settings for model', e);
+      return {
+        'isValid': false,
+        'error': e.toString(),
+        'modelName': currentModel,
+        'recommendations': ['Unable to validate settings due to an error'],
+      };
+    }
+  }
+
   /// Manually trigger error recovery for a specific service
   Future<bool> recoverService(String serviceName) async {
     try {
