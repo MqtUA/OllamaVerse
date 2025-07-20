@@ -51,11 +51,21 @@ class StorageService {
       final settingsJson = _preferences.getString(_settingsKey);
       if (settingsJson != null) {
         final settingsMap = jsonDecode(settingsJson) as Map<String, dynamic>;
+        
+        // Handle migration from old settings format
+        final migratedSettings = _migrateSettingsIfNeeded(settingsMap);
+        
         AppLogger.debug('Loaded settings from storage');
-        return AppSettings.fromJson(settingsMap);
+        return AppSettings.fromJson(migratedSettings);
       }
     } catch (e) {
       AppLogger.error('Error loading settings', e);
+      
+      // Handle corrupted settings data
+      if (e is FormatException) {
+        AppLogger.warning('Settings data appears corrupted, resetting to defaults');
+        await _resetCorruptedSettings();
+      }
     }
 
     // Return default settings if loading fails
@@ -353,6 +363,187 @@ class StorageService {
     } catch (e) {
       AppLogger.error('Error getting secure storage stats', e);
       return {
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // === MIGRATION AND ERROR HANDLING ===
+
+  /// Migrate settings from old format to new format with GenerationSettings
+  Map<String, dynamic> _migrateSettingsIfNeeded(Map<String, dynamic> settingsMap) {
+    try {
+      // Check if generationSettings already exists
+      if (settingsMap.containsKey('generationSettings')) {
+        // Settings already have generation settings, validate structure
+        final generationSettings = settingsMap['generationSettings'];
+        if (generationSettings is Map<String, dynamic>) {
+          // Ensure all required fields exist with defaults
+          final migratedGenerationSettings = _ensureGenerationSettingsDefaults(generationSettings);
+          settingsMap['generationSettings'] = migratedGenerationSettings;
+        } else {
+          // Invalid generation settings, use defaults
+          AppLogger.warning('Invalid generationSettings format, using defaults');
+          settingsMap['generationSettings'] = _getDefaultGenerationSettings();
+        }
+      } else {
+        // Old format without generation settings, add defaults
+        AppLogger.info('Migrating settings to include generation settings');
+        settingsMap['generationSettings'] = _getDefaultGenerationSettings();
+      }
+
+      return settingsMap;
+    } catch (e) {
+      AppLogger.error('Error during settings migration', e);
+      // Return original settings with default generation settings
+      settingsMap['generationSettings'] = _getDefaultGenerationSettings();
+      return settingsMap;
+    }
+  }
+
+  /// Ensure generation settings have all required fields with defaults
+  Map<String, dynamic> _ensureGenerationSettingsDefaults(Map<String, dynamic> generationSettings) {
+    final defaults = _getDefaultGenerationSettings();
+    
+    // Merge with defaults, keeping existing values where valid
+    final result = Map<String, dynamic>.from(defaults);
+    
+    for (final entry in generationSettings.entries) {
+      if (defaults.containsKey(entry.key)) {
+        // Validate the value type and range
+        final validatedValue = _validateGenerationSettingValue(entry.key, entry.value);
+        if (validatedValue != null) {
+          result[entry.key] = validatedValue;
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /// Get default generation settings as Map
+  Map<String, dynamic> _getDefaultGenerationSettings() {
+    return {
+      'temperature': 0.7,
+      'topP': 0.9,
+      'topK': 40,
+      'repeatPenalty': 1.1,
+      'maxTokens': -1,
+      'numThread': 4,
+    };
+  }
+
+  /// Validate individual generation setting values
+  dynamic _validateGenerationSettingValue(String key, dynamic value) {
+    try {
+      switch (key) {
+        case 'temperature':
+          if (value is num) {
+            final temp = value.toDouble();
+            return temp >= 0.0 && temp <= 2.0 ? temp : 0.7;
+          }
+          break;
+        case 'topP':
+          if (value is num) {
+            final topP = value.toDouble();
+            return topP >= 0.0 && topP <= 1.0 ? topP : 0.9;
+          }
+          break;
+        case 'topK':
+          if (value is num) {
+            final topK = value.toInt();
+            return topK >= 1 && topK <= 100 ? topK : 40;
+          }
+          break;
+        case 'repeatPenalty':
+          if (value is num) {
+            final penalty = value.toDouble();
+            return penalty >= 0.5 && penalty <= 2.0 ? penalty : 1.1;
+          }
+          break;
+        case 'maxTokens':
+          if (value is num) {
+            final tokens = value.toInt();
+            return tokens >= -1 && tokens <= 4096 ? tokens : -1;
+          }
+          break;
+        case 'numThread':
+          if (value is num) {
+            final threads = value.toInt();
+            return threads >= 1 && threads <= 16 ? threads : 4;
+          }
+          break;
+      }
+    } catch (e) {
+      AppLogger.error('Error validating generation setting $key', e);
+    }
+    return null; // Invalid value, will use default
+  }
+
+  /// Reset corrupted settings and backup the corrupted data
+  Future<void> _resetCorruptedSettings() async {
+    try {
+      // Backup corrupted settings for debugging
+      final corruptedData = _preferences.getString(_settingsKey);
+      if (corruptedData != null) {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        await _preferences.setString('${_settingsKey}_corrupted_$timestamp', corruptedData);
+        AppLogger.info('Backed up corrupted settings data');
+      }
+
+      // Remove corrupted settings
+      await _preferences.remove(_settingsKey);
+      AppLogger.info('Removed corrupted settings, will use defaults');
+    } catch (e) {
+      AppLogger.error('Error resetting corrupted settings', e);
+    }
+  }
+
+  /// Validate settings data integrity
+  Future<bool> validateSettingsIntegrity() async {
+    try {
+      final settingsJson = _preferences.getString(_settingsKey);
+      if (settingsJson == null) return true; // No settings is valid
+
+      final settingsMap = jsonDecode(settingsJson) as Map<String, dynamic>;
+      
+      // Try to create AppSettings from the data
+      AppSettings.fromJson(settingsMap);
+      
+      return true;
+    } catch (e) {
+      AppLogger.error('Settings integrity validation failed', e);
+      return false;
+    }
+  }
+
+  /// Get settings migration status
+  Map<String, dynamic> getSettingsMigrationStatus() {
+    try {
+      final settingsJson = _preferences.getString(_settingsKey);
+      if (settingsJson == null) {
+        return {
+          'hasSavedSettings': false,
+          'needsMigration': false,
+          'hasGenerationSettings': false,
+        };
+      }
+
+      final settingsMap = jsonDecode(settingsJson) as Map<String, dynamic>;
+      final hasGenerationSettings = settingsMap.containsKey('generationSettings');
+      
+      return {
+        'hasSavedSettings': true,
+        'needsMigration': !hasGenerationSettings,
+        'hasGenerationSettings': hasGenerationSettings,
+        'settingsKeys': settingsMap.keys.toList(),
+      };
+    } catch (e) {
+      AppLogger.error('Error getting migration status', e);
+      return {
+        'hasSavedSettings': false,
+        'needsMigration': true,
+        'hasGenerationSettings': false,
         'error': e.toString(),
       };
     }

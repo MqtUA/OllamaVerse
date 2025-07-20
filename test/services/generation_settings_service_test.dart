@@ -3,7 +3,6 @@ import '../../lib/services/generation_settings_service.dart';
 import '../../lib/models/generation_settings.dart';
 import '../../lib/models/chat.dart';
 import '../../lib/models/app_settings.dart';
-import '../../lib/models/message.dart';
 
 void main() {
   group('GenerationSettingsService', () {
