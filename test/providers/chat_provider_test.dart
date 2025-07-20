@@ -59,6 +59,22 @@ void main() {
     when(mockSettingsProvider.getLastSelectedModel())
         .thenAnswer((_) async => 'llama2');
 
+    // Setup mock chat history service
+    when(mockChatHistoryService.chats).thenReturn([]);
+    when(mockChatHistoryService.chatStream).thenAnswer((_) => Stream.value([]));
+    when(mockChatHistoryService.isInitialized).thenReturn(true);
+    when(mockChatHistoryService.saveChat(any)).thenAnswer((_) async {});
+    when(mockChatHistoryService.deleteChat(any)).thenAnswer((_) async {});
+
+    // Setup model validation mocks
+    when(mockOllamaService.validateSystemPromptSupport(any)).thenAnswer((_) async => {
+      'supported': true,
+      'modelName': 'llama2',
+      'fallbackMethod': 'native',
+      'recommendation': 'Model supports system prompts natively.',
+    });
+    when(mockOllamaService.getSystemPromptStrategy(any)).thenReturn('native');
+
     // Create the provider with the mocks and required services
     final modelManager = ModelManager(settingsProvider: mockSettingsProvider);
     final chatStateManager = ChatStateManager(chatHistoryService: mockChatHistoryService);
