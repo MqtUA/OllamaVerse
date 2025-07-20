@@ -4,12 +4,13 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i5;
-import 'dart:ui' as _i12;
+import 'dart:ui' as _i13;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i8;
 import 'package:ollamaverse/models/app_settings.dart' as _i3;
 import 'package:ollamaverse/models/chat.dart' as _i10;
+import 'package:ollamaverse/models/generation_settings.dart' as _i12;
 import 'package:ollamaverse/models/message.dart' as _i7;
 import 'package:ollamaverse/models/ollama_response.dart' as _i2;
 import 'package:ollamaverse/models/processed_file.dart' as _i6;
@@ -243,6 +244,34 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
       ) as String);
 
   @override
+  Map<String, dynamic> getPerformanceRecommendations(String? modelName) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPerformanceRecommendations,
+          [modelName],
+        ),
+        returnValue: <String, dynamic>{},
+      ) as Map<String, dynamic>);
+
+  @override
+  bool validateSettingsForModel(String? modelName) => (super.noSuchMethod(
+        Invocation.method(
+          #validateSettingsForModel,
+          [modelName],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  int getRecommendedContextLength(String? modelName) => (super.noSuchMethod(
+        Invocation.method(
+          #getRecommendedContextLength,
+          [modelName],
+        ),
+        returnValue: 0,
+      ) as int);
+
+  @override
   void dispose() => super.noSuchMethod(
         Invocation.method(
           #dispose,
@@ -370,6 +399,8 @@ class MockSettingsProviderTest extends _i1.Mock
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
     bool? darkMode,
+    _i12.GenerationSettings? generationSettings,
+    bool? validateSettings = true,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -386,6 +417,8 @@ class MockSettingsProviderTest extends _i1.Mock
             #thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
             #thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
             #darkMode: darkMode,
+            #generationSettings: generationSettings,
+            #validateSettings: validateSettings,
           },
         ),
         returnValue: _i5.Future<void>.value(),
@@ -443,7 +476,60 @@ class MockSettingsProviderTest extends _i1.Mock
       );
 
   @override
-  void addListener(_i12.VoidCallback? listener) => super.noSuchMethod(
+  Map<String, dynamic> validateCurrentSettings() => (super.noSuchMethod(
+        Invocation.method(
+          #validateCurrentSettings,
+          [],
+        ),
+        returnValue: <String, dynamic>{},
+      ) as Map<String, dynamic>);
+
+  @override
+  int getSettingsHealthScore() => (super.noSuchMethod(
+        Invocation.method(
+          #getSettingsHealthScore,
+          [],
+        ),
+        returnValue: 0,
+      ) as int);
+
+  @override
+  String getSettingsStatus() => (super.noSuchMethod(
+        Invocation.method(
+          #getSettingsStatus,
+          [],
+        ),
+        returnValue: _i8.dummyValue<String>(
+          this,
+          Invocation.method(
+            #getSettingsStatus,
+            [],
+          ),
+        ),
+      ) as String);
+
+  @override
+  _i5.Future<void> autoFixSettings() => (super.noSuchMethod(
+        Invocation.method(
+          #autoFixSettings,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  bool shouldUpdateExistingChats(_i3.AppSettings? oldSettings) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #shouldUpdateExistingChats,
+          [oldSettings],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void addListener(_i13.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #addListener,
           [listener],
@@ -452,7 +538,7 @@ class MockSettingsProviderTest extends _i1.Mock
       );
 
   @override
-  void removeListener(_i12.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i13.VoidCallback? listener) => super.noSuchMethod(
         Invocation.method(
           #removeListener,
           [listener],

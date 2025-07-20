@@ -48,7 +48,6 @@ class OllamaService {
   // Connection timeout for Android devices - optimized for better responsiveness
   static const Duration _connectionTimeout = Duration(seconds: 15);
   static const Duration _receiveTimeout = Duration(seconds: 120);
-  static const Duration _streamTimeout = Duration(seconds: 300); // Longer for streaming
 
   OllamaService({
     required AppSettings settings,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
+import '../models/generation_settings.dart';
 import '../services/storage_service.dart';
 import '../services/ollama_service.dart';
 import '../services/model_manager.dart';
@@ -60,6 +61,7 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
     bool? darkMode,
+    GenerationSettings? generationSettings,
     bool validateSettings = true,
   }) async {
     final oldSettings = _settings;
@@ -74,6 +76,7 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
       thinkingBubbleDefaultExpanded: thinkingBubbleDefaultExpanded,
       thinkingBubbleAutoCollapse: thinkingBubbleAutoCollapse,
       darkMode: darkMode,
+      generationSettings: generationSettings,
     );
 
     // Validate settings if requested

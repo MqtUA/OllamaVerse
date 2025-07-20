@@ -1,10 +1,8 @@
 import '../models/app_settings.dart';
-import '../providers/settings_provider.dart';
 import '../utils/logger.dart';
 
 /// Service to validate and ensure all settings are properly applied throughout the app
 class SettingsValidationService {
-  static const String _serviceName = 'SettingsValidationService';
 
   /// Validate all settings and return validation results
   static Map<String, dynamic> validateAllSettings(AppSettings settings) {
@@ -46,7 +44,6 @@ class SettingsValidationService {
   static void _validateOllamaSettings(AppSettings settings, Map<String, dynamic> results) {
     final warnings = results['warnings'] as List<String>;
     final errors = results['errors'] as List<String>;
-    final recommendations = results['recommendations'] as List<String>;
 
     // Validate host
     if (settings.ollamaHost.isEmpty) {

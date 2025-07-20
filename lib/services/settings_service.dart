@@ -1,5 +1,4 @@
 import '../services/storage_service.dart';
-import '../utils/logger.dart';
 
 /// Legacy SettingsService - now delegates to StorageService for consistency
 /// This maintains backward compatibility while using the unified storage approach
