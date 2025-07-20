@@ -1,3 +1,5 @@
+import 'generation_settings.dart';
+
 class AppSettings {
   final String ollamaHost;
   final int ollamaPort;
@@ -9,6 +11,7 @@ class AppSettings {
       thinkingBubbleDefaultExpanded; // Default state for thinking bubbles
   final bool thinkingBubbleAutoCollapse; // Auto-collapse when thinking ends
   final bool darkMode;
+  final GenerationSettings generationSettings;
 
   AppSettings({
     this.ollamaHost = '127.0.0.1',
@@ -21,7 +24,8 @@ class AppSettings {
         true, // Default to expanded for better UX
     this.thinkingBubbleAutoCollapse = false, // Don't auto-collapse by default
     this.darkMode = false,
-  });
+    GenerationSettings? generationSettings,
+  }) : generationSettings = generationSettings ?? GenerationSettings.defaults();
 
   String get ollamaUrl => 'http://$ollamaHost:$ollamaPort';
 
@@ -35,6 +39,7 @@ class AppSettings {
     bool? thinkingBubbleDefaultExpanded,
     bool? thinkingBubbleAutoCollapse,
     bool? darkMode,
+    GenerationSettings? generationSettings,
   }) {
     return AppSettings(
       ollamaHost: ollamaHost ?? this.ollamaHost,
@@ -48,6 +53,7 @@ class AppSettings {
       thinkingBubbleAutoCollapse:
           thinkingBubbleAutoCollapse ?? this.thinkingBubbleAutoCollapse,
       darkMode: darkMode ?? this.darkMode,
+      generationSettings: generationSettings ?? this.generationSettings,
     );
   }
 
@@ -63,6 +69,9 @@ class AppSettings {
       thinkingBubbleDefaultExpanded:
           json['thinkingBubbleDefaultExpanded'] ?? true,
       thinkingBubbleAutoCollapse: json['thinkingBubbleAutoCollapse'] ?? false,
+      generationSettings: json['generationSettings'] != null
+          ? GenerationSettings.fromJson(json['generationSettings'])
+          : null, // Will use defaults in constructor
     );
   }
 
@@ -77,6 +86,7 @@ class AppSettings {
       'darkMode': darkMode,
       'thinkingBubbleDefaultExpanded': thinkingBubbleDefaultExpanded,
       'thinkingBubbleAutoCollapse': thinkingBubbleAutoCollapse,
+      'generationSettings': generationSettings.toJson(),
     };
   }
 }

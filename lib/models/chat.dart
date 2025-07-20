@@ -1,4 +1,5 @@
 import 'message.dart';
+import 'generation_settings.dart';
 
 class Chat {
   final String id;
@@ -9,6 +10,7 @@ class Chat {
   DateTime lastUpdatedAt;
   final List<int>?
       context; // Ollama context for maintaining conversation memory
+  final GenerationSettings? customGenerationSettings;
 
   Chat({
     required this.id,
@@ -18,7 +20,11 @@ class Chat {
     required this.createdAt,
     required this.lastUpdatedAt,
     this.context, // Optional context for conversation memory
+    this.customGenerationSettings, // Optional per-chat generation settings
   });
+
+  /// Returns true if this chat has custom generation settings
+  bool get hasCustomGenerationSettings => customGenerationSettings != null;
 
   Chat copyWith({
     String? id,
@@ -28,6 +34,7 @@ class Chat {
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
     List<int>? context,
+    GenerationSettings? customGenerationSettings,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -37,6 +44,7 @@ class Chat {
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       context: context ?? this.context,
+      customGenerationSettings: customGenerationSettings ?? this.customGenerationSettings,
     );
   }
 
@@ -49,6 +57,7 @@ class Chat {
       'createdAt': createdAt.toIso8601String(),
       'lastUpdatedAt': lastUpdatedAt.toIso8601String(),
       'context': context, // Store context for conversation memory
+      'customGenerationSettings': customGenerationSettings?.toJson(),
     };
   }
 
@@ -65,6 +74,9 @@ class Chat {
       context: json['context'] != null
           ? List<int>.from(json['context'])
           : null, // Load context for conversation memory
+      customGenerationSettings: json['customGenerationSettings'] != null
+          ? GenerationSettings.fromJson(json['customGenerationSettings'])
+          : null,
     );
   }
 }
