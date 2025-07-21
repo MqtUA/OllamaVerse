@@ -172,4 +172,14 @@ class SettingsProvider extends ChangeNotifier implements ISettingsProvider {
   bool shouldUpdateExistingChats(AppSettings oldSettings) {
     return SettingsValidationService.shouldUpdateExistingChats(oldSettings, _settings);
   }
+
+  /// Validate generation settings in real-time
+  Map<String, dynamic> validateGenerationSettings(GenerationSettings settings) {
+    return SettingsValidationService.validateGenerationSettingsRealTime(settings);
+  }
+
+  /// Get helpful error message for a specific field
+  String getHelpfulErrorMessage(String field, dynamic value) {
+    return SettingsValidationService.getHelpfulErrorMessage(field, value);
+  }
 }
