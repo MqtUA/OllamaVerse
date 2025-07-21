@@ -15,12 +15,12 @@ This document summarizes the optimizations made to improve the Ollama client's a
 ### 2. Ollama API Optimization ✅
 
 **New Features Added**:
-- **OllamaOptimizationService**: Model-specific parameter optimization
+- **Universal Generation Settings**: User-configurable generation parameters
 - **Enhanced API Options**: Context-aware parameter tuning
 - **Performance Monitoring**: Better timeout handling and connection management
 
 **Optimizations**:
-- Model-specific temperature, top_p, and repeat_penalty settings
+- User-configurable temperature, top_p, and repeat_penalty settings
 - Context-length aware optimizations
 - Streaming vs non-streaming specific parameters
 - Multi-threading optimization based on model capabilities
@@ -51,7 +51,7 @@ This document summarizes the optimizations made to improve the Ollama client's a
 **API Level**:
 - Reduced connection timeout (30s → 15s) for better responsiveness
 - Extended streaming timeout (60s → 300s) for long generations
-- Model-specific parameter optimization
+- User-configurable parameter optimization
 - Context-aware batch sizing
 
 **Settings Level**:
@@ -101,7 +101,7 @@ This document summarizes the optimizations made to improve the Ollama client's a
 - Available in debug builds only
 
 ### Performance Recommendations
-- Model-specific optimization suggestions
+- Generation settings optimization suggestions
 - Context length recommendations
 - Performance impact warnings
 
@@ -145,7 +145,7 @@ final validation = await chatProvider.validateSettingsForCurrentModel();
 
 ### Positive Impacts
 - ✅ Faster connection timeouts reduce wait times
-- ✅ Model-specific optimizations improve generation quality
+- ✅ User-configurable generation settings improve generation quality
 - ✅ Settings validation prevents performance-killing configurations
 - ✅ Auto-fix resolves issues without user intervention
 

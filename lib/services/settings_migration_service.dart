@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/logger.dart';
 
-/// Service for handling migration from old optimization service to new generation settings
+/// Service for handling migration to new generation settings system
 class SettingsMigrationService {
   static const String _settingsKey = 'app_settings';
   static const String _lastSelectedModelKey = 'last_selected_model';
 
-  /// Check if settings need migration from old optimization service
+  /// Check if settings need migration to new generation settings system
   static Future<bool> needsMigration() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -52,8 +52,8 @@ class SettingsMigrationService {
     }
   }
 
-  /// Perform migration from old optimization service to new generation settings
-  static Future<bool> migrateFromOptimizationService() async {
+  /// Perform migration to new generation settings system
+  static Future<bool> migrateToGenerationSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
@@ -87,7 +87,7 @@ class SettingsMigrationService {
       
       // Add migration metadata
       settingsMap['_migrationInfo'] = {
-        'migratedFrom': settingsJson != null ? 'optimization_service' : 'new_user_with_data',
+        'migratedFrom': settingsJson != null ? 'legacy_settings' : 'new_user_with_data',
         'migratedAt': DateTime.now().toIso8601String(),
         'previousModel': lastSelectedModel,
         'settingsValidated': true,
@@ -105,7 +105,7 @@ class SettingsMigrationService {
       
       return true;
     } catch (e) {
-      AppLogger.error('Error migrating settings from optimization service', e);
+      AppLogger.error('Error migrating settings to new generation settings system', e);
       return false;
     }
   }
@@ -244,7 +244,7 @@ class SettingsMigrationService {
     
     final lowerName = modelName.toLowerCase();
     
-    // Infer settings based on model type (similar to old OllamaOptimizationService)
+    // Infer settings based on model type
     if (lowerName.contains('codellama') || lowerName.contains('codegemma')) {
       // Code models - lower temperature, higher repeat penalty
       return {
