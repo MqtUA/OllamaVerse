@@ -5,8 +5,9 @@ import '../models/app_settings.dart';
 import '../models/processed_file.dart';
 import '../models/ollama_response.dart';
 import '../models/message.dart';
+import '../models/chat.dart';
 import '../services/model_capability_service.dart';
-import '../services/ollama_optimization_service.dart';
+import '../services/generation_settings_service.dart';
 import '../utils/logger.dart';
 
 /// Custom exception for Ollama API errors
@@ -72,21 +73,7 @@ class OllamaService {
     return headers;
   }
 
-  /// Get optimized options using the optimization service
-  Map<String, dynamic> _getOptimizedOptions({
-    required String modelName,
-    int? contextLength,
-    bool isStreaming = false,
-    String operationType = 'generate',
-  }) {
-    return OllamaOptimizationService.getOptimizedOptions(
-      modelName: modelName,
-      settings: _settings,
-      isStreaming: isStreaming,
-      operationType: operationType,
-      contextLength: contextLength,
-    );
-  }
+
 
   Future<T> _makeRequest<T>(
     Future<T> Function() request, {
@@ -185,6 +172,7 @@ class OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     if (_isDisposed) {
@@ -205,15 +193,30 @@ class OllamaService {
         'stream': false,
       };
 
-      // Add optimized options
-      final options = _getOptimizedOptions(
-        modelName: modelName,
-        contextLength: contextLength,
-        isStreaming: false,
-        operationType: capabilities.supportsVision ? 'chat' : 'generate',
-      );
-      if (options.isNotEmpty) {
-        requestBody['options'] = options;
+      // Get effective generation settings and build options with error handling
+      try {
+        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+          chat: chat,
+          globalSettings: _settings,
+        );
+        
+        // Validate settings and use safe fallback if invalid
+        final validatedSettings = GenerationSettingsService.validateSettings(generationSettings)
+            ? generationSettings
+            : GenerationSettingsService.createSafeSettings(generationSettings);
+        
+        final options = GenerationSettingsService.buildOllamaOptions(
+          settings: validatedSettings,
+          contextLength: contextLength,
+          isStreaming: false,
+        );
+        
+        if (options.isNotEmpty) {
+          requestBody['options'] = options;
+        }
+      } catch (e) {
+        AppLogger.error('Error applying generation settings, using defaults', e);
+        // Continue without custom options - Ollama will use its defaults
       }
 
       // Handle vision models with images
@@ -417,6 +420,7 @@ class OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async* {
     if (_isDisposed) {
@@ -491,13 +495,18 @@ class OllamaService {
           'stream': true,
         };
 
-        // Add optimized streaming options
-        final options = _getOptimizedOptions(
-          modelName: modelName,
+        // Get effective generation settings and build streaming options
+        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+          chat: chat,
+          globalSettings: _settings,
+        );
+        
+        final options = GenerationSettingsService.buildOllamaOptions(
+          settings: generationSettings,
           contextLength: contextLength,
           isStreaming: true,
-          operationType: 'chat',
         );
+        
         if (options.isNotEmpty) {
           requestBody['options'] = options;
         }
@@ -548,13 +557,18 @@ class OllamaService {
           'stream': true,
         };
 
-        // Add optimized generate options
-        final options = _getOptimizedOptions(
-          modelName: modelName,
+        // Get effective generation settings and build streaming options
+        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+          chat: chat,
+          globalSettings: _settings,
+        );
+        
+        final options = GenerationSettingsService.buildOllamaOptions(
+          settings: generationSettings,
           contextLength: contextLength,
           isStreaming: true,
-          operationType: 'generate',
         );
+        
         if (options.isNotEmpty) {
           requestBody['options'] = options;
         }
@@ -673,24 +687,49 @@ class OllamaService {
 
   /// Get performance recommendations for current settings and model
   Map<String, dynamic> getPerformanceRecommendations(String modelName) {
-    return OllamaOptimizationService.getPerformanceRecommendations(
-      modelName: modelName,
-      settings: _settings,
-    );
+    final generationSettings = _settings.generationSettings;
+    final recommendations = <String, dynamic>{
+      'warnings': GenerationSettingsService.getValidationErrors(generationSettings),
+      'suggestions': GenerationSettingsService.getRecommendations(generationSettings),
+      'optimizations': <String, dynamic>{},
+    };
+    
+    // Add model-specific recommendations
+    final capabilities = ModelCapabilityService.getModelCapabilities(modelName);
+    if (capabilities.supportsVision) {
+      (recommendations['suggestions'] as List<String>).add(
+        'Vision models work best with clear, high-resolution images and specific questions about visual content.');
+    }
+    
+    if (capabilities.supportsCode) {
+      (recommendations['suggestions'] as List<String>).add(
+        'For code generation, consider using a system prompt that specifies the programming language and coding style.');
+    }
+    
+    return recommendations;
   }
 
   /// Validate current settings for optimal performance
   bool validateSettingsForModel(String modelName) {
-    return OllamaOptimizationService.validateSettings(
-      modelName: modelName,
-      settings: _settings,
-    );
+    return GenerationSettingsService.validateSettings(_settings.generationSettings);
   }
 
   /// Get recommended context length for a model
   int getRecommendedContextLength(String modelName) {
-    return OllamaOptimizationService.getRecommendedContextLength(modelName);
+    final capabilities = ModelCapabilityService.getModelCapabilities(modelName);
+    
+    if (capabilities.supportsCode) {
+      return 16384; // Code models benefit from larger contexts
+    } else if (capabilities.supportsVision) {
+      return 4096; // Vision models need moderate context for images
+    } else if (modelName.toLowerCase().contains('llama3') || 
+               modelName.toLowerCase().contains('qwen')) {
+      return 8192; // Newer models support larger contexts
+    }
+    
+    return 4096; // Safe default
   }
+
 
   void dispose() {
     _isDisposed = true;
