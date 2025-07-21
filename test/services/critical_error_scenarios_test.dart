@@ -393,6 +393,7 @@ class UnreliableOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) {
     _callCount++;
@@ -420,6 +421,7 @@ class TimeoutOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     // Simulate timeout
@@ -483,6 +485,7 @@ class IntermittentOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     _callCount++;
@@ -554,6 +557,7 @@ class MockOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     return mockResponse ?? const OllamaResponse(response: 'Mock response', context: null);
@@ -567,6 +571,7 @@ class MockOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) {
     return _mockStreamResponse ?? const Stream.empty();

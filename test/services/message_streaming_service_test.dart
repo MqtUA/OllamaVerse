@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ollamaverse/services/message_streaming_service.dart';
 import 'package:ollamaverse/services/ollama_service.dart';
 import 'package:ollamaverse/models/app_settings.dart';
+import 'package:ollamaverse/models/chat.dart';
 import 'package:ollamaverse/models/message.dart';
 import 'package:ollamaverse/models/processed_file.dart';
 import 'package:ollamaverse/models/streaming_state.dart';
@@ -26,6 +27,7 @@ class TestOllamaService extends OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) {
     if (mockError != null) {
@@ -42,6 +44,7 @@ class TestOllamaService extends OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     if (mockError != null) {

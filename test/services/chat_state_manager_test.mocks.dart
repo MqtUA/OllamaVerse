@@ -80,6 +80,15 @@ class MockChatHistoryService extends _i1.Mock
       ) as _i3.Future<void>);
 
   @override
+  Map<String, dynamic> getCustomSettingsStats() => (super.noSuchMethod(
+        Invocation.method(
+          #getCustomSettingsStats,
+          [],
+        ),
+        returnValue: <String, dynamic>{},
+      ) as Map<String, dynamic>);
+
+  @override
   _i3.Future<void> dispose() => (super.noSuchMethod(
         Invocation.method(
           #dispose,

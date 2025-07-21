@@ -425,6 +425,7 @@ class MockOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) {
     if (exceptionToThrow != null) {
@@ -441,6 +442,7 @@ class MockOllamaService implements OllamaService {
     List<int>? context,
     List<Message>? conversationHistory,
     int? contextLength,
+    Chat? chat,
     bool Function()? isCancelled,
   }) async {
     if (exceptionToThrow != null) {

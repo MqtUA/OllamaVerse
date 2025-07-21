@@ -7,15 +7,15 @@ import 'dart:async' as _i5;
 import 'dart:ui' as _i13;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i8;
+import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:ollamaverse/models/app_settings.dart' as _i3;
-import 'package:ollamaverse/models/chat.dart' as _i10;
+import 'package:ollamaverse/models/chat.dart' as _i8;
 import 'package:ollamaverse/models/generation_settings.dart' as _i12;
 import 'package:ollamaverse/models/message.dart' as _i7;
 import 'package:ollamaverse/models/ollama_response.dart' as _i2;
 import 'package:ollamaverse/models/processed_file.dart' as _i6;
 import 'package:ollamaverse/providers/settings_provider.dart' as _i11;
-import 'package:ollamaverse/services/chat_history_service.dart' as _i9;
+import 'package:ollamaverse/services/chat_history_service.dart' as _i10;
 import 'package:ollamaverse/services/ollama_service.dart' as _i4;
 
 // ignore_for_file: type=lint
@@ -107,6 +107,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
     List<int>? context,
     List<_i7.Message>? conversationHistory,
     int? contextLength,
+    _i8.Chat? chat,
     bool Function()? isCancelled,
   }) =>
       (super.noSuchMethod(
@@ -119,6 +120,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
             #context: context,
             #conversationHistory: conversationHistory,
             #contextLength: contextLength,
+            #chat: chat,
             #isCancelled: isCancelled,
           },
         ),
@@ -133,6 +135,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
               #context: context,
               #conversationHistory: conversationHistory,
               #contextLength: contextLength,
+              #chat: chat,
               #isCancelled: isCancelled,
             },
           ),
@@ -156,7 +159,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
             #context: context,
           },
         ),
-        returnValue: _i5.Future<String>.value(_i8.dummyValue<String>(
+        returnValue: _i5.Future<String>.value(_i9.dummyValue<String>(
           this,
           Invocation.method(
             #generateResponseWithFiles,
@@ -178,6 +181,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
     List<int>? context,
     List<_i7.Message>? conversationHistory,
     int? contextLength,
+    _i8.Chat? chat,
     bool Function()? isCancelled,
   }) =>
       (super.noSuchMethod(
@@ -190,6 +194,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
             #context: context,
             #conversationHistory: conversationHistory,
             #contextLength: contextLength,
+            #chat: chat,
             #isCancelled: isCancelled,
           },
         ),
@@ -234,7 +239,7 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
           #getSystemPromptStrategy,
           [modelName],
         ),
-        returnValue: _i8.dummyValue<String>(
+        returnValue: _i9.dummyValue<String>(
           this,
           Invocation.method(
             #getSystemPromptStrategy,
@@ -285,22 +290,22 @@ class MockOllamaServiceTest extends _i1.Mock implements _i4.OllamaService {
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockChatHistoryServiceTest extends _i1.Mock
-    implements _i9.ChatHistoryService {
+    implements _i10.ChatHistoryService {
   MockChatHistoryServiceTest() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i5.Stream<List<_i10.Chat>> get chatStream => (super.noSuchMethod(
+  _i5.Stream<List<_i8.Chat>> get chatStream => (super.noSuchMethod(
         Invocation.getter(#chatStream),
-        returnValue: _i5.Stream<List<_i10.Chat>>.empty(),
-      ) as _i5.Stream<List<_i10.Chat>>);
+        returnValue: _i5.Stream<List<_i8.Chat>>.empty(),
+      ) as _i5.Stream<List<_i8.Chat>>);
 
   @override
-  List<_i10.Chat> get chats => (super.noSuchMethod(
+  List<_i8.Chat> get chats => (super.noSuchMethod(
         Invocation.getter(#chats),
-        returnValue: <_i10.Chat>[],
-      ) as List<_i10.Chat>);
+        returnValue: <_i8.Chat>[],
+      ) as List<_i8.Chat>);
 
   @override
   bool get isInitialized => (super.noSuchMethod(
@@ -309,7 +314,7 @@ class MockChatHistoryServiceTest extends _i1.Mock
       ) as bool);
 
   @override
-  _i5.Future<void> saveChat(_i10.Chat? chat) => (super.noSuchMethod(
+  _i5.Future<void> saveChat(_i8.Chat? chat) => (super.noSuchMethod(
         Invocation.method(
           #saveChat,
           [chat],
@@ -319,13 +324,13 @@ class MockChatHistoryServiceTest extends _i1.Mock
       ) as _i5.Future<void>);
 
   @override
-  _i5.Future<_i10.Chat?> loadChat(String? chatId) => (super.noSuchMethod(
+  _i5.Future<_i8.Chat?> loadChat(String? chatId) => (super.noSuchMethod(
         Invocation.method(
           #loadChat,
           [chatId],
         ),
-        returnValue: _i5.Future<_i10.Chat?>.value(),
-      ) as _i5.Future<_i10.Chat?>);
+        returnValue: _i5.Future<_i8.Chat?>.value(),
+      ) as _i5.Future<_i8.Chat?>);
 
   @override
   _i5.Future<void> deleteChat(String? chatId) => (super.noSuchMethod(
@@ -336,6 +341,15 @@ class MockChatHistoryServiceTest extends _i1.Mock
         returnValue: _i5.Future<void>.value(),
         returnValueForMissingStub: _i5.Future<void>.value(),
       ) as _i5.Future<void>);
+
+  @override
+  Map<String, dynamic> getCustomSettingsStats() => (super.noSuchMethod(
+        Invocation.method(
+          #getCustomSettingsStats,
+          [],
+        ),
+        returnValue: <String, dynamic>{},
+      ) as Map<String, dynamic>);
 
   @override
   _i5.Future<void> dispose() => (super.noSuchMethod(
@@ -446,7 +460,7 @@ class MockSettingsProviderTest extends _i1.Mock
           #getLastSelectedModel,
           [],
         ),
-        returnValue: _i5.Future<String>.value(_i8.dummyValue<String>(
+        returnValue: _i5.Future<String>.value(_i9.dummyValue<String>(
           this,
           Invocation.method(
             #getLastSelectedModel,
@@ -499,7 +513,7 @@ class MockSettingsProviderTest extends _i1.Mock
           #getSettingsStatus,
           [],
         ),
-        returnValue: _i8.dummyValue<String>(
+        returnValue: _i9.dummyValue<String>(
           this,
           Invocation.method(
             #getSettingsStatus,

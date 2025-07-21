@@ -5,6 +5,9 @@ import 'package:ollamaverse/services/ollama_service.dart';
 import 'package:ollamaverse/services/model_manager.dart';
 import 'package:ollamaverse/providers/settings_provider.dart';
 import 'package:ollamaverse/models/app_settings.dart';
+import 'package:ollamaverse/models/chat.dart';
+import 'package:ollamaverse/models/message.dart';
+import 'package:ollamaverse/models/processed_file.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
 
 // Simple mock implementation without mockito
@@ -27,10 +30,11 @@ class MockOllamaService implements OllamaService {
   @override
   Future<OllamaResponse> generateResponseWithContext(String prompt,
       {String? model,
-      List<dynamic>? processedFiles,
+      List<ProcessedFile>? processedFiles,
       List<int>? context,
-      List<dynamic>? conversationHistory,
+      List<Message>? conversationHistory,
       int? contextLength,
+      Chat? chat,
       bool Function()? isCancelled}) async {
     final response = await _generateResponse(prompt, model);
     return OllamaResponse(response: response, context: context);
@@ -53,6 +57,22 @@ class MockOllamaService implements OllamaService {
   }
 
   // Implement other required methods with minimal functionality
+  @override
+  Stream<OllamaStreamResponse> generateStreamingResponseWithContext(
+    String prompt, {
+    String? model,
+    List<ProcessedFile>? processedFiles,
+    List<int>? context,
+    List<Message>? conversationHistory,
+    int? contextLength,
+    Chat? chat,
+    bool Function()? isCancelled,
+  }) {
+    return Stream.fromIterable([
+      OllamaStreamResponse(response: responseToReturn ?? 'Default Response', done: true),
+    ]);
+  }
+  
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
