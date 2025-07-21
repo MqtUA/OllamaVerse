@@ -107,6 +107,24 @@ class ChatProvider with ChangeNotifier {
       _messageStreamingService.isThinkingBubbleExpanded(messageId);
   void toggleThinkingBubble(String messageId) =>
       _messageStreamingService.toggleThinkingBubble(messageId);
+      
+  /// Check if a chat has custom generation settings
+  bool chatHasCustomSettings(String chatId) {
+    final chat = _chatHistoryService.chats.where((c) => c.id == chatId).firstOrNull;
+    return chat?.hasCustomGenerationSettings ?? false;
+  }
+  
+  /// Get generation settings for a chat (either custom or global)
+  GenerationSettings getEffectiveSettingsForChat(String chatId) {
+    final chat = _chatHistoryService.chats.where((c) => c.id == chatId).firstOrNull;
+    if (chat == null) {
+      return _settingsProvider.settings.generationSettings;
+    }
+    
+    return chat.hasCustomGenerationSettings
+        ? chat.customGenerationSettings!
+        : _settingsProvider.settings.generationSettings;
+  }
 
   @override
   void dispose() {
@@ -439,9 +457,24 @@ class ChatProvider with ChangeNotifier {
       if (chat == null) {
         throw Exception('Chat not found');
       }
+      
+      // Validate settings before applying them
+      if (customSettings != null && !customSettings.isValid()) {
+        final errors = customSettings.getValidationErrors();
+        final errorMessage = 'Invalid generation settings: ${errors.join(', ')}';
+        _error = errorMessage;
+        _safeNotifyListeners();
+        return;
+      }
 
       final updatedChat = chat.copyWith(customGenerationSettings: customSettings);
       await _chatStateManager.updateChat(updatedChat);
+      
+      // If this is the active chat, ensure the UI reflects the change
+      if (activeChat?.id == chatId) {
+        await _chatStateManager.refreshActiveChat();
+      }
+      
       _safeNotifyListeners();
     } catch (e) {
       _handleError(
@@ -508,6 +541,8 @@ class ChatProvider with ChangeNotifier {
         context: activeChat!.context,
         contextLength: _settingsProvider.settings.contextLength,
         showLiveResponse: _settingsProvider.settings.showLiveResponse,
+        chat: activeChat, // Pass the chat for per-chat settings resolution
+        appSettings: _settingsProvider.settings, // Pass global settings
       )) {
         if (_messageStreamingService.isCancelled) break;
 
@@ -771,6 +806,25 @@ class ChatProvider with ChangeNotifier {
     _errorRecoveryService.clearAllErrors();
     _error = null;
     _safeNotifyListeners();
+  }
+  
+  /// Handle global generation settings changes
+  /// 
+  /// This method is called when the global generation settings are updated
+  /// to ensure that any active chat using global settings is properly updated.
+  void handleGlobalSettingsChange() {
+    try {
+      // No need to update anything if there's no active chat
+      if (activeChat == null) return;
+      
+      // Only refresh if the active chat is using global settings
+      if (!activeChat!.hasCustomGenerationSettings) {
+        _safeNotifyListeners();
+      }
+    } catch (e) {
+      _handleError(
+          'Failed to handle settings change', e, 'Error handling settings change');
+    }
   }
 
   /// Get service health status

@@ -171,6 +171,24 @@ class ChatHistoryService {
       return null;
     }
   }
+  
+  /// Get a chat by ID
+  /// 
+  /// First checks the in-memory cache, then loads from disk if not found
+  Future<Chat?> getChat(String chatId) async {
+    try {
+      // First check in-memory cache
+      final cachedChat = _chats.firstWhere(
+        (c) => c.id == chatId,
+        orElse: () => throw Exception('Chat not found in cache'),
+      );
+      
+      return cachedChat;
+    } catch (_) {
+      // If not in cache, load from disk
+      return await loadChat(chatId);
+    }
+  }
 
   Future<void> deleteChat(String chatId) async {
     try {

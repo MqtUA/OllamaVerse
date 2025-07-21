@@ -3,9 +3,13 @@ import '../models/message.dart';
 import '../models/processed_file.dart';
 import '../models/streaming_state.dart';
 import '../models/thinking_state.dart';
+import '../models/app_settings.dart';
+import '../models/chat.dart';
+import '../models/generation_settings.dart';
 import '../services/ollama_service.dart';
 import '../services/thinking_content_processor.dart';
 import '../services/error_recovery_service.dart';
+import '../services/generation_settings_service.dart';
 import '../utils/cancellation_token.dart';
 
 import '../utils/logger.dart';
@@ -17,6 +21,7 @@ import '../utils/logger.dart';
 class MessageStreamingService {
   final OllamaService _ollamaService;
   final ErrorRecoveryService? _errorRecoveryService;
+  final AppSettings? _globalSettings;
 
   // Current streaming state
   StreamingState _streamingState = StreamingState.initial();
@@ -41,9 +46,11 @@ class MessageStreamingService {
     required OllamaService ollamaService,
     required ThinkingContentProcessor thinkingContentProcessor,
     ErrorRecoveryService? errorRecoveryService,
+    AppSettings? globalSettings,
   })  : _ollamaService = ollamaService,
         _thinkingContentProcessor = thinkingContentProcessor,
-        _errorRecoveryService = errorRecoveryService;
+        _errorRecoveryService = errorRecoveryService,
+        _globalSettings = globalSettings;
 
   // Getters
   StreamingState get streamingState => _streamingState;
@@ -71,6 +78,8 @@ class MessageStreamingService {
     List<int>? context,
     int? contextLength,
     bool showLiveResponse = true,
+    Chat? chat,
+    AppSettings? appSettings,
   }) async* {
     try {
       AppLogger.info(
@@ -83,6 +92,9 @@ class MessageStreamingService {
       _thinkingState = _thinkingContentProcessor.initializeThinkingState();
       _notifyThinkingStateChanged();
 
+      // Resolve effective generation settings for this chat
+      final effectiveSettings = _resolveEffectiveSettings(chat, appSettings);
+      
       if (showLiveResponse) {
         // Streaming provides better UX with live updates but uses more resources
         yield* _handleStreamingResponse(
@@ -92,6 +104,8 @@ class MessageStreamingService {
           processedFiles: processedFiles,
           context: context,
           contextLength: contextLength,
+          chat: chat,
+          effectiveSettings: effectiveSettings,
         );
       } else {
         // Non-streaming is faster for batch processing or when UX doesn't require live updates
@@ -102,6 +116,8 @@ class MessageStreamingService {
           processedFiles: processedFiles,
           context: context,
           contextLength: contextLength,
+          chat: chat,
+          effectiveSettings: effectiveSettings,
         );
       }
     } catch (e) {
@@ -115,6 +131,38 @@ class MessageStreamingService {
     }
   }
 
+  /// Resolve effective generation settings for a chat
+  /// 
+  /// This method ensures we always have valid generation settings by:
+  /// 1. Using the provided chat's custom settings if available
+  /// 2. Falling back to the provided app settings
+  /// 3. Using global settings from the service if available
+  /// 4. Creating default settings as a last resort
+  /// 
+  /// This ensures consistent behavior across streaming and non-streaming paths.
+  GenerationSettings _resolveEffectiveSettings(Chat? chat, AppSettings? appSettings) {
+    try {
+      // Use the provided app settings or fall back to global settings
+      final settings = appSettings ?? _globalSettings;
+      
+      if (settings != null) {
+        // Use GenerationSettingsService to resolve effective settings
+        return GenerationSettingsService.getEffectiveSettings(
+          chat: chat,
+          globalSettings: settings,
+        );
+      } else {
+        // If no settings are available, create default settings
+        AppLogger.warning('No app settings available, using default generation settings');
+        return GenerationSettings.defaults();
+      }
+    } catch (e) {
+      // Handle any errors by returning safe default settings
+      AppLogger.error('Error resolving generation settings, using defaults', e);
+      return GenerationSettings.defaults();
+    }
+  }
+
   /// Handle streaming response with live updates
   Stream<Map<String, dynamic>> _handleStreamingResponse({
     required String content,
@@ -123,6 +171,8 @@ class MessageStreamingService {
     List<ProcessedFile>? processedFiles,
     List<int>? context,
     int? contextLength,
+    Chat? chat,
+    required GenerationSettings effectiveSettings,
   }) async* {
     try {
       // Start streaming state
@@ -143,6 +193,7 @@ class MessageStreamingService {
         context: context,
         conversationHistory: conversationHistory,
         contextLength: contextLength,
+        chat: chat,
         isCancelled: () => _cancellationToken.isCancelled,
       )) {
         // Check for cancellation
@@ -231,6 +282,8 @@ class MessageStreamingService {
     List<ProcessedFile>? processedFiles,
     List<int>? context,
     int? contextLength,
+    Chat? chat,
+    required GenerationSettings effectiveSettings,
   }) async* {
     try {
       AppLogger.info('Using non-streaming response for faster completion');
@@ -243,6 +296,7 @@ class MessageStreamingService {
         context: context,
         conversationHistory: conversationHistory,
         contextLength: contextLength,
+        chat: chat,
         isCancelled: () => _cancellationToken.isCancelled,
       );
 

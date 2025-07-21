@@ -411,6 +411,30 @@ class ChatStateManager {
     if (_activeChat == null) return [];
     return _activeChat!.messages.where((msg) => !msg.isSystem).toList();
   }
+  
+  /// Refresh the active chat from storage
+  /// 
+  /// This is useful when settings or other properties have changed
+  /// but the chat ID remains the same
+  Future<void> refreshActiveChat() async {
+    try {
+      _validateNotDisposed();
+      
+      if (_activeChat == null) return;
+      
+      final chatId = _activeChat!.id;
+      final refreshedChat = await _chatHistoryService.getChat(chatId);
+      
+      if (refreshedChat != null) {
+        _activeChat = refreshedChat;
+        _notifyStateChange();
+        AppLogger.info('Refreshed active chat: ${refreshedChat.title}');
+      }
+    } catch (e) {
+      AppLogger.error('Error refreshing active chat', e);
+      rethrow;
+    }
+  }
 
   /// Validate that the manager is not disposed
   void _validateNotDisposed() {
