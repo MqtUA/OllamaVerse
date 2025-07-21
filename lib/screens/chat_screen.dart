@@ -344,10 +344,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Show dialog to configure generation settings for a chat
   void _showGenerationSettingsDialog(Chat chat) {
-    showDialog(
-      context: context,
-      builder: (context) => ChatGenerationSettingsDialog(chat: chat),
-    );
+    final isSmallScreen = MediaQuery.of(context).size.width <= 600;
+
+    if (isSmallScreen) {
+      // On mobile, use a full-screen dialog for better usability
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => FractionallySizedBox(
+          heightFactor: 0.95,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: ChatGenerationSettingsDialog(chat: chat),
+          ),
+        ),
+      );
+    } else {
+      // On desktop/tablet, use a regular dialog
+      showDialog(
+        context: context,
+        builder: (context) => ChatGenerationSettingsDialog(chat: chat),
+      );
+    }
   }
 
   @override
@@ -385,9 +405,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       builder: (context, settingsProvider, child) {
                         return GenerationSettingsIndicator(
                           chat: activeChat,
-                          globalSettings: settingsProvider.settings.generationSettings,
+                          globalSettings:
+                              settingsProvider.settings.generationSettings,
                           compact: true,
-                          onTap: () => _showGenerationSettingsDialog(activeChat),
+                          onTap: () =>
+                              _showGenerationSettingsDialog(activeChat),
                         );
                       },
                     ),
@@ -422,33 +444,45 @@ class _ChatScreenState extends State<ChatScreen> {
                 return PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   tooltip: 'Chat options',
+                  // Make menu items more touch-friendly on mobile
+                  padding: EdgeInsets.zero,
+                  iconSize: MediaQuery.of(context).size.width <= 600 ? 24 : 24,
                   itemBuilder: (context) => [
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'generation_settings',
+                      height:
+                          MediaQuery.of(context).size.width <= 600 ? 48 : 40,
                       child: Row(
                         children: [
-                          Icon(Icons.tune),
-                          SizedBox(width: 8),
-                          Text('Generation Settings'),
+                          Icon(
+                            Icons.tune,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Generation Settings'),
                         ],
                       ),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'rename',
+                      height:
+                          MediaQuery.of(context).size.width <= 600 ? 48 : 40,
                       child: Row(
                         children: [
-                          Icon(Icons.edit),
-                          SizedBox(width: 8),
-                          Text('Rename Chat'),
+                          const Icon(Icons.edit),
+                          const SizedBox(width: 12),
+                          const Text('Rename Chat'),
                         ],
                       ),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'delete',
-                      child: Row(
+                      height:
+                          MediaQuery.of(context).size.width <= 600 ? 48 : 40,
+                      child: const Row(
                         children: [
                           Icon(Icons.delete, color: Colors.red),
-                          SizedBox(width: 8),
+                          SizedBox(width: 12),
                           Text(
                             'Delete Chat',
                             style: TextStyle(color: Colors.red),
