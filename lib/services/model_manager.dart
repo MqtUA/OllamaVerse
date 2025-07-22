@@ -163,6 +163,29 @@ class ModelManager {
     return await loadModels();
   }
 
+  /// Retry connection and model loading (useful after settings changes)
+  Future<bool> retryConnection() async {
+    try {
+      _lastError = null;
+      AppLogger.info('Retrying connection and model loading...');
+
+      // Wait for settings to be ready
+      await _waitForSettings();
+
+      // Test connection first
+      final connectionSuccess = await testConnection();
+      if (!connectionSuccess) {
+        return false;
+      }
+
+      // If connection is good, load models
+      return await loadModels();
+    } catch (e) {
+      await _handleModelError(e, 'retryConnection');
+      return false;
+    }
+  }
+
   /// Set the selected model and persist it
   Future<void> setSelectedModel(String modelName) async {
     if (modelName.isEmpty) {

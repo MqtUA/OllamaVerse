@@ -8,6 +8,11 @@ import '../services/file_processing_manager.dart';
 import '../services/thinking_content_processor.dart';
 import '../services/file_content_processor.dart';
 import '../services/error_recovery_service.dart';
+import '../services/system_prompt_service.dart';
+import '../services/model_compatibility_service.dart';
+import '../services/service_health_coordinator.dart';
+import '../services/chat_settings_manager.dart';
+import '../services/cancellation_manager.dart';
 import '../utils/logger.dart';
 
 /// Service locator for managing dependency injection and service lifecycle
@@ -29,6 +34,11 @@ class ServiceLocator {
   ThinkingContentProcessor? _thinkingContentProcessor;
   FileContentProcessor? _fileContentProcessor;
   ErrorRecoveryService? _errorRecoveryService;
+  SystemPromptService? _systemPromptService;
+  ModelCompatibilityService? _modelCompatibilityService;
+  ServiceHealthCoordinator? _serviceHealthCoordinator;
+  ChatSettingsManager? _chatSettingsManager;
+  CancellationManager? _cancellationManager;
 
   bool _isInitialized = false;
   bool _isDisposed = false;
@@ -103,6 +113,35 @@ class ServiceLocator {
         errorRecoveryService: _errorRecoveryService,
       );
 
+      // Initialize new refactored services
+      _systemPromptService = SystemPromptService(
+        chatHistoryService: _chatHistoryService!,
+        chatStateManager: _chatStateManager!,
+        settingsProvider: settingsProvider,
+      );
+
+      _modelCompatibilityService = ModelCompatibilityService(
+        modelManager: _modelManager!,
+        settingsProvider: settingsProvider,
+      );
+
+      _serviceHealthCoordinator = ServiceHealthCoordinator(
+        errorRecoveryService: _errorRecoveryService!,
+        modelManager: _modelManager!,
+        chatStateManager: _chatStateManager!,
+        messageStreamingService: _messageStreamingService!,
+        fileProcessingManager: _fileProcessingManager!,
+        chatTitleGenerator: _chatTitleGenerator!,
+      );
+
+      _chatSettingsManager = ChatSettingsManager(
+        chatHistoryService: _chatHistoryService!,
+        chatStateManager: _chatStateManager!,
+        settingsProvider: settingsProvider,
+      );
+
+      _cancellationManager = CancellationManager();
+
       // Initialize services that require async initialization
       await _initializeAsyncServices();
 
@@ -157,6 +196,11 @@ class ServiceLocator {
       _fileContentProcessor = null;
       _chatHistoryService = null;
       _errorRecoveryService = null;
+      _systemPromptService = null;
+      _modelCompatibilityService = null;
+      _serviceHealthCoordinator = null;
+      _chatSettingsManager = null;
+      _cancellationManager = null;
 
       AppLogger.info('Partial initialization cleanup completed');
     } catch (e, stackTrace) {
@@ -219,6 +263,36 @@ class ServiceLocator {
     return _errorRecoveryService!;
   }
 
+  /// Get SystemPromptService instance
+  SystemPromptService get systemPromptService {
+    _ensureInitialized();
+    return _systemPromptService!;
+  }
+
+  /// Get ModelCompatibilityService instance
+  ModelCompatibilityService get modelCompatibilityService {
+    _ensureInitialized();
+    return _modelCompatibilityService!;
+  }
+
+  /// Get ServiceHealthCoordinator instance
+  ServiceHealthCoordinator get serviceHealthCoordinator {
+    _ensureInitialized();
+    return _serviceHealthCoordinator!;
+  }
+
+  /// Get ChatSettingsManager instance
+  ChatSettingsManager get chatSettingsManager {
+    _ensureInitialized();
+    return _chatSettingsManager!;
+  }
+
+  /// Get CancellationManager instance
+  CancellationManager get cancellationManager {
+    _ensureInitialized();
+    return _cancellationManager!;
+  }
+
   /// Check if services are initialized
   bool get isInitialized => _isInitialized;
 
@@ -235,6 +309,11 @@ class ServiceLocator {
     if (T == ThinkingContentProcessor) return _thinkingContentProcessor != null;
     if (T == FileContentProcessor) return _fileContentProcessor != null;
     if (T == ErrorRecoveryService) return _errorRecoveryService != null;
+    if (T == SystemPromptService) return _systemPromptService != null;
+    if (T == ModelCompatibilityService) return _modelCompatibilityService != null;
+    if (T == ServiceHealthCoordinator) return _serviceHealthCoordinator != null;
+    if (T == ChatSettingsManager) return _chatSettingsManager != null;
+    if (T == CancellationManager) return _cancellationManager != null;
 
     return false;
   }
@@ -254,6 +333,11 @@ class ServiceLocator {
         'ThinkingContentProcessor': _thinkingContentProcessor != null,
         'FileContentProcessor': _fileContentProcessor != null,
         'ErrorRecoveryService': _errorRecoveryService != null,
+        'SystemPromptService': _systemPromptService != null,
+        'ModelCompatibilityService': _modelCompatibilityService != null,
+        'ServiceHealthCoordinator': _serviceHealthCoordinator != null,
+        'ChatSettingsManager': _chatSettingsManager != null,
+        'CancellationManager': _cancellationManager != null,
       }
     };
   }
@@ -270,6 +354,7 @@ class ServiceLocator {
 
       // Dispose services in reverse dependency order
       // Only call dispose on services that have the method
+      _cancellationManager?.dispose();
       _fileProcessingManager?.dispose();
       _messageStreamingService?.dispose();
       _chatStateManager?.dispose();
@@ -286,6 +371,11 @@ class ServiceLocator {
       _fileContentProcessor = null;
       _chatHistoryService = null;
       _errorRecoveryService = null;
+      _systemPromptService = null;
+      _modelCompatibilityService = null;
+      _serviceHealthCoordinator = null;
+      _chatSettingsManager = null;
+      _cancellationManager = null;
 
       _isInitialized = false;
       _isDisposed = true;

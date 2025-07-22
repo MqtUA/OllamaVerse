@@ -157,7 +157,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             // Create ChatProvider with all required services
             try {
               return ChatProvider(
-                chatHistoryService: ServiceLocator.instance.chatHistoryService,
                 settingsProvider: settingsProvider,
                 modelManager: ServiceLocator.instance.modelManager,
                 chatStateManager: ServiceLocator.instance.chatStateManager,
@@ -166,10 +165,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 chatTitleGenerator: ServiceLocator.instance.chatTitleGenerator,
                 fileProcessingManager:
                     ServiceLocator.instance.fileProcessingManager,
-                thinkingContentProcessor:
-                    ServiceLocator.instance.thinkingContentProcessor,
-                errorRecoveryService:
-                    ServiceLocator.instance.errorRecoveryService,
+                cancellationManager: ServiceLocator.instance.cancellationManager,
+                systemPromptService: ServiceLocator.instance.systemPromptService,
+                modelCompatibilityService: ServiceLocator.instance.modelCompatibilityService,
+                serviceHealthCoordinator: ServiceLocator.instance.serviceHealthCoordinator,
+                chatSettingsManager: ServiceLocator.instance.chatSettingsManager,
               );
             } catch (e) {
               AppLogger.error('Failed to create ChatProvider', e);

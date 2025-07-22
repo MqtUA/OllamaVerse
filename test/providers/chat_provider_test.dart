@@ -14,6 +14,11 @@ import 'package:ollamaverse/services/file_processing_manager.dart';
 import 'package:ollamaverse/services/thinking_content_processor.dart';
 import 'package:ollamaverse/services/file_content_processor.dart';
 import 'package:ollamaverse/services/error_recovery_service.dart';
+import 'package:ollamaverse/services/system_prompt_service.dart';
+import 'package:ollamaverse/services/model_compatibility_service.dart';
+import 'package:ollamaverse/services/service_health_coordinator.dart';
+import 'package:ollamaverse/services/chat_settings_manager.dart';
+import 'package:ollamaverse/services/cancellation_manager.dart';
 
 import 'package:ollamaverse/models/app_settings.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
@@ -94,16 +99,47 @@ void main() {
     
     final errorRecoveryService = ErrorRecoveryService();
     
-    chatProvider = ChatProvider(
+    // Create new refactored services
+    final systemPromptService = SystemPromptService(
       chatHistoryService: mockChatHistoryService,
+      chatStateManager: chatStateManager,
+      settingsProvider: mockSettingsProvider,
+    );
+    
+    final modelCompatibilityService = ModelCompatibilityService(
+      modelManager: modelManager,
+      settingsProvider: mockSettingsProvider,
+    );
+    
+    final serviceHealthCoordinator = ServiceHealthCoordinator(
+      errorRecoveryService: errorRecoveryService,
+      modelManager: modelManager,
+      chatStateManager: chatStateManager,
+      messageStreamingService: messageStreamingService,
+      fileProcessingManager: fileProcessingManager,
+      chatTitleGenerator: chatTitleGenerator,
+    );
+    
+    final chatSettingsManager = ChatSettingsManager(
+      chatHistoryService: mockChatHistoryService,
+      chatStateManager: chatStateManager,
+      settingsProvider: mockSettingsProvider,
+    );
+    
+    final cancellationManager = CancellationManager();
+    
+    chatProvider = ChatProvider(
       settingsProvider: mockSettingsProvider,
       modelManager: modelManager,
       chatStateManager: chatStateManager,
       messageStreamingService: messageStreamingService,
       chatTitleGenerator: chatTitleGenerator,
       fileProcessingManager: fileProcessingManager,
-      thinkingContentProcessor: thinkingContentProcessor,
-      errorRecoveryService: errorRecoveryService,
+      cancellationManager: cancellationManager,
+      systemPromptService: systemPromptService,
+      modelCompatibilityService: modelCompatibilityService,
+      serviceHealthCoordinator: serviceHealthCoordinator,
+      chatSettingsManager: chatSettingsManager,
     );
     
     // Initialize the model manager with test models
