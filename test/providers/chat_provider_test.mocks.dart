@@ -333,6 +333,15 @@ class MockChatHistoryServiceTest extends _i1.Mock
       ) as _i5.Future<_i8.Chat?>);
 
   @override
+  _i5.Future<_i8.Chat?> getChat(String? chatId) => (super.noSuchMethod(
+        Invocation.method(
+          #getChat,
+          [chatId],
+        ),
+        returnValue: _i5.Future<_i8.Chat?>.value(),
+      ) as _i5.Future<_i8.Chat?>);
+
+  @override
   _i5.Future<void> deleteChat(String? chatId) => (super.noSuchMethod(
         Invocation.method(
           #deleteChat,
@@ -541,6 +550,42 @@ class MockSettingsProviderTest extends _i1.Mock
         ),
         returnValue: false,
       ) as bool);
+
+  @override
+  Map<String, dynamic> validateGenerationSettings(
+          _i12.GenerationSettings? settings) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #validateGenerationSettings,
+          [settings],
+        ),
+        returnValue: <String, dynamic>{},
+      ) as Map<String, dynamic>);
+
+  @override
+  String getHelpfulErrorMessage(
+    String? field,
+    dynamic value,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getHelpfulErrorMessage,
+          [
+            field,
+            value,
+          ],
+        ),
+        returnValue: _i9.dummyValue<String>(
+          this,
+          Invocation.method(
+            #getHelpfulErrorMessage,
+            [
+              field,
+              value,
+            ],
+          ),
+        ),
+      ) as String);
 
   @override
   void addListener(_i13.VoidCallback? listener) => super.noSuchMethod(

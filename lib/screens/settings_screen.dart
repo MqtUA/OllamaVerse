@@ -82,7 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _performanceStreamController != null &&
               !_performanceStreamController!.isClosed) {
             _performanceStreamController!
-                .add(PerformanceMonitor.instance.getStats());
+                .add(PerformanceMonitor.instance.getOverallStats());
           }
         },
       );
@@ -733,8 +733,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       _buildPerformanceRow(
                                           'Theme Switch',
                                           '${stats.averageThemeSwitchTime.toStringAsFixed(1)}ms',
-                                          stats.averageThemeSwitchTime <
-                                              50.0), // Fixed threshold to match code
+                                          stats.averageThemeSwitchTime < 50.0),
                                     ],
                                   ),
                                 ),

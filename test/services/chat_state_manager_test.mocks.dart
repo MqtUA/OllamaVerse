@@ -70,6 +70,15 @@ class MockChatHistoryService extends _i1.Mock
       ) as _i3.Future<_i4.Chat?>);
 
   @override
+  _i3.Future<_i4.Chat?> getChat(String? chatId) => (super.noSuchMethod(
+        Invocation.method(
+          #getChat,
+          [chatId],
+        ),
+        returnValue: _i3.Future<_i4.Chat?>.value(),
+      ) as _i3.Future<_i4.Chat?>);
+
+  @override
   _i3.Future<void> deleteChat(String? chatId) => (super.noSuchMethod(
         Invocation.method(
           #deleteChat,
