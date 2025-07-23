@@ -211,7 +211,11 @@ void main() {
       await chatProvider.createNewChat('llama2');
       await chatProvider.sendMessage(message);
 
-      verify(mockSettingsProvider.getOllamaService());
+      // After refactoring, ChatProvider delegates to services
+      // Verify that the message was processed through the service layer
+      expect(chatProvider.activeChat?.messages.length, greaterThan(0));
+      expect(chatProvider.activeChat?.messages.last.content, equals(message));
+      
       verify(mockOllamaService.generateResponseWithContext(
         any,
         model: anyNamed('model'),
@@ -252,7 +256,11 @@ void main() {
       await chatProvider.createNewChat('llama2');
       await chatProvider.sendMessage(message);
 
-      verify(mockSettingsProvider.getOllamaService());
+      // After refactoring, ChatProvider delegates to MessageStreamingService
+      // Verify that the message was processed and streaming occurred
+      expect(chatProvider.activeChat?.messages.length, greaterThan(0));
+      expect(chatProvider.activeChat?.messages.last.content, equals(message));
+      
       verify(mockOllamaService.generateStreamingResponseWithContext(
         any,
         model: anyNamed('model'),

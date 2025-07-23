@@ -9,7 +9,7 @@ import '../models/generation_settings.dart';
 import '../services/ollama_service.dart';
 import '../services/thinking_content_processor.dart';
 import '../services/error_recovery_service.dart';
-import '../services/generation_settings_service.dart';
+import '../services/optimized_generation_settings_service.dart';
 import '../utils/cancellation_token.dart';
 
 import '../utils/logger.dart';
@@ -146,8 +146,9 @@ class MessageStreamingService {
       final settings = appSettings ?? _globalSettings;
       
       if (settings != null) {
-        // Use GenerationSettingsService to resolve effective settings
-        return GenerationSettingsService.getEffectiveSettings(
+        // Use OptimizedGenerationSettingsService to resolve effective settings
+        final settingsService = OptimizedGenerationSettingsService();
+        return settingsService.getEffectiveSettings(
           chat: chat,
           globalSettings: settings,
         );

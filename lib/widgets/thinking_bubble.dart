@@ -1,38 +1,92 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/message.dart';
+import '../providers/chat_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/custom_markdown_body.dart';
 import '../widgets/thinking_indicator.dart';
-import '../theme/dracula_theme.dart';
-import '../theme/material_light_theme.dart';
-import '../services/thinking_model_detection_service.dart';
+import '../widgets/thinking_theme.dart';
 
-/// A widget that displays thinking content with expand/collapse functionality
-class ThinkingBubble extends StatefulWidget {
-  final Message message;
+/// Unified thinking bubble that handles both static (from Message) and live (streaming) content
+/// Consolidates functionality from ThinkingBubble and LiveThinkingBubble
+class UnifiedThinkingBubble extends StatefulWidget {
   final double fontSize;
-  final bool isExpanded;
-  final VoidCallback? onToggleExpanded;
   final bool showThinkingIndicator;
 
-  const ThinkingBubble({
+  // Static mode properties (for completed messages)
+  final Message? message;
+  final bool? isExpanded;
+  final VoidCallback? onToggleExpanded;
+
+  // Live mode properties (for streaming)
+  final bool isLiveMode;
+  final String? liveContent;
+  final String? bubbleId;
+
+  const UnifiedThinkingBubble({
     super.key,
-    required this.message,
     required this.fontSize,
-    this.isExpanded = false,
-    this.onToggleExpanded,
     this.showThinkingIndicator = false,
-  });
+
+    // Static mode
+    this.message,
+    this.isExpanded,
+    this.onToggleExpanded,
+
+    // Live mode
+    this.isLiveMode = false,
+    this.liveContent,
+    this.bubbleId,
+  }) : assert(
+          (isLiveMode && bubbleId != null) || (!isLiveMode && message != null),
+          'Either provide message for static mode or bubbleId for live mode',
+        );
+
+  /// Factory constructor for static thinking bubble (completed messages)
+  factory UnifiedThinkingBubble.static({
+    required Message message,
+    required double fontSize,
+    bool showThinkingIndicator = false,
+    bool isExpanded = false,
+    VoidCallback? onToggleExpanded,
+  }) {
+    return UnifiedThinkingBubble(
+      message: message,
+      fontSize: fontSize,
+      showThinkingIndicator: showThinkingIndicator,
+      isExpanded: isExpanded,
+      onToggleExpanded: onToggleExpanded,
+      isLiveMode: false,
+    );
+  }
+
+  /// Factory constructor for live thinking bubble (streaming)
+  factory UnifiedThinkingBubble.live({
+    required String bubbleId,
+    required double fontSize,
+    bool showThinkingIndicator = false,
+  }) {
+    return UnifiedThinkingBubble(
+      bubbleId: bubbleId,
+      fontSize: fontSize,
+      showThinkingIndicator: showThinkingIndicator,
+      isLiveMode: true,
+    );
+  }
 
   @override
-  State<ThinkingBubble> createState() => _ThinkingBubbleState();
+  State<UnifiedThinkingBubble> createState() => _UnifiedThinkingBubbleState();
 }
 
-class _ThinkingBubbleState extends State<ThinkingBubble>
+class _UnifiedThinkingBubbleState extends State<UnifiedThinkingBubble>
     with TickerProviderStateMixin {
   late AnimationController _expandController;
   late Animation<double> _expandAnimation;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+
+  // Live mode specific state
+  bool _hasScheduledAutoCollapse = false;
 
   @override
   void initState() {
@@ -40,7 +94,7 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
 
     // Animation for expand/collapse
     _expandController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: ThinkingConstants.animationDuration,
       vsync: this,
     );
     _expandAnimation = CurvedAnimation(
@@ -59,18 +113,53 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
     );
 
     // Set initial state
-    if (widget.isExpanded) {
-      _expandController.value = 1.0;
+    if (widget.isLiveMode) {
+      _initializeLiveMode();
+    } else {
+      _initializeStaticMode();
     }
+
     _fadeController.forward();
   }
 
+  void _initializeLiveMode() {
+    // Set up live mode initialization after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.bubbleId == null) return;
+
+      final settings =
+          Provider.of<SettingsProvider>(context, listen: false).settings;
+      final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
+
+      // Initialize expansion state based on settings
+      if (chatProvider != null &&
+          !chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
+        if (settings.thinkingBubbleDefaultExpanded) {
+          chatProvider.toggleThinkingBubble(widget.bubbleId!);
+        }
+      }
+
+      // Set animation state
+      final isExpanded =
+          chatProvider?.isThinkingBubbleExpanded(widget.bubbleId!) ?? false;
+      if (isExpanded) {
+        _expandController.forward();
+      }
+    });
+  }
+
+  void _initializeStaticMode() {
+    if (widget.isExpanded == true) {
+      _expandController.value = 1.0;
+    }
+  }
+
   @override
-  void didUpdateWidget(ThinkingBubble oldWidget) {
+  void didUpdateWidget(UnifiedThinkingBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.isExpanded != oldWidget.isExpanded) {
-      if (widget.isExpanded) {
+    if (!widget.isLiveMode && widget.isExpanded != oldWidget.isExpanded) {
+      if (widget.isExpanded == true) {
         _expandController.forward();
       } else {
         _expandController.reverse();
@@ -85,44 +174,118 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
     super.dispose();
   }
 
+  void _toggleExpansion() {
+    if (widget.isLiveMode && widget.bubbleId != null) {
+      final chatProvider = Provider.of<ChatProvider?>(context, listen: false);
+      if (chatProvider != null) {
+        chatProvider.toggleThinkingBubble(widget.bubbleId!);
+
+        final isExpanded =
+            chatProvider.isThinkingBubbleExpanded(widget.bubbleId!);
+        if (isExpanded) {
+          _expandController.forward();
+        } else {
+          _expandController.reverse();
+        }
+      }
+    } else {
+      widget.onToggleExpanded?.call();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!widget.message.hasThinking) {
+    if (widget.isLiveMode) {
+      return _buildLiveMode();
+    } else {
+      return _buildStaticMode();
+    }
+  }
+
+  Widget _buildLiveMode() {
+    return Consumer2<ChatProvider, SettingsProvider>(
+      builder: (context, chatProvider, settingsProvider, child) {
+        if (!chatProvider.hasActiveThinkingBubble) {
+          return const SizedBox.shrink();
+        }
+
+        final thinkingContent = chatProvider.currentThinkingContent;
+        final colors = ThinkingTheme.getColors(context);
+        final settings = settingsProvider.settings;
+
+        // Auto-collapse logic
+        _handleAutoCollapse(chatProvider, settings);
+
+        return _buildBubbleContainer(
+          colors: colors,
+          isLive: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(
+                title: chatProvider.isActiveChatGenerating
+                    ? 'Thinking...'
+                    : 'Thought Process',
+                colors: colors,
+                isLive: true,
+                isExpanded:
+                    chatProvider.isThinkingBubbleExpanded(widget.bubbleId!),
+                showIndicator: widget.showThinkingIndicator ||
+                    chatProvider.isActiveChatGenerating,
+              ),
+              SizeTransition(
+                sizeFactor: _expandAnimation,
+                child: _buildContent(
+                  content: thinkingContent.isNotEmpty
+                      ? thinkingContent
+                      : 'Processing...',
+                  colors: colors,
+                  isLive: true,
+                  isProcessing: thinkingContent.isEmpty,
+                  selectable: !chatProvider.isGenerating,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStaticMode() {
+    if (!widget.message!.hasThinking) {
       return const SizedBox.shrink();
     }
 
-    final thinkingContent = widget.message.thinkingContent!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final thinkingContent = widget.message!.thinkingContent!;
+    final colors = ThinkingTheme.getColors(context);
 
     return FadeTransition(
       opacity: _fadeAnimation,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8.0),
-        decoration: BoxDecoration(
-          color: _getThinkingBubbleColor(isDark),
-          borderRadius: BorderRadius.circular(12.0),
-          border: Border.all(
-            color: _getThinkingBorderColor(isDark),
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(26), // 0.1 * 255 ≈ 26
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
+      child: _buildBubbleContainer(
+        colors: colors,
+        isLive: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thinking header with toggle button
-            _buildThinkingHeader(thinkingContent, isDark),
-
-            // Expandable thinking content
+            _buildHeader(
+              title: 'Thinking',
+              colors: colors,
+              isLive: false,
+              isExpanded: widget.isExpanded ?? false,
+              showIndicator: widget.showThinkingIndicator,
+              summary: widget.isExpanded != true
+                  ? thinkingContent.thinkingSummary
+                  : null,
+            ),
             SizeTransition(
               sizeFactor: _expandAnimation,
-              child: _buildThinkingContent(thinkingContent, isDark),
+              child: _buildContent(
+                content: thinkingContent.thinkingText ?? '',
+                colors: colors,
+                isLive: false,
+                selectable: true,
+              ),
             ),
           ],
         ),
@@ -130,49 +293,79 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
     );
   }
 
-  Widget _buildThinkingHeader(ThinkingContent thinkingContent, bool isDark) {
+  Widget _buildBubbleContainer({
+    required ThinkingColors colors,
+    required bool isLive,
+    required Widget child,
+  }) {
+    return Container(
+      margin: ThinkingConstants.margin,
+      decoration: BoxDecoration(
+        color: isLive ? colors.liveBubbleBackground : colors.bubbleBackground,
+        borderRadius: BorderRadius.circular(ThinkingConstants.borderRadius),
+        border: Border.all(
+          color: isLive ? colors.liveBorder : colors.border,
+          width: ThinkingConstants.borderWidth,
+        ),
+        boxShadow: isLive ? null : ThinkingConstants.boxShadow,
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildHeader({
+    required String title,
+    required ThinkingColors colors,
+    required bool isLive,
+    required bool isExpanded,
+    required bool showIndicator,
+    String? summary,
+  }) {
     return InkWell(
-      onTap: widget.onToggleExpanded,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(12.0)),
+      onTap: _toggleExpansion,
+      borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(ThinkingConstants.borderRadius)),
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: ThinkingConstants.padding,
         child: Row(
           children: [
-            // Thinking indicator icon/animation
-            if (widget.showThinkingIndicator)
-              const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: ThinkingIndicator(size: 16.0),
+            // Thinking indicator or icon
+            if (showIndicator)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ThinkingIndicator(
+                  color: colors.icon,
+                  size: ThinkingConstants.iconSize,
+                ),
               )
             else
               Icon(
                 Icons.psychology,
-                size: 16.0,
-                color: _getThinkingIconColor(isDark),
+                size: ThinkingConstants.iconSize,
+                color: colors.icon,
               ),
 
             const SizedBox(width: 8.0),
 
-            // "Thinking" label
+            // Title
             Text(
-              'Thinking',
+              title,
               style: TextStyle(
                 fontSize: widget.fontSize * 0.9,
                 fontWeight: FontWeight.w600,
-                color: _getThinkingTextColor(isDark),
+                color: colors.text,
               ),
             ),
 
-            // Summary (when collapsed)
-            if (!widget.isExpanded &&
-                thinkingContent.thinkingSummary.isNotEmpty) ...[
+            // Summary (when collapsed and available)
+            if (!isExpanded && summary?.isNotEmpty == true) ...[
               const SizedBox(width: 8.0),
               Expanded(
                 child: Text(
-                  thinkingContent.thinkingSummary,
+                  summary!,
                   style: TextStyle(
                     fontSize: widget.fontSize * 0.8,
-                    color: _getThinkingSummaryColor(isDark),
+                    color: colors.summary,
                     fontStyle: FontStyle.italic,
                   ),
                   maxLines: 1,
@@ -185,12 +378,12 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
 
             // Expand/collapse button
             AnimatedRotation(
-              turns: widget.isExpanded ? 0.5 : 0.0,
-              duration: const Duration(milliseconds: 300),
+              turns: isExpanded ? 0.5 : 0.0,
+              duration: ThinkingConstants.animationDuration,
               child: Icon(
-                Icons.keyboard_arrow_down,
-                size: 20.0,
-                color: _getThinkingIconColor(isDark),
+                isLive ? Icons.expand_more : Icons.keyboard_arrow_down,
+                size: ThinkingConstants.expandIconSize,
+                color: colors.icon,
               ),
             ),
           ],
@@ -199,63 +392,69 @@ class _ThinkingBubbleState extends State<ThinkingBubble>
     );
   }
 
-  Widget _buildThinkingContent(ThinkingContent thinkingContent, bool isDark) {
+  Widget _buildContent({
+    required String content,
+    required ThinkingColors colors,
+    required bool isLive,
+    bool isProcessing = false,
+    bool selectable = true,
+  }) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12.0, 0.0, 12.0, 12.0),
+      padding: ThinkingConstants.contentPadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Divider
           Container(
             height: 1.0,
-            color: _getThinkingDividerColor(isDark),
+            color: colors.divider,
             margin: const EdgeInsets.only(bottom: 12.0),
           ),
 
-          // Thinking content
-          if (thinkingContent.thinkingText?.isNotEmpty ?? false)
+          // Content
+          if (content.isNotEmpty && !isProcessing)
             CustomMarkdownBody(
-              data: thinkingContent.thinkingText!,
+              data: content,
               fontSize: widget.fontSize * 0.9,
-              selectable: true,
+              selectable: selectable,
+            )
+          else
+            Text(
+              isProcessing ? 'Processing...' : content,
+              style: TextStyle(
+                fontSize: widget.fontSize * 0.9,
+                fontStyle: FontStyle.italic,
+                color: colors.summary,
+              ),
             ),
         ],
       ),
     );
   }
 
-  // Theme-aware color methods
-  Color _getThinkingBubbleColor(bool isDark) {
-    return isDark
-        ? DraculaColors.background.withAlpha(128) // Darker with transparency
-        : MaterialLightColors.surfaceVariant
-            .withAlpha(179); // Light with transparency
-  }
+  void _handleAutoCollapse(ChatProvider chatProvider, dynamic settings) {
+    if (widget.bubbleId == null) return;
+    
+    if (!chatProvider.isActiveChatGenerating &&
+        !chatProvider.isInsideThinkingBlock &&
+        settings.thinkingBubbleAutoCollapse &&
+        chatProvider.isThinkingBubbleExpanded(widget.bubbleId!) &&
+        !_hasScheduledAutoCollapse) {
+      _hasScheduledAutoCollapse = true;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && widget.bubbleId != null &&
+            chatProvider.isThinkingBubbleExpanded(widget.bubbleId!)) {
+          _toggleExpansion();
+        }
+        if (mounted) {
+          _hasScheduledAutoCollapse = false;
+        }
+      });
+    }
 
-  Color _getThinkingBorderColor(bool isDark) {
-    return isDark
-        ? DraculaColors.purple.withAlpha(102) // Purple border for dark theme
-        : MaterialLightColors.primary
-            .withAlpha(77); // Primary color border for light
-  }
-
-  Color _getThinkingIconColor(bool isDark) {
-    return isDark ? DraculaColors.purple : MaterialLightColors.primary;
-  }
-
-  Color _getThinkingTextColor(bool isDark) {
-    return isDark ? DraculaColors.purple : MaterialLightColors.primary;
-  }
-
-  Color _getThinkingSummaryColor(bool isDark) {
-    return isDark
-        ? DraculaColors.comment
-        : MaterialLightColors.onSurfaceVariant;
-  }
-
-  Color _getThinkingDividerColor(bool isDark) {
-    return isDark
-        ? DraculaColors.selection
-        : MaterialLightColors.outline.withAlpha(128);
+    // Reset auto-collapse flag when thinking starts again
+    if (chatProvider.isActiveChatGenerating && _hasScheduledAutoCollapse) {
+      _hasScheduledAutoCollapse = false;
+    }
   }
 }

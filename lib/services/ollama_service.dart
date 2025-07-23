@@ -7,7 +7,7 @@ import '../models/ollama_response.dart';
 import '../models/message.dart';
 import '../models/chat.dart';
 import '../services/model_capability_service.dart';
-import '../services/generation_settings_service.dart';
+import '../services/optimized_generation_settings_service.dart';
 import '../utils/logger.dart';
 
 /// Custom exception for Ollama API errors
@@ -195,17 +195,18 @@ class OllamaService {
 
       // Get effective generation settings and build options with error handling
       try {
-        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+        final settingsService = OptimizedGenerationSettingsService();
+        final generationSettings = settingsService.getEffectiveSettings(
           chat: chat,
           globalSettings: _settings,
         );
         
         // Validate settings and use safe fallback if invalid
-        final validatedSettings = GenerationSettingsService.validateSettings(generationSettings)
+        final validatedSettings = settingsService.validateSettings(generationSettings)
             ? generationSettings
-            : GenerationSettingsService.createSafeSettings(generationSettings);
+            : settingsService.createSafeSettings(generationSettings);
         
-        final options = GenerationSettingsService.buildOllamaOptions(
+        final options = settingsService.buildOllamaOptions(
           settings: validatedSettings,
           contextLength: contextLength,
           isStreaming: false,
@@ -496,12 +497,13 @@ class OllamaService {
         };
 
         // Get effective generation settings and build streaming options
-        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+        final settingsService = OptimizedGenerationSettingsService();
+        final generationSettings = settingsService.getEffectiveSettings(
           chat: chat,
           globalSettings: _settings,
         );
         
-        final options = GenerationSettingsService.buildOllamaOptions(
+        final options = settingsService.buildOllamaOptions(
           settings: generationSettings,
           contextLength: contextLength,
           isStreaming: true,
@@ -558,12 +560,13 @@ class OllamaService {
         };
 
         // Get effective generation settings and build streaming options
-        final generationSettings = GenerationSettingsService.getEffectiveSettings(
+        final settingsService = OptimizedGenerationSettingsService();
+        final generationSettings = settingsService.getEffectiveSettings(
           chat: chat,
           globalSettings: _settings,
         );
         
-        final options = GenerationSettingsService.buildOllamaOptions(
+        final options = settingsService.buildOllamaOptions(
           settings: generationSettings,
           contextLength: contextLength,
           isStreaming: true,
@@ -687,10 +690,11 @@ class OllamaService {
 
   /// Get performance recommendations for current settings and model
   Map<String, dynamic> getPerformanceRecommendations(String modelName) {
+    final settingsService = OptimizedGenerationSettingsService();
     final generationSettings = _settings.generationSettings;
     final recommendations = <String, dynamic>{
-      'warnings': GenerationSettingsService.getValidationErrors(generationSettings),
-      'suggestions': GenerationSettingsService.getRecommendations(generationSettings),
+      'warnings': settingsService.getValidationErrors(generationSettings),
+      'suggestions': settingsService.getRecommendations(generationSettings),
       'optimizations': <String, dynamic>{},
     };
     
@@ -711,7 +715,8 @@ class OllamaService {
 
   /// Validate current settings for optimal performance
   bool validateSettingsForModel(String modelName) {
-    return GenerationSettingsService.validateSettings(_settings.generationSettings);
+    final settingsService = OptimizedGenerationSettingsService();
+    return settingsService.validateSettings(_settings.generationSettings);
   }
 
   /// Get recommended context length for a model

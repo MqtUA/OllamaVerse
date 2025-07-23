@@ -15,7 +15,6 @@ import '../widgets/model_selector.dart';
 import '../widgets/typing_indicator.dart';
 import '../widgets/thinking_bubble.dart';
 import '../widgets/thinking_indicator.dart';
-import '../widgets/live_thinking_bubble.dart';
 import '../widgets/chat_generation_settings_dialog.dart';
 import '../widgets/generation_settings_indicator.dart';
 import '../theme/dracula_theme.dart';
@@ -650,7 +649,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                 // Live thinking bubble (appears when thinking content is detected)
                                 RepaintBoundary(
                                   key: const ValueKey('live_thinking_bubble'),
-                                  child: LiveThinkingBubble(
+                                  child: UnifiedThinkingBubble.live(
+                                    bubbleId: 'live_thinking_bubble',
                                     fontSize: fontSize,
                                     showThinkingIndicator:
                                         chatProvider.isActiveChatGenerating,
@@ -1035,7 +1035,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (!isUser && message.hasThinking)
               SafeChatConsumer(
                 builder: (context, chatProvider, child) {
-                  return ThinkingBubble(
+                  return UnifiedThinkingBubble.static(
                     message: message,
                     fontSize: fontSize,
                     isExpanded:
