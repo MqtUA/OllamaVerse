@@ -71,6 +71,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
 
+    // Reset keyboard state to prevent conflicts
+    _isCtrlPressed = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlLeft) ||
+                    HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlRight);
+
     // Add a scroll listener to detect when the user has manually scrolled
     _scrollController.addListener(_onScrollChange);
 
@@ -92,14 +96,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _handleKeyPress(KeyEvent event) {
+    // Use HardwareKeyboard.instance.isLogicalKeyPressed for more reliable state tracking
+    final isCtrlPressed = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlLeft) ||
+                         HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.controlRight);
+    
     if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
-          event.logicalKey == LogicalKeyboardKey.controlRight) {
+      // Update our local state to match hardware keyboard state
+      if (_isCtrlPressed != isCtrlPressed) {
         setState(() {
-          _isCtrlPressed = true;
+          _isCtrlPressed = isCtrlPressed;
         });
-      } else if (event.logicalKey == LogicalKeyboardKey.enter &&
-          _isCtrlPressed) {
+      }
+      
+      // Handle Ctrl+Enter combination
+      if (event.logicalKey == LogicalKeyboardKey.enter && isCtrlPressed) {
         // Only handle if the message field has focus
         if (_messageFocusNode.hasFocus) {
           _sendMessage();
@@ -107,10 +117,10 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
     } else if (event is KeyUpEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
-          event.logicalKey == LogicalKeyboardKey.controlRight) {
+      // Update our local state to match hardware keyboard state
+      if (_isCtrlPressed != isCtrlPressed) {
         setState(() {
-          _isCtrlPressed = false;
+          _isCtrlPressed = isCtrlPressed;
         });
       }
     }
