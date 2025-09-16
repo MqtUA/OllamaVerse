@@ -73,7 +73,203 @@ class OllamaService {
     return headers;
   }
 
+  String _mapRoleToApiRole(MessageRole role) {
+    switch (role) {
+      case MessageRole.system:
+        return 'system';
+      case MessageRole.assistant:
+        return 'assistant';
+      case MessageRole.user:
+        return 'user';
+    }
+  }
 
+  dynamic _buildChatContent({
+    String? content,
+    List<ProcessedFile> textFiles = const <ProcessedFile>[],
+    List<ProcessedFile> imageFiles = const <ProcessedFile>[],
+  }) {
+    final segments = <Map<String, String>>[];
+    final textBuffer = StringBuffer();
+    var hasText = false;
+
+    if (content != null && content.trim().isNotEmpty) {
+      textBuffer.write(content);
+      hasText = true;
+    }
+
+    if (textFiles.isNotEmpty) {
+      if (hasText) {
+        textBuffer.write('\n\n');
+      }
+      for (final file in textFiles) {
+        textBuffer.write('--- Start of File: ${file.fileName} ---\n');
+        if (file.textContent != null && file.textContent!.isNotEmpty) {
+          textBuffer.write('${file.textContent}\n');
+        }
+        textBuffer.write('--- End of File: ${file.fileName} ---\n');
+        textBuffer.write('\n');
+      }
+      hasText = true;
+    }
+
+    final combinedText = textBuffer.toString().trim();
+    if (combinedText.isNotEmpty) {
+      segments.add({'type': 'text', 'text': combinedText});
+    }
+
+    for (final file in imageFiles) {
+      final base64 = file.base64Content;
+      if (base64 != null && base64.isNotEmpty) {
+        segments.add({'type': 'image', 'image': base64});
+      }
+    }
+
+    if (segments.isEmpty) {
+      return '';
+    }
+    if (segments.length == 1 && segments.first['type'] == 'text') {
+      return segments.first['text'];
+    }
+    return segments;
+  }
+
+  Map<String, dynamic> _buildChatMessage({
+    required MessageRole role,
+    required String content,
+    List<ProcessedFile> textFiles = const <ProcessedFile>[],
+    List<ProcessedFile> imageFiles = const <ProcessedFile>[],
+  }) {
+    return {
+      'role': _mapRoleToApiRole(role),
+      'content': _buildChatContent(
+        content: content,
+        textFiles: textFiles,
+        imageFiles: imageFiles,
+      ),
+    };
+  }
+
+  List<Map<String, dynamic>> _buildChatMessages({
+    required List<Message>? conversationHistory,
+    required String prompt,
+    List<ProcessedFile>? processedFiles,
+  }) {
+    final messages = <Map<String, dynamic>>[];
+
+    if (conversationHistory != null && conversationHistory.isNotEmpty) {
+      for (final message in conversationHistory) {
+        messages.add(
+          _buildChatMessage(
+            role: message.role,
+            content: message.content,
+            textFiles: message.textFiles,
+            imageFiles: message.imageFiles
+                .where((file) =>
+                    file.base64Content != null &&
+                    file.base64Content!.isNotEmpty)
+                .toList(),
+          ),
+        );
+      }
+    }
+
+    final includesPrompt = conversationHistory != null &&
+        conversationHistory.isNotEmpty &&
+        conversationHistory.last.role == MessageRole.user &&
+        conversationHistory.last.content == prompt;
+
+    if (!includesPrompt) {
+      final files = processedFiles ?? const <ProcessedFile>[];
+      final textFiles = files.where((file) => file.hasTextContent).toList();
+      final imageFiles = files
+          .where((file) =>
+              file.type == FileType.image &&
+              (file.base64Content?.isNotEmpty ?? false))
+          .toList();
+
+      messages.add(
+        _buildChatMessage(
+          role: MessageRole.user,
+          content: prompt,
+          textFiles: textFiles,
+          imageFiles: imageFiles,
+        ),
+      );
+    }
+
+    return messages;
+  }
+
+  String _buildGeneratePrompt({
+    required String prompt,
+    List<Message>? conversationHistory,
+    List<ProcessedFile>? processedFiles,
+    required ModelCapabilities capabilities,
+  }) {
+    final buffer = StringBuffer();
+
+    if (conversationHistory != null && conversationHistory.isNotEmpty) {
+      for (final message in conversationHistory) {
+        if (message.role == MessageRole.system) {
+          if (capabilities.supportsSystemPrompts) {
+            buffer.writeln(message.content);
+            buffer.writeln();
+          } else {
+            buffer.writeln('Instructions: ${message.content}');
+            buffer.writeln(
+                'Please follow the above instructions when responding.');
+            buffer.writeln();
+          }
+        } else {
+          buffer.writeln(
+              '${message.role.name.toUpperCase()}: ${message.content}');
+          if (message.hasTextContent) {
+            for (final file in message.textFiles) {
+              buffer.writeln('--- Start of File: ${file.fileName} ---');
+              if (file.textContent != null && file.textContent!.isNotEmpty) {
+                buffer.writeln(file.textContent);
+              }
+              buffer.writeln('--- End of File: ${file.fileName} ---');
+            }
+          }
+          buffer.writeln();
+        }
+      }
+
+      final lastMessage = conversationHistory.last;
+      if (lastMessage.role == MessageRole.user) {
+        buffer.writeln('=== CURRENT USER REQUEST ===');
+        buffer.writeln('Please focus on this specific request:');
+        buffer.writeln(lastMessage.content);
+        buffer.writeln('=== END CURRENT REQUEST ===');
+        buffer.writeln();
+      }
+    } else {
+      buffer.write(prompt);
+      if (processedFiles != null && processedFiles.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln();
+        for (final file in processedFiles) {
+          if (file.hasTextContent) {
+            buffer.writeln('--- Start of File: ${file.fileName} ---');
+            if (file.textContent != null && file.textContent!.isNotEmpty) {
+              buffer.writeln(file.textContent);
+            }
+            buffer.writeln('--- End of File: ${file.fileName} ---');
+          }
+        }
+        buffer.writeln();
+        buffer.writeln('=== USER REQUEST ===');
+        buffer.writeln(
+            'Please analyze the above file(s) and respond to this request:');
+        buffer.writeln(prompt);
+        buffer.writeln('=== END REQUEST ===');
+      }
+    }
+
+    return buffer.toString().trimRight();
+  }
 
   Future<T> _makeRequest<T>(
     Future<T> Function() request, {
@@ -187,98 +383,48 @@ class OllamaService {
       final capabilities =
           ModelCapabilityService.getModelCapabilities(modelName);
 
-      // Build the request body based on model capabilities
       final requestBody = <String, dynamic>{
         'model': modelName,
         'stream': false,
       };
 
-      // Get effective generation settings and build options with error handling
       try {
         final settingsService = OptimizedGenerationSettingsService();
         final generationSettings = settingsService.getEffectiveSettings(
           chat: chat,
           globalSettings: _settings,
         );
-        
-        // Validate settings and use safe fallback if invalid
-        final validatedSettings = settingsService.validateSettings(generationSettings)
-            ? generationSettings
-            : settingsService.createSafeSettings(generationSettings);
-        
+
+        final validatedSettings =
+            settingsService.validateSettings(generationSettings)
+                ? generationSettings
+                : settingsService.createSafeSettings(generationSettings);
+
         final options = settingsService.buildOllamaOptions(
           settings: validatedSettings,
           contextLength: contextLength,
           isStreaming: false,
         );
-        
+
         if (options.isNotEmpty) {
           requestBody['options'] = options;
         }
       } catch (e) {
-        AppLogger.error('Error applying generation settings, using defaults', e);
-        // Continue without custom options - Ollama will use its defaults
+        AppLogger.error(
+            'Error applying generation settings, using defaults', e);
       }
 
-      // Handle vision models with images
-      final imageFiles = processedFiles
-              ?.where((file) => file.type == FileType.image)
-              .toList() ??
-          [];
+      final hasImageAttachments =
+          processedFiles?.any((file) => file.type == FileType.image) ?? false;
+      final useChatEndpoint =
+          capabilities.supportsVision || hasImageAttachments;
 
-      if (capabilities.supportsVision || imageFiles.isNotEmpty) {
-        // Use chat endpoint for vision models - build full conversation history
-        final messages = <Map<String, dynamic>>[];
-
-        // Add conversation history including system messages and file contexts
-        if (conversationHistory != null) {
-          for (final msg in conversationHistory) {
-            String role;
-            switch (msg.role) {
-              case MessageRole.system:
-                role = 'system';
-                break;
-              case MessageRole.user:
-                role = 'user';
-                break;
-              case MessageRole.assistant:
-                role = 'assistant';
-                break;
-            }
-
-            // Append file content to the message content for context
-            String messageContentWithFiles = msg.content;
-            if (msg.hasTextContent) {
-              messageContentWithFiles += '\n\n--- Attached Files Context ---\n';
-              for (final file in msg.textFiles) {
-                messageContentWithFiles +=
-                    'File: ${file.fileName}\n${file.textContent}\n\n';
-              }
-              messageContentWithFiles += '--- End of Attached Files ---\n';
-            }
-
-            final messageMap = <String, dynamic>{
-              'role': role,
-              'content': messageContentWithFiles,
-            };
-
-            // Add images if this was a user message with images
-            if (msg.hasImages && msg.role == MessageRole.user) {
-              final images =
-                  msg.imageFiles.map((f) => f.base64Content!).toList();
-              if (images.isNotEmpty) {
-                messageMap['images'] = images;
-              }
-            }
-            messages.add(messageMap);
-          }
-        }
-
-        // The logic for adding the current message and its files is now handled
-        // by the loop above, which iterates through the entire conversationHistory.
-        // The `prompt` and `processedFiles` parameters are implicitly included
-        // in the last message of the `conversationHistory`.
-        requestBody['messages'] = messages;
+      if (useChatEndpoint) {
+        requestBody['messages'] = _buildChatMessages(
+          conversationHistory: conversationHistory,
+          prompt: prompt,
+          processedFiles: processedFiles,
+        );
 
         final response = await _client.post(
           Uri.parse('$_baseUrl/api/chat'),
@@ -288,86 +434,35 @@ class OllamaService {
 
         if (response.statusCode == 200) {
           try {
-            final data = jsonDecode(response.body);
-            if (data['message'] != null && data['message']['content'] != null) {
-              return OllamaResponse(
-                response: data['message']['content'] as String,
-                context:
-                    null, // Chat API doesn't return context, but maintains it internally
-              );
-            } else {
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
+            final message = data['message'] as Map<String, dynamic>?;
+            if (message == null || message['content'] == null) {
               throw OllamaApiException(
                   'Invalid response format: missing message content');
             }
+            return OllamaResponse.fromJson(data);
           } catch (e) {
             AppLogger.error('Raw response body: ${response.body}');
-            throw OllamaApiException('Invalid JSON response from chat endpoint',
-                originalError: e);
+            throw OllamaApiException(
+              'Invalid JSON response from chat endpoint',
+              originalError: e,
+            );
           }
         } else {
-          throw OllamaApiException('Failed to generate response with vision',
-              statusCode: response.statusCode);
+          throw OllamaApiException(
+            'Failed to generate response with vision',
+            statusCode: response.statusCode,
+          );
         }
       } else {
-        // Use generate endpoint for text-only models with context
-        String finalPrompt = '';
+        final promptBody = _buildGeneratePrompt(
+          prompt: prompt,
+          conversationHistory: conversationHistory,
+          processedFiles: processedFiles,
+          capabilities: capabilities,
+        );
+        requestBody['prompt'] = promptBody;
 
-        // If we have conversation history, build the prompt from it
-        if (conversationHistory != null && conversationHistory.isNotEmpty) {
-          for (final msg in conversationHistory) {
-            if (msg.role == MessageRole.system) {
-              if (capabilities.supportsSystemPrompts) {
-                finalPrompt += '${msg.content}\n\n';
-              } else {
-                finalPrompt +=
-                    'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
-              }
-            } else {
-              finalPrompt += '${msg.role.name.toUpperCase()}: ${msg.content}\n';
-              if (msg.hasTextContent) {
-                for (final file in msg.textFiles) {
-                  finalPrompt +=
-                      '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
-                }
-              }
-              finalPrompt += '\n';
-            }
-          }
-
-          // For the last user message (current), emphasize it to ensure it doesn't get lost
-          if (conversationHistory.isNotEmpty) {
-            final lastMessage = conversationHistory.last;
-            if (lastMessage.role == MessageRole.user) {
-              finalPrompt += '\n=== CURRENT USER REQUEST ===\n';
-              finalPrompt += 'Please focus on this specific request:\n';
-              finalPrompt += '${lastMessage.content}\n';
-              finalPrompt += '=== END CURRENT REQUEST ===\n\n';
-            }
-          }
-        } else {
-          // Fallback for single prompts without history
-          finalPrompt += prompt;
-          if (processedFiles != null && processedFiles.isNotEmpty) {
-            finalPrompt += '\n\n';
-            for (final file in processedFiles) {
-              if (file.hasTextContent) {
-                finalPrompt +=
-                    '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
-              }
-            }
-
-            // Emphasize the user request
-            finalPrompt += '\n=== USER REQUEST ===\n';
-            finalPrompt +=
-                'Please analyze the above file(s) and respond to this request:\n';
-            finalPrompt += '$prompt\n';
-            finalPrompt += '=== END REQUEST ===\n';
-          }
-        }
-
-        requestBody['prompt'] = finalPrompt;
-
-        // Add context if available for conversation memory
         if (context != null && context.isNotEmpty) {
           requestBody['context'] = context;
         }
@@ -380,18 +475,21 @@ class OllamaService {
 
         if (response.statusCode == 200) {
           try {
-            final data = jsonDecode(response.body);
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
             return OllamaResponse.fromJson(data);
           } catch (e) {
             if (e is OllamaApiException) rethrow;
             AppLogger.error('Raw response body: ${response.body}');
             throw OllamaApiException(
-                'Invalid JSON response from generate endpoint',
-                originalError: e);
+              'Invalid JSON response from generate endpoint',
+              originalError: e,
+            );
           }
         } else {
-          throw OllamaApiException('Failed to generate response',
-              statusCode: response.statusCode);
+          throw OllamaApiException(
+            'Failed to generate response',
+            statusCode: response.statusCode,
+          );
         }
       }
     }, timeout: _receiveTimeout);
@@ -433,150 +531,56 @@ class OllamaService {
       final capabilities =
           ModelCapabilityService.getModelCapabilities(modelName);
 
-      // Handle vision models with images
-      final imageFiles = processedFiles
-              ?.where((file) => file.type == FileType.image)
-              .toList() ??
-          [];
+      final requestBody = <String, dynamic>{
+        'model': modelName,
+        'stream': true,
+      };
+
+      try {
+        final settingsService = OptimizedGenerationSettingsService();
+        final generationSettings = settingsService.getEffectiveSettings(
+          chat: chat,
+          globalSettings: _settings,
+        );
+
+        final options = settingsService.buildOllamaOptions(
+          settings: generationSettings,
+          contextLength: contextLength,
+          isStreaming: true,
+        );
+
+        if (options.isNotEmpty) {
+          requestBody['options'] = options;
+        }
+      } catch (e) {
+        AppLogger.error(
+            'Error applying generation settings for streaming, using defaults',
+            e);
+      }
+
+      final hasImageAttachments =
+          processedFiles?.any((file) => file.type == FileType.image) ?? false;
+      final useChatEndpoint =
+          capabilities.supportsVision || hasImageAttachments;
 
       http.Request request;
-      Map<String, dynamic> requestBody;
 
-      if (capabilities.supportsVision || imageFiles.isNotEmpty) {
-        // Use chat endpoint for vision models with conversation history
-        final messages = <Map<String, dynamic>>[];
-
-        // Add conversation history (excluding system messages initially)
-        if (conversationHistory != null) {
-          for (final msg in conversationHistory) {
-            String role;
-            switch (msg.role) {
-              case MessageRole.system:
-                role = 'system';
-                break;
-              case MessageRole.user:
-                role = 'user';
-                break;
-              case MessageRole.assistant:
-                role = 'assistant';
-                break;
-            }
-
-            // Append file content to the message content for context
-            String messageContentWithFiles = msg.content;
-            if (msg.hasTextContent) {
-              messageContentWithFiles += '\n\n--- Attached Files Context ---\n';
-              for (final file in msg.textFiles) {
-                messageContentWithFiles +=
-                    'File: ${file.fileName}\n${file.textContent}\n\n';
-              }
-              messageContentWithFiles += '--- End of Attached Files ---\n';
-            }
-
-            final messageMap = <String, dynamic>{
-              'role': role,
-              'content': messageContentWithFiles,
-            };
-
-            // Add images if this was a user message with images
-            if (msg.hasImages && msg.role == MessageRole.user) {
-              final images =
-                  msg.imageFiles.map((f) => f.base64Content!).toList();
-              if (images.isNotEmpty) {
-                messageMap['images'] = images;
-              }
-            }
-            messages.add(messageMap);
-          }
-        }
-
-        requestBody = {
-          'model': modelName,
-          'messages': messages,
-          'stream': true,
-        };
-
-        // Get effective generation settings and build streaming options
-        final settingsService = OptimizedGenerationSettingsService();
-        final generationSettings = settingsService.getEffectiveSettings(
-          chat: chat,
-          globalSettings: _settings,
+      if (useChatEndpoint) {
+        requestBody['messages'] = _buildChatMessages(
+          conversationHistory: conversationHistory,
+          prompt: prompt,
+          processedFiles: processedFiles,
         );
-        
-        final options = settingsService.buildOllamaOptions(
-          settings: generationSettings,
-          contextLength: contextLength,
-          isStreaming: true,
-        );
-        
-        if (options.isNotEmpty) {
-          requestBody['options'] = options;
-        }
-
         request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
       } else {
-        // Use generate endpoint for text-only models with context
-        String finalPrompt = '';
-
-        // If we have conversation history, build the prompt from it
-        if (conversationHistory != null && conversationHistory.isNotEmpty) {
-          for (final msg in conversationHistory) {
-            if (msg.role == MessageRole.system) {
-              if (capabilities.supportsSystemPrompts) {
-                finalPrompt += '${msg.content}\n\n';
-              } else {
-                finalPrompt +=
-                    'Instructions: ${msg.content}\n\nPlease follow the above instructions when responding.\n\n';
-              }
-            } else {
-              finalPrompt += '${msg.role.name.toUpperCase()}: ${msg.content}\n';
-              if (msg.hasTextContent) {
-                for (final file in msg.textFiles) {
-                  finalPrompt +=
-                      '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
-                }
-              }
-              finalPrompt += '\n';
-            }
-          }
-        } else {
-          // Fallback for single prompts without history
-          finalPrompt += prompt;
-          if (processedFiles != null && processedFiles.isNotEmpty) {
-            finalPrompt += '\n\n';
-            for (final file in processedFiles) {
-              if (file.hasTextContent) {
-                finalPrompt +=
-                    '--- Start of File: ${file.fileName} ---\n${file.textContent}\n--- End of File: ${file.fileName} ---\n';
-              }
-            }
-          }
-        }
-
-        requestBody = {
-          'model': modelName,
-          'prompt': finalPrompt,
-          'stream': true,
-        };
-
-        // Get effective generation settings and build streaming options
-        final settingsService = OptimizedGenerationSettingsService();
-        final generationSettings = settingsService.getEffectiveSettings(
-          chat: chat,
-          globalSettings: _settings,
+        final promptBody = _buildGeneratePrompt(
+          prompt: prompt,
+          conversationHistory: conversationHistory,
+          processedFiles: processedFiles,
+          capabilities: capabilities,
         );
-        
-        final options = settingsService.buildOllamaOptions(
-          settings: generationSettings,
-          contextLength: contextLength,
-          isStreaming: true,
-        );
-        
-        if (options.isNotEmpty) {
-          requestBody['options'] = options;
-        }
+        requestBody['prompt'] = promptBody;
 
-        // Add context if available for conversation memory
         if (context != null && context.isNotEmpty) {
           requestBody['context'] = context;
         }
@@ -597,14 +601,13 @@ class OllamaService {
             AppLogger.info('Stream generation cancelled by user.');
             break;
           }
-          line = line.trim();
-          if (line.isNotEmpty) {
+          final trimmedLine = line.trim();
+          if (trimmedLine.isNotEmpty) {
             try {
-              final data = jsonDecode(line);
+              final data = jsonDecode(trimmedLine) as Map<String, dynamic>;
               final streamResponse = OllamaStreamResponse.fromJson(data);
               yield streamResponse;
 
-              // Break if done
               if (streamResponse.done) {
                 break;
               }
@@ -697,19 +700,19 @@ class OllamaService {
       'suggestions': settingsService.getRecommendations(generationSettings),
       'optimizations': <String, dynamic>{},
     };
-    
+
     // Add model-specific recommendations
     final capabilities = ModelCapabilityService.getModelCapabilities(modelName);
     if (capabilities.supportsVision) {
       (recommendations['suggestions'] as List<String>).add(
-        'Vision models work best with clear, high-resolution images and specific questions about visual content.');
+          'Vision models work best with clear, high-resolution images and specific questions about visual content.');
     }
-    
+
     if (capabilities.supportsCode) {
       (recommendations['suggestions'] as List<String>).add(
-        'For code generation, consider using a system prompt that specifies the programming language and coding style.');
+          'For code generation, consider using a system prompt that specifies the programming language and coding style.');
     }
-    
+
     return recommendations;
   }
 
@@ -722,19 +725,18 @@ class OllamaService {
   /// Get recommended context length for a model
   int getRecommendedContextLength(String modelName) {
     final capabilities = ModelCapabilityService.getModelCapabilities(modelName);
-    
+
     if (capabilities.supportsCode) {
       return 16384; // Code models benefit from larger contexts
     } else if (capabilities.supportsVision) {
       return 4096; // Vision models need moderate context for images
-    } else if (modelName.toLowerCase().contains('llama3') || 
-               modelName.toLowerCase().contains('qwen')) {
+    } else if (modelName.toLowerCase().contains('llama3') ||
+        modelName.toLowerCase().contains('qwen')) {
       return 8192; // Newer models support larger contexts
     }
-    
+
     return 4096; // Safe default
   }
-
 
   void dispose() {
     _isDisposed = true;
