@@ -87,6 +87,7 @@ class MessageStreamingService {
 
       // Reset states
       _resetStreamingStates();
+      final CancellationToken currentToken = _cancellationToken;
 
       // Initialize thinking state for new generation using injected processor
       _thinkingState = _thinkingContentProcessor.initializeThinkingState();
@@ -94,7 +95,7 @@ class MessageStreamingService {
 
       // Resolve effective generation settings for this chat
       final effectiveSettings = _resolveEffectiveSettings(chat, appSettings);
-      
+
       if (showLiveResponse) {
         // Streaming provides better UX with live updates but uses more resources
         yield* _handleStreamingResponse(
@@ -106,6 +107,7 @@ class MessageStreamingService {
           contextLength: contextLength,
           chat: chat,
           effectiveSettings: effectiveSettings,
+          cancellationToken: currentToken,
         );
       } else {
         // Non-streaming is faster for batch processing or when UX doesn't require live updates
@@ -118,6 +120,7 @@ class MessageStreamingService {
           contextLength: contextLength,
           chat: chat,
           effectiveSettings: effectiveSettings,
+          cancellationToken: currentToken,
         );
       }
     } catch (e) {
@@ -132,19 +135,20 @@ class MessageStreamingService {
   }
 
   /// Resolve effective generation settings for a chat
-  /// 
+  ///
   /// This method ensures we always have valid generation settings by:
   /// 1. Using the provided chat's custom settings if available
   /// 2. Falling back to the provided app settings
   /// 3. Using global settings from the service if available
   /// 4. Creating default settings as a last resort
-  /// 
+  ///
   /// This ensures consistent behavior across streaming and non-streaming paths.
-  GenerationSettings _resolveEffectiveSettings(Chat? chat, AppSettings? appSettings) {
+  GenerationSettings _resolveEffectiveSettings(
+      Chat? chat, AppSettings? appSettings) {
     try {
       // Use the provided app settings or fall back to global settings
       final settings = appSettings ?? _globalSettings;
-      
+
       if (settings != null) {
         // Use OptimizedGenerationSettingsService to resolve effective settings
         final settingsService = OptimizedGenerationSettingsService();
@@ -154,7 +158,8 @@ class MessageStreamingService {
         );
       } else {
         // If no settings are available, create default settings
-        AppLogger.warning('No app settings available, using default generation settings');
+        AppLogger.warning(
+            'No app settings available, using default generation settings');
         return GenerationSettings.defaults();
       }
     } catch (e) {
@@ -174,6 +179,7 @@ class MessageStreamingService {
     int? contextLength,
     Chat? chat,
     required GenerationSettings effectiveSettings,
+    required CancellationToken cancellationToken,
   }) async* {
     try {
       // Start streaming state
@@ -195,11 +201,10 @@ class MessageStreamingService {
         conversationHistory: conversationHistory,
         contextLength: contextLength,
         chat: chat,
-        isCancelled: () => _cancellationToken.isCancelled,
+        isCancelled: () => cancellationToken.isCancelled,
       )) {
-        // Check for cancellation
-        if (_cancellationToken.isCancelled) {
-          AppLogger.warning('Stream cancelled during generation');
+        if (cancellationToken.isCancelled) {
+          AppLogger.info('Cancellation requested; exiting streaming loop');
           break;
         }
 
@@ -252,6 +257,11 @@ class MessageStreamingService {
         }
       }
 
+      if (cancellationToken.isCancelled) {
+        AppLogger.info('Streaming response cancelled before completion');
+        return;
+      }
+
       // Complete streaming
       _streamingState = StreamingState.completed(accumulatedResponse);
       _thinkingState =
@@ -285,6 +295,7 @@ class MessageStreamingService {
     int? contextLength,
     Chat? chat,
     required GenerationSettings effectiveSettings,
+    required CancellationToken cancellationToken,
   }) async* {
     try {
       AppLogger.info('Using non-streaming response for faster completion');
@@ -298,11 +309,11 @@ class MessageStreamingService {
         conversationHistory: conversationHistory,
         contextLength: contextLength,
         chat: chat,
-        isCancelled: () => _cancellationToken.isCancelled,
+        isCancelled: () => cancellationToken.isCancelled,
       );
 
       // Check for cancellation
-      if (_cancellationToken.isCancelled) {
+      if (cancellationToken.isCancelled) {
         AppLogger.warning('Non-streaming generation cancelled');
         return;
       }
@@ -351,16 +362,18 @@ class MessageStreamingService {
     _streamSubscription = null;
 
     // Reset states
-    _resetStreamingStates();
+    _resetStreamingStates(resetCancellationToken: false);
   }
 
   /// Reset streaming and thinking states
-  void _resetStreamingStates() {
+  void _resetStreamingStates({bool resetCancellationToken = true}) {
     if (_disposed) return;
 
     _streamingState = StreamingState.initial();
     _thinkingState = ThinkingState.initial();
-    _cancellationToken = CancellationToken();
+    if (resetCancellationToken) {
+      _cancellationToken = CancellationToken();
+    }
 
     _notifyStreamingStateChanged();
     _notifyThinkingStateChanged();
