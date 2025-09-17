@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../utils/logger.dart';
 
 /// Represents the capabilities of an Ollama model
@@ -79,6 +81,7 @@ class ModelCapabilities {
 class ModelCapabilityService {
   // Cache for model capabilities to avoid repeated lookups
   static final Map<String, ModelCapabilities> _capabilityCache = {};
+  static final Set<String> _apiBackedModels = {};
 
   // Clear cache on service startup to apply new detection logic
   static bool _cacheCleared = false;
@@ -89,6 +92,8 @@ class ModelCapabilityService {
     'bakllava', // BakLLaVA models
     'moondream', // Moondream vision models
     'cogvlm', // CogVLM models
+    'gemma3', // Gemma 3 vision-capable variants
+    'gemma-3', // Gemma 3 vision-capable variants
     'mini-cpm', // MiniCPM-V models
     'llava-llama3', // LLaVA Llama3 variants
     'llava-phi3', // LLaVA Phi3 variants
@@ -127,29 +132,101 @@ class ModelCapabilityService {
     'wizard', // WizardLM models support system prompts
   ];
 
-  /// Get capabilities for a specific model
-  static ModelCapabilities getModelCapabilities(String modelName) {
-    // Clear cache once to apply new detection logic
+  static const List<String> _defaultImageTypes = [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'bmp',
+    'webp',
+  ];
+
+  static void _ensureCacheInitialized() {
     if (!_cacheCleared) {
       _capabilityCache.clear();
+      _apiBackedModels.clear();
       _cacheCleared = true;
       AppLogger.info(
           'Cleared model capability cache for updated detection logic');
     }
+  }
 
-    // Check cache first
+  /// Get capabilities for a specific model
+  static ModelCapabilities getModelCapabilities(String modelName) {
+    _ensureCacheInitialized();
+
     if (_capabilityCache.containsKey(modelName)) {
       return _capabilityCache[modelName]!;
     }
 
-    // Determine capabilities based on model name patterns
     final capabilities = _detectCapabilities(modelName);
-
-    // Cache the result
     _capabilityCache[modelName] = capabilities;
 
     AppLogger.info('Detected capabilities for $modelName: $capabilities');
     return capabilities;
+  }
+
+  static Future<ModelCapabilities> getModelCapabilitiesViaApi(
+    String modelName, {
+    required Future<Map<String, dynamic>> Function() fetchModelDetails,
+  }) async {
+    _ensureCacheInitialized();
+
+    final cached = _capabilityCache[modelName];
+    if (cached != null && _apiBackedModels.contains(modelName)) {
+      return cached;
+    }
+
+    try {
+      final metadata = await fetchModelDetails();
+      final families = _extractFamilies(metadata);
+      final base = _detectCapabilities(modelName);
+
+      final supportsVision =
+          families.contains('vision') || families.contains('gemma3');
+      final supportsCode = base.supportsCode || families.contains('code');
+
+      var imageTypes = List<String>.from(base.supportedImageTypes);
+      if (supportsVision) {
+        if (imageTypes.isEmpty) {
+          imageTypes = List<String>.from(_defaultImageTypes);
+        }
+      } else {
+        imageTypes = <String>[];
+      }
+
+      final capabilities = ModelCapabilities(
+        modelName: modelName,
+        supportsVision: supportsVision,
+        supportsText: true,
+        supportsCode: supportsCode,
+        supportsMultimodal: supportsVision,
+        supportsSystemPrompts: base.supportsSystemPrompts,
+        supportedImageTypes: imageTypes,
+        maxImageSize: supportsVision
+            ? (base.maxImageSize == 0 ? 10 : base.maxImageSize)
+            : 0,
+        description: supportsVision
+            ? (base.description ??
+                'Vision-language model detected via Ollama metadata')
+            : base.description,
+      );
+
+      _capabilityCache[modelName] = capabilities;
+      _apiBackedModels.add(modelName);
+      AppLogger.info(
+          'Detected capabilities for $modelName via Ollama API: $capabilities (families: ${families.join(', ')})');
+      return capabilities;
+    } catch (e) {
+      AppLogger.warning(
+          'Failed to fetch capabilities for $modelName from Ollama API, using heuristics (${e.toString()})');
+      if (cached != null) {
+        return cached;
+      }
+      final fallback = _detectCapabilities(modelName);
+      _capabilityCache[modelName] = fallback;
+      return fallback;
+    }
   }
 
   /// Detect capabilities based on model name patterns
@@ -210,10 +287,48 @@ class ModelCapabilityService {
       supportsCode: isCodeModel,
       supportsMultimodal: isVisionModel,
       supportsSystemPrompts: supportsSystemPrompts,
-      supportedImageTypes: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
-      maxImageSize: 10,
+      supportedImageTypes:
+          isVisionModel ? List<String>.from(_defaultImageTypes) : <String>[],
+      maxImageSize: isVisionModel ? 10 : 0,
       description: description,
     );
+  }
+
+  static Set<String> _extractFamilies(Map<String, dynamic> metadata) {
+    final families = <String>{};
+
+    void addFamilies(dynamic value) {
+      if (value is List) {
+        for (final item in value) {
+          if (item is String && item.isNotEmpty) {
+            families.add(item.toLowerCase());
+          }
+        }
+      } else if (value is String && value.isNotEmpty) {
+        families.add(value.toLowerCase());
+      }
+    }
+
+    final details = metadata['details'];
+    if (details is Map<String, dynamic>) {
+      addFamilies(details['families']);
+      addFamilies(details['family']);
+      addFamilies(details['capabilities']);
+    }
+
+    final modelInfo = metadata['model_info'];
+    if (modelInfo is Map<String, dynamic>) {
+      addFamilies(modelInfo['families']);
+      addFamilies(modelInfo['family']);
+    }
+
+    final info = metadata['info'];
+    if (info is Map<String, dynamic>) {
+      addFamilies(info['families']);
+      addFamilies(info['family']);
+    }
+
+    return families;
   }
 
   /// Get description for vision models

@@ -342,6 +342,25 @@ class OllamaService {
     }
   }
 
+  Future<Map<String, dynamic>> _fetchModelDetails(String modelName) {
+    return _makeRequest(() async {
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/api/show'),
+        headers: _headers,
+        body: jsonEncode({'name': modelName}),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
+      throw OllamaApiException(
+        'Failed to fetch model metadata for $modelName',
+        statusCode: response.statusCode,
+      );
+    });
+  }
+
   Future<List<String>> getModels() async {
     return _makeRequest(() async {
       final response = await _client.get(
@@ -419,7 +438,10 @@ class OllamaService {
     return _makeRequest(() async {
       final modelName = model ?? 'llama2';
       final capabilities =
-          ModelCapabilityService.getModelCapabilities(modelName);
+          await ModelCapabilityService.getModelCapabilitiesViaApi(
+        modelName,
+        fetchModelDetails: () => _fetchModelDetails(modelName),
+      );
 
       final requestBody = <String, dynamic>{
         'model': modelName,
@@ -462,7 +484,7 @@ class OllamaService {
           conversationHistory: conversationHistory,
           prompt: prompt,
           processedFiles: processedFiles,
-          allowImages: true,
+          allowImages: capabilities.supportsVision,
         );
 
         final response = await _client.post(
@@ -576,7 +598,10 @@ class OllamaService {
     try {
       final modelName = model ?? 'llama2';
       final capabilities =
-          ModelCapabilityService.getModelCapabilities(modelName);
+          await ModelCapabilityService.getModelCapabilitiesViaApi(
+        modelName,
+        fetchModelDetails: () => _fetchModelDetails(modelName),
+      );
 
       final requestBody = <String, dynamic>{
         'model': modelName,
@@ -617,7 +642,7 @@ class OllamaService {
           conversationHistory: conversationHistory,
           prompt: prompt,
           processedFiles: processedFiles,
-          allowImages: true,
+          allowImages: capabilities.supportsVision,
         );
         request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
       } else {
@@ -710,7 +735,10 @@ class OllamaService {
       String modelName) async {
     try {
       final capabilities =
-          ModelCapabilityService.getModelCapabilities(modelName);
+          await ModelCapabilityService.getModelCapabilitiesViaApi(
+        modelName,
+        fetchModelDetails: () => _fetchModelDetails(modelName),
+      );
 
       return {
         'supported': capabilities.supportsSystemPrompts,
