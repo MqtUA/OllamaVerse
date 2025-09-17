@@ -23,7 +23,22 @@ class AppLogger {
 
   /// Handle log record
   static void _handleLogRecord(LogRecord record) {
-    final message = '${record.level.name}: ${record.time}: ${record.message}';
+    final buffer = StringBuffer()
+      ..write('${record.level.name}: ${record.time}: ${record.message}');
+
+    if (record.error != null) {
+      buffer
+        ..write(' | error: ')
+        ..write(record.error);
+    }
+
+    if (record.stackTrace != null) {
+      buffer
+        ..write(' | stack: ')
+        ..write(record.stackTrace);
+    }
+
+    final message = buffer.toString();
     // ignore: avoid_print
     print(message);
     _writeToLogFile(message);

@@ -84,38 +84,27 @@ class OllamaService {
     }
   }
 
-  dynamic _buildChatContent({
+  List<Map<String, dynamic>> _buildStructuredChatContent({
     String? content,
     List<ProcessedFile> textFiles = const <ProcessedFile>[],
     List<ProcessedFile> imageFiles = const <ProcessedFile>[],
   }) {
-    final segments = <Map<String, String>>[];
-    final textBuffer = StringBuffer();
-    var hasText = false;
+    final segments = <Map<String, dynamic>>[];
 
-    if (content != null && content.trim().isNotEmpty) {
-      textBuffer.write(content);
-      hasText = true;
+    final trimmedContent = content?.trim();
+    if (trimmedContent != null && trimmedContent.isNotEmpty) {
+      segments.add({'type': 'text', 'text': trimmedContent});
     }
 
-    if (textFiles.isNotEmpty) {
-      if (hasText) {
-        textBuffer.write('\n\n');
+    for (final file in textFiles) {
+      final text = file.textContent;
+      if (text != null && text.isNotEmpty) {
+        segments.add({
+          'type': 'text',
+          'text':
+              '--- Start of File: ${file.fileName} ---\n$text\n--- End of File: ${file.fileName} ---',
+        });
       }
-      for (final file in textFiles) {
-        textBuffer.write('--- Start of File: ${file.fileName} ---\n');
-        if (file.textContent != null && file.textContent!.isNotEmpty) {
-          textBuffer.write('${file.textContent}\n');
-        }
-        textBuffer.write('--- End of File: ${file.fileName} ---\n');
-        textBuffer.write('\n');
-      }
-      hasText = true;
-    }
-
-    final combinedText = textBuffer.toString().trim();
-    if (combinedText.isNotEmpty) {
-      segments.add({'type': 'text', 'text': combinedText});
     }
 
     for (final file in imageFiles) {
@@ -125,13 +114,34 @@ class OllamaService {
       }
     }
 
-    if (segments.isEmpty) {
-      return '';
-    }
-    if (segments.length == 1 && segments.first['type'] == 'text') {
-      return segments.first['text'];
-    }
     return segments;
+  }
+
+  String _buildFallbackChatContent({
+    String? content,
+    List<ProcessedFile> textFiles = const <ProcessedFile>[],
+    List<ProcessedFile> imageFiles = const <ProcessedFile>[],
+  }) {
+    final sections = <String>[];
+    final trimmedContent = content?.trim();
+    if (trimmedContent != null && trimmedContent.isNotEmpty) {
+      sections.add(trimmedContent);
+    }
+
+    for (final file in textFiles) {
+      final text = file.textContent;
+      if (text != null && text.isNotEmpty) {
+        sections.add(
+            '--- Start of File: ${file.fileName} ---\n$text\n--- End of File: ${file.fileName} ---');
+      }
+    }
+
+    if (imageFiles.isNotEmpty) {
+      sections.add(
+          'Attached images: ${imageFiles.map((file) => file.fileName).join(', ')}');
+    }
+
+    return sections.join('\n\n').trim();
   }
 
   Map<String, dynamic> _buildChatMessage({
@@ -139,21 +149,47 @@ class OllamaService {
     required String content,
     List<ProcessedFile> textFiles = const <ProcessedFile>[],
     List<ProcessedFile> imageFiles = const <ProcessedFile>[],
+    required bool allowImages,
   }) {
-    return {
+    final message = <String, dynamic>{
       'role': _mapRoleToApiRole(role),
-      'content': _buildChatContent(
+    };
+
+    if (allowImages) {
+      final structuredContent = _buildStructuredChatContent(
         content: content,
         textFiles: textFiles,
         imageFiles: imageFiles,
-      ),
-    };
+      );
+
+      if (structuredContent.isEmpty) {
+        message['content'] = [
+          {
+            'type': 'text',
+            'text': content.isNotEmpty
+                ? content
+                : 'Please analyse the provided attachments.',
+          }
+        ];
+      } else {
+        message['content'] = structuredContent;
+      }
+    } else {
+      message['content'] = _buildFallbackChatContent(
+        content: content,
+        textFiles: textFiles,
+        imageFiles: imageFiles,
+      );
+    }
+
+    return message;
   }
 
   List<Map<String, dynamic>> _buildChatMessages({
     required List<Message>? conversationHistory,
     required String prompt,
     List<ProcessedFile>? processedFiles,
+    required bool allowImages,
   }) {
     final messages = <Map<String, dynamic>>[];
 
@@ -169,6 +205,7 @@ class OllamaService {
                     file.base64Content != null &&
                     file.base64Content!.isNotEmpty)
                 .toList(),
+            allowImages: allowImages,
           ),
         );
       }
@@ -194,6 +231,7 @@ class OllamaService {
           content: prompt,
           textFiles: textFiles,
           imageFiles: imageFiles,
+          allowImages: allowImages,
         ),
       );
     }
@@ -424,6 +462,7 @@ class OllamaService {
           conversationHistory: conversationHistory,
           prompt: prompt,
           processedFiles: processedFiles,
+          allowImages: true,
         );
 
         final response = await _client.post(
@@ -449,8 +488,12 @@ class OllamaService {
             );
           }
         } else {
+          final errorBody = response.body.trim();
+          final message = errorBody.isNotEmpty
+              ? 'Failed to generate response with vision: $errorBody'
+              : 'Failed to generate response with vision';
           throw OllamaApiException(
-            'Failed to generate response with vision',
+            message,
             statusCode: response.statusCode,
           );
         }
@@ -486,8 +529,12 @@ class OllamaService {
             );
           }
         } else {
+          final errorBody = response.body.trim();
+          final message = errorBody.isNotEmpty
+              ? 'Failed to generate response: $errorBody'
+              : 'Failed to generate response';
           throw OllamaApiException(
-            'Failed to generate response',
+            message,
             statusCode: response.statusCode,
           );
         }
@@ -570,6 +617,7 @@ class OllamaService {
           conversationHistory: conversationHistory,
           prompt: prompt,
           processedFiles: processedFiles,
+          allowImages: true,
         );
         request = http.Request('POST', Uri.parse('$_baseUrl/api/chat'));
       } else {
@@ -617,7 +665,19 @@ class OllamaService {
           }
         }
       } else {
-        throw OllamaApiException('Failed to start streaming response',
+        String? errorBody;
+        try {
+          errorBody = await streamedResponse.stream
+              .transform(const Utf8Decoder())
+              .join();
+        } catch (e) {
+          AppLogger.warning('Failed to read streaming error body: $e');
+        }
+
+        final message = errorBody != null && errorBody.trim().isNotEmpty
+            ? 'Failed to start streaming response: ${errorBody.trim()}'
+            : 'Failed to start streaming response';
+        throw OllamaApiException(message,
             statusCode: streamedResponse.statusCode);
       }
     } catch (e) {

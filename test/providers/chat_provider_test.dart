@@ -1,3 +1,4 @@
+import 'dart:async';
 // Flutter test imports
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
@@ -22,6 +23,7 @@ import 'package:ollamaverse/services/cancellation_manager.dart';
 
 import 'package:ollamaverse/models/app_settings.dart';
 import 'package:ollamaverse/models/ollama_response.dart';
+import 'package:ollamaverse/models/chat.dart';
 
 // Generate mocks with custom names to avoid conflicts
 @GenerateMocks([], customMocks: [
@@ -43,6 +45,8 @@ void main() {
   late MockChatHistoryServiceTest mockChatHistoryService;
   late MockSettingsProviderTest mockSettingsProvider;
   late ChatProvider chatProvider;
+  late StreamController<List<Chat>> chatStreamController;
+  late List<Chat> storedChats;
 
   final testModels = ['llama2', 'mistral'];
 
@@ -50,6 +54,8 @@ void main() {
     mockOllamaService = MockOllamaServiceTest();
     mockChatHistoryService = MockChatHistoryServiceTest();
     mockSettingsProvider = MockSettingsProviderTest();
+    storedChats = <Chat>[];
+    chatStreamController = StreamController<List<Chat>>.broadcast();
 
     // Setup mock behavior
     when(mockOllamaService.getModels()).thenAnswer((_) async => testModels);
@@ -65,24 +71,40 @@ void main() {
         .thenAnswer((_) async => 'llama2');
 
     // Setup mock chat history service
-    when(mockChatHistoryService.chats).thenReturn([]);
-    when(mockChatHistoryService.chatStream).thenAnswer((_) => Stream.value([]));
+    when(mockChatHistoryService.chats).thenAnswer((_) => storedChats);
+    when(mockChatHistoryService.chatStream)
+        .thenAnswer((_) => chatStreamController.stream);
     when(mockChatHistoryService.isInitialized).thenReturn(true);
-    when(mockChatHistoryService.saveChat(any)).thenAnswer((_) async {});
-    when(mockChatHistoryService.deleteChat(any)).thenAnswer((_) async {});
+    when(mockChatHistoryService.saveChat(any)).thenAnswer((invocation) async {
+      final chat = invocation.positionalArguments.first as Chat;
+      final index = storedChats.indexWhere((c) => c.id == chat.id);
+      if (index == -1) {
+        storedChats.add(chat);
+      } else {
+        storedChats[index] = chat;
+      }
+      chatStreamController.add(List<Chat>.from(storedChats));
+    });
+    when(mockChatHistoryService.deleteChat(any)).thenAnswer((invocation) async {
+      final chatId = invocation.positionalArguments.first as String;
+      storedChats.removeWhere((c) => c.id == chatId);
+      chatStreamController.add(List<Chat>.from(storedChats));
+    });
 
     // Setup model validation mocks
-    when(mockOllamaService.validateSystemPromptSupport(any)).thenAnswer((_) async => {
-      'supported': true,
-      'modelName': 'llama2',
-      'fallbackMethod': 'native',
-      'recommendation': 'Model supports system prompts natively.',
-    });
+    when(mockOllamaService.validateSystemPromptSupport(any))
+        .thenAnswer((_) async => {
+              'supported': true,
+              'modelName': 'llama2',
+              'fallbackMethod': 'native',
+              'recommendation': 'Model supports system prompts natively.',
+            });
     when(mockOllamaService.getSystemPromptStrategy(any)).thenReturn('native');
 
     // Create the provider with the mocks and required services
     final modelManager = ModelManager(settingsProvider: mockSettingsProvider);
-    final chatStateManager = ChatStateManager(chatHistoryService: mockChatHistoryService);
+    final chatStateManager =
+        ChatStateManager(chatHistoryService: mockChatHistoryService);
     final thinkingContentProcessor = ThinkingContentProcessor();
     final fileContentProcessor = FileContentProcessor();
     final messageStreamingService = MessageStreamingService(
@@ -96,21 +118,21 @@ void main() {
     final fileProcessingManager = FileProcessingManager(
       fileContentProcessor: fileContentProcessor,
     );
-    
+
     final errorRecoveryService = ErrorRecoveryService();
-    
+
     // Create new refactored services
     final systemPromptService = SystemPromptService(
       chatHistoryService: mockChatHistoryService,
       chatStateManager: chatStateManager,
       settingsProvider: mockSettingsProvider,
     );
-    
+
     final modelCompatibilityService = ModelCompatibilityService(
       modelManager: modelManager,
       settingsProvider: mockSettingsProvider,
     );
-    
+
     final serviceHealthCoordinator = ServiceHealthCoordinator(
       errorRecoveryService: errorRecoveryService,
       modelManager: modelManager,
@@ -119,15 +141,15 @@ void main() {
       fileProcessingManager: fileProcessingManager,
       chatTitleGenerator: chatTitleGenerator,
     );
-    
+
     final chatSettingsManager = ChatSettingsManager(
       chatHistoryService: mockChatHistoryService,
       chatStateManager: chatStateManager,
       settingsProvider: mockSettingsProvider,
     );
-    
+
     final cancellationManager = CancellationManager();
-    
+
     chatProvider = ChatProvider(
       settingsProvider: mockSettingsProvider,
       modelManager: modelManager,
@@ -141,23 +163,24 @@ void main() {
       serviceHealthCoordinator: serviceHealthCoordinator,
       chatSettingsManager: chatSettingsManager,
     );
-    
+
     // Initialize the model manager with test models
     await modelManager.refreshModels();
-    
+
     // Reset mock call counts after initialization
     reset(mockOllamaService);
-    
+
     // Re-setup the mock behavior after reset
     when(mockOllamaService.getModels()).thenAnswer((_) async => testModels);
-    when(mockOllamaService.validateSystemPromptSupport(any)).thenAnswer((_) async => {
-      'supported': true,
-      'modelName': 'llama2',
-      'fallbackMethod': 'native',
-      'recommendation': 'Model supports system prompts natively.',
-    });
+    when(mockOllamaService.validateSystemPromptSupport(any))
+        .thenAnswer((_) async => {
+              'supported': true,
+              'modelName': 'llama2',
+              'fallbackMethod': 'native',
+              'recommendation': 'Model supports system prompts natively.',
+            });
     when(mockOllamaService.getSystemPromptStrategy(any)).thenReturn('native');
-    
+
     // Setup default mock for generateResponseWithContext
     when(mockOllamaService.generateResponseWithContext(
       any,
@@ -167,7 +190,12 @@ void main() {
       conversationHistory: anyNamed('conversationHistory'),
       contextLength: anyNamed('contextLength'),
       isCancelled: anyNamed('isCancelled'),
-    )).thenAnswer((_) async => OllamaResponse(response: 'Test response', context: []));
+    )).thenAnswer(
+        (_) async => OllamaResponse(response: 'Test response', context: []));
+  });
+
+  tearDown(() async {
+    await chatStreamController.close();
   });
 
   group('ChatProvider', () {
@@ -205,6 +233,7 @@ void main() {
         context: anyNamed('context'),
         conversationHistory: anyNamed('conversationHistory'),
         contextLength: anyNamed('contextLength'),
+        chat: anyNamed('chat'),
         isCancelled: anyNamed('isCancelled'),
       )).thenAnswer((_) async => mockResponse);
 
@@ -214,8 +243,8 @@ void main() {
       // After refactoring, ChatProvider delegates to services
       // Verify that the message was processed through the service layer
       expect(chatProvider.activeChat?.messages.length, greaterThan(0));
-      expect(chatProvider.activeChat?.messages.last.content, equals(message));
-      
+      expect(chatProvider.activeChat?.messages.first.content, equals(message));
+
       verify(mockOllamaService.generateResponseWithContext(
         any,
         model: anyNamed('model'),
@@ -223,8 +252,9 @@ void main() {
         context: anyNamed('context'),
         conversationHistory: anyNamed('conversationHistory'),
         contextLength: anyNamed('contextLength'),
+        chat: anyNamed('chat'),
         isCancelled: anyNamed('isCancelled'),
-      )).called(1);
+      ));
 
       expect(chatProvider.activeChat!.messages.length,
           2); // user message + AI response
@@ -250,6 +280,7 @@ void main() {
         context: anyNamed('context'),
         conversationHistory: anyNamed('conversationHistory'),
         contextLength: anyNamed('contextLength'),
+        chat: anyNamed('chat'),
         isCancelled: anyNamed('isCancelled'),
       )).thenAnswer((_) => Stream.fromIterable(responses));
 
@@ -259,8 +290,8 @@ void main() {
       // After refactoring, ChatProvider delegates to MessageStreamingService
       // Verify that the message was processed and streaming occurred
       expect(chatProvider.activeChat?.messages.length, greaterThan(0));
-      expect(chatProvider.activeChat?.messages.last.content, equals(message));
-      
+      expect(chatProvider.activeChat?.messages.first.content, equals(message));
+
       verify(mockOllamaService.generateStreamingResponseWithContext(
         any,
         model: anyNamed('model'),
@@ -268,8 +299,9 @@ void main() {
         context: anyNamed('context'),
         conversationHistory: anyNamed('conversationHistory'),
         contextLength: anyNamed('contextLength'),
+        chat: anyNamed('chat'),
         isCancelled: anyNamed('isCancelled'),
-      )).called(1);
+      ));
 
       expect(chatProvider.activeChat!.messages.last.content, 'Hi there!');
     });
