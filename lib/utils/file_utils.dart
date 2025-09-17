@@ -346,8 +346,16 @@ class FileUtils {
       // Read the first 8KB (8192 bytes) of the file for better detection
       final fileSize = await file.length();
       final sampleSize = fileSize < 8192 ? fileSize : 8192;
-      final bytes =
-          await file.readAsBytes().then((b) => b.sublist(0, sampleSize));
+
+      if (sampleSize == 0) return false;
+
+      final randomAccessFile = await file.open();
+      List<int> bytes;
+      try {
+        bytes = await randomAccessFile.read(sampleSize);
+      } finally {
+        await randomAccessFile.close();
+      }
 
       if (bytes.isEmpty) return false;
 

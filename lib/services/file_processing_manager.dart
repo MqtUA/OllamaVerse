@@ -114,6 +114,10 @@ class FileProcessingManager implements IFileProcessingManager {
     String filePath, {
     CancellationToken? cancellationToken,
   }) async {
+    if (_isProcessingFiles) {
+      throw StateError('File processing is already in progress');
+    }
+
     try {
       _isProcessingFiles = true;
       _fileProcessingProgress.clear();

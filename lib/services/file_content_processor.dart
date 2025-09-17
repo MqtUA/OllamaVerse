@@ -326,12 +326,20 @@ class FileContentProcessor {
     int cacheHits = 0;
 
     for (final filePath in filePaths) {
+      final fileName = FileUtils.getFileName(filePath);
       try {
         if (isCancelled?.call() ?? false) {
           AppLogger.info('File processing cancelled by user.');
+          final cancelledFile = ProcessedFile.cancelled(filePath);
+          processedFiles.add(cancelledFile);
+          onProgress?.call(FileProcessingProgress(
+            filePath: filePath,
+            fileName: fileName,
+            progress: 1.0,
+            status: 'Cancelled',
+          ));
           break;
         }
-        final fileName = FileUtils.getFileName(filePath);
 
         // Check cache first
         final cache = FileContentCache.instance;
@@ -355,11 +363,18 @@ class FileContentProcessor {
           onProgress: onProgress,
           isCancelled: isCancelled,
         );
+        processedFiles.add(processedFile);
+
         if (processedFile.isCancelled) {
           AppLogger.info('Processing of $fileName was cancelled.');
+          onProgress?.call(FileProcessingProgress(
+            filePath: filePath,
+            fileName: fileName,
+            progress: 1.0,
+            status: 'Cancelled',
+          ));
           break;
         }
-        processedFiles.add(processedFile);
 
         onProgress?.call(FileProcessingProgress(
           filePath: filePath,
@@ -369,7 +384,6 @@ class FileContentProcessor {
         ));
         AppLogger.info('Successfully processed: ${processedFile.fileName}');
       } catch (e) {
-        final fileName = FileUtils.getFileName(filePath);
         final error = 'Failed to process $fileName: $e';
         errors.add(error);
         onProgress?.call(FileProcessingProgress(
@@ -433,7 +447,7 @@ class FileContentProcessor {
       };
 
       AppLogger.info(
-          'Image processed: $fileName, base64 size: $base64Content.length chars');
+          'Image processed: $fileName, base64 size: ${base64Content.length} chars');
 
       return ProcessedFile.image(
         originalPath: filePath,
@@ -723,7 +737,7 @@ class FileContentProcessor {
       };
 
       AppLogger.info(
-          'Text file processed: $fileName, $textContent.length characters, encoding: $actualEncoding');
+          'Text file processed: $fileName, ${textContent.length} characters, encoding: $actualEncoding');
 
       return ProcessedFile.text(
         originalPath: filePath,
@@ -1193,12 +1207,12 @@ class FileContentProcessor {
 
       if (nonEmptyLines.length < 3) {
         AppLogger.warning(
-            'Very little text extracted from PDF: $fileName ($nonEmptyLines.length lines)');
+            'Very little text extracted from PDF: $fileName (${nonEmptyLines.length} lines)');
         return 'This PDF appears to contain minimal text content. Text extraction may be incomplete.';
       }
 
       AppLogger.info(
-          'PDF text extraction completed: $extractedText.length characters extracted from $pageCount pages');
+          'PDF text extraction completed: ${extractedText.length} characters extracted from $pageCount pages');
 
       return extractedText;
     } catch (e) {
