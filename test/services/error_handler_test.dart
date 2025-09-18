@@ -204,7 +204,7 @@ void main() {
       test('should return user-friendly messages', () {
         expect(
           ErrorHandler.getUserFriendlyMessage(OllamaConnectionException('test')),
-          contains('Unable to connect'),
+          equals('test'), // Enhanced exception provides its own message
         );
         
         expect(
@@ -254,7 +254,7 @@ void main() {
         expect(errorState.operation, equals('testOperation'));
         expect(errorState.canRetry, isTrue);
         expect(errorState.context, equals({'key': 'value'}));
-        expect(errorState.message, contains('Unable to connect'));
+        expect(errorState.message, equals('Connection failed')); // Enhanced exception message
         expect(errorState.suggestions.isNotEmpty, isTrue);
       });
 

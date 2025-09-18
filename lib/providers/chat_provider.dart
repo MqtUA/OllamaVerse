@@ -18,6 +18,7 @@ import '../services/service_health_coordinator.dart';
 import '../services/chat_settings_manager.dart';
 import '../providers/settings_provider.dart';
 import '../utils/logger.dart';
+import '../utils/error_handler.dart';
 
 /// Refactored ChatProvider that orchestrates services and maintains UI state
 ///
@@ -558,12 +559,32 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  /// Handle errors with consistent logging and user feedback
-  /// Handle errors with consistent logging and user feedback
+  /// Handle errors with enhanced logging and user feedback
   void _handleError(String operation, dynamic error, [String? userMessage]) {
-    final message = userMessage ?? operation;
-    _error = '$message: ${error.toString()}';
-    AppLogger.error(operation, error);
+    // Generate correlation ID for tracking
+    final correlationId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    // Use ErrorHandler for consistent error processing
+    final userFriendlyMessage = userMessage ?? ErrorHandler.getUserFriendlyMessage(error);
+    _error = userFriendlyMessage;
+    
+    // Enhanced error logging with context
+    ErrorHandler.logError(
+      operation,
+      error,
+      correlationId: correlationId,
+      context: {
+        'activeChat': activeChat?.id,
+        'availableModels': availableModels.length,
+        'isGenerating': isGenerating,
+        'isProcessingFiles': isProcessingFiles,
+      },
+    );
+    
+    // Log recovery suggestions for debugging
+    final suggestions = ErrorHandler.getRecoverySuggestions(error);
+    AppLogger.info('[$correlationId] Recovery suggestions: ${suggestions.join(', ')}');
+    
     _safeNotifyListeners();
   }
 }

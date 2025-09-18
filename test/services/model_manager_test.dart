@@ -92,7 +92,7 @@ void main() {
       
       expect(result, isFalse);
       expect(modelManager.availableModels, isEmpty);
-      expect(modelManager.lastError, contains('Unable to connect to the server'));
+      expect(modelManager.lastError, contains('Connection failed')); // Updated error message
       expect(mockOllamaService.getModelsCallCount, equals(4)); // Should retry multiple times
     });
 

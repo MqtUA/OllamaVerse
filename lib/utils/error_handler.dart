@@ -123,15 +123,21 @@ class ErrorHandler {
     }
   }
 
-  /// Check if an error is retryable
+  /// Check if an error is retryable with enhanced logic
   static bool isRetryableError(Object error) {
+    // Use enhanced exception logic if available
+    if (error is OllamaApiException) {
+      return error.isRetryable;
+    }
+    
     final errorType = classifyError(error);
 
     switch (errorType) {
       case ErrorType.connection:
       case ErrorType.timeout:
-      case ErrorType.api:
         return true;
+      case ErrorType.api:
+        return true; // Default to retryable for API errors
       case ErrorType.cancellation:
       case ErrorType.validation:
       case ErrorType.format:
@@ -141,18 +147,21 @@ class ErrorHandler {
     }
   }
 
-  /// Get user-friendly error message
+  /// Get user-friendly error message with enhanced context
   static String getUserFriendlyMessage(Object error) {
     final errorType = classifyError(error);
 
     switch (errorType) {
       case ErrorType.connection:
+        if (error is OllamaConnectionException) {
+          return error.userFriendlyMessage;
+        }
         return 'Unable to connect to the server. Please check your connection settings.';
       case ErrorType.timeout:
         return 'The operation timed out. Please try again.';
       case ErrorType.api:
         if (error is OllamaApiException) {
-          return 'Server error: ${error.message}';
+          return error.userFriendlyMessage;
         }
         return 'An error occurred while communicating with the server.';
       case ErrorType.cancellation:
@@ -168,12 +177,44 @@ class ErrorHandler {
     }
   }
 
-  /// Get recovery suggestions for an error
+  /// Get recovery suggestions for an error with enhanced context
   static List<String> getRecoverySuggestions(Object error) {
     final errorType = classifyError(error);
 
     switch (errorType) {
       case ErrorType.connection:
+        if (error is OllamaConnectionException) {
+          switch (error.errorCategory) {
+            case 'connection_refused':
+              return [
+                'Start the Ollama service',
+                'Check if Ollama is running on the correct port',
+                'Verify firewall settings',
+                'Try restarting Ollama',
+              ];
+            case 'dns_error':
+              return [
+                'Check the server URL spelling',
+                'Verify the server address is correct',
+                'Try using an IP address instead of hostname',
+                'Check your DNS settings',
+              ];
+            case 'network_error':
+              return [
+                'Check your internet connection',
+                'Try connecting to a different network',
+                'Verify network permissions',
+                'Check proxy settings if applicable',
+              ];
+            case 'timeout':
+              return [
+                'Check your network connection speed',
+                'Try again when the server is less busy',
+                'Increase timeout settings if available',
+                'Use a faster network connection',
+              ];
+          }
+        }
         return [
           'Check your internet connection',
           'Verify Ollama server is running',
@@ -185,8 +226,27 @@ class ErrorHandler {
           'Try again with a shorter request',
           'Check your internet connection speed',
           'Increase timeout settings if available',
+          'Break large requests into smaller parts',
         ];
       case ErrorType.api:
+        if (error is OllamaApiException) {
+          switch (error.errorCategory) {
+            case 'client_error':
+              return [
+                'Check your input format',
+                'Verify the selected model is correct',
+                'Reduce the size of your request',
+                'Check authentication if required',
+              ];
+            case 'server_error':
+              return [
+                'Try again in a few moments',
+                'Check if the server is overloaded',
+                'Verify server configuration',
+                'Contact server administrator if problem persists',
+              ];
+          }
+        }
         return [
           'Check if the selected model is available',
           'Verify server configuration',
@@ -198,11 +258,13 @@ class ErrorHandler {
           'Check your input data',
           'Ensure all required fields are filled',
           'Verify file formats are supported',
+          'Reduce file sizes if too large',
         ];
       case ErrorType.state:
         return [
           'Refresh the application',
           'Try creating a new chat',
+          'Clear application cache',
           'Restart the application if needed',
         ];
       default:
@@ -210,6 +272,7 @@ class ErrorHandler {
           'Try the operation again',
           'Restart the application',
           'Check application logs for details',
+          'Contact support if problem persists',
         ];
     }
   }
@@ -257,21 +320,46 @@ class ErrorHandler {
     await completer.future;
   }
 
-  /// Log error with context information
+  /// Log error with enhanced context information and correlation ID
   static void logError(
     String operation,
     Object error, {
     StackTrace? stackTrace,
     Map<String, dynamic>? context,
+    String? correlationId,
   }) {
     final errorType = classifyError(error);
-    final contextInfo = context != null ? ' Context: $context' : '';
+    final timestamp = DateTime.now().toIso8601String();
+    final corrId = correlationId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    
+    // Build enhanced context
+    final enhancedContext = <String, dynamic>{
+      'timestamp': timestamp,
+      'correlationId': corrId,
+      'errorType': errorType.name,
+      'operation': operation,
+    };
+    
+    // Add original context
+    if (context != null) {
+      enhancedContext.addAll(context);
+    }
+    
+    // Add enhanced error details if available
+    if (error is OllamaApiException) {
+      enhancedContext.addAll(error.toLogMap());
+    } else if (error is OllamaConnectionException) {
+      enhancedContext.addAll(error.toLogMap());
+    }
 
     AppLogger.error(
-      '$operation failed with ${errorType.name} error: $error$contextInfo',
+      '[$corrId] $operation failed with ${errorType.name} error: $error',
       error,
       stackTrace,
     );
+    
+    // Log detailed context at debug level to avoid cluttering main logs
+    AppLogger.debug('[$corrId] Error context: $enhancedContext');
   }
 
   /// Create error state for UI components

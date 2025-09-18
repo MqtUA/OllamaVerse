@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/logger.dart';
+import '../utils/error_handler.dart';
 
 /// A comprehensive error boundary widget that catches and handles widget errors
 /// Provides fallback UI and error reporting functionality
@@ -51,8 +52,19 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       _errorCount++;
     });
 
-    // Log the error
-    AppLogger.error('ErrorBoundary caught error', error, stackTrace);
+    // Enhanced error logging with correlation ID
+    final correlationId = DateTime.now().millisecondsSinceEpoch.toString();
+    ErrorHandler.logError(
+      'ErrorBoundary caught widget error',
+      error,
+      stackTrace: stackTrace,
+      correlationId: correlationId,
+      context: {
+        'errorCount': _errorCount,
+        'widgetType': widget.child.runtimeType.toString(),
+        'hasCustomFallback': widget.fallback != null,
+      },
+    );
 
     // Call custom error handler if provided
     widget.onError?.call();
@@ -64,6 +76,56 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       _stackTrace = null;
       _hasError = false;
     });
+  }
+
+  Widget _buildRecoverySuggestions() {
+    if (_error == null) return const SizedBox.shrink();
+    
+    final suggestions = ErrorHandler.getRecoverySuggestions(_error!);
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(4.0),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.lightbulb_outline,
+                color: Colors.blue.shade700,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Suggestions:',
+                style: TextStyle(
+                  color: Colors.blue.shade700,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ...suggestions.take(3).map((suggestion) => Padding(
+            padding: const EdgeInsets.only(left: 20, top: 2),
+            child: Text(
+              '• $suggestion',
+              style: TextStyle(
+                color: Colors.blue.shade600,
+                fontSize: 11,
+              ),
+            ),
+          )),
+        ],
+      ),
+    );
   }
 
   Widget _buildErrorWidget() {
@@ -104,13 +166,19 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
           ),
           const SizedBox(height: 8),
           Text(
-            widget.errorMessage ??
-                'An unexpected error occurred. The app will try to recover automatically.',
+            widget.errorMessage ?? 
+                (_error != null ? ErrorHandler.getUserFriendlyMessage(_error!) : 
+                'An unexpected error occurred. The app will try to recover automatically.'),
             style: TextStyle(
               color: Colors.red.shade600,
               fontSize: 14,
             ),
           ),
+          // Add recovery suggestions if available
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            _buildRecoverySuggestions(),
+          ],
           if (widget.showDetails && _error != null) ...[
             const SizedBox(height: 12),
             ExpansionTile(
